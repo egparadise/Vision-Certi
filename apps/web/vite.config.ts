@@ -1,15 +1,27 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
+
+// LAN mode is opt-in; backend and key-management ports remain on loopback.
+const lanHost = process.env.VISIONCERTI_LAN_HOST;
+const lanTls = lanHost ? {
+  cert: readFileSync(process.env.VISIONCERTI_LAN_CERT_FILE!),
+  key: readFileSync(process.env.VISIONCERTI_LAN_KEY_FILE!),
+} : undefined;
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  publicDir: lanHost ? process.env.VISIONCERTI_LAN_PUBLIC_DIR : 'public',
   server: {
-    port: 5173,
+    host: lanHost || '127.0.0.1',
+    port: lanHost ? 5174 : 5173,
+    strictPort: true,
+    https: lanTls,
     proxy: {
       '/v1': {
-        target: 'http://localhost:8080',
+        target: lanHost ? 'http://127.0.0.1:18082' : 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
     },

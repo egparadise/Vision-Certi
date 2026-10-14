@@ -95,6 +95,9 @@ run=uuid.uuid4().hex
 created=api('POST','/v1/admin/doctors',{'name':'Synthetic SV70 Doctor','licenseNumber':str(int(run,16))[:20],'centerName':'Synthetic PACS',
     'googleEmail':run+'@example.invalid','identityEvidenceRef':'synthetic/id','licenseEvidenceRef':'synthetic/license'},admin=True,expected=201)
 doctor=created['doctor']['id']
+with engine.begin() as db:
+    db.execute(text('UPDATE pacs_users_view SET doctor_license_number=:license WHERE user_idx=:u'),
+               {'license': str(int(run,16))[:20], 'u': number})
 fixture=ROOT/'work/certificate-fixtures'
 ca=x509.load_pem_x509_certificate((fixture/'ca.pem').read_bytes())
 ca_key=serialization.load_pem_private_key((fixture/'ca.key.pem').read_bytes(),None)

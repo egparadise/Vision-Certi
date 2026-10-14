@@ -14,6 +14,7 @@ import StudyService from "@services/api/StudyService";
 import { MdNavigateBefore, MdNavigateNext } from "react-icons/md";
 import { useUserAllUiQuery, useUpdateUserUIMutation } from "@queries/useUI";
 import { UpdateUiRequest } from "@userTypes/ui.types";
+import { requestCertificateHandoff } from "@services/api/certificateHandoff";
 import { VisionCertiService } from "@services/api/VisionCertiService";
 import { VcConfig, VcApproval } from "@shared/types/visionCerti.types";
 
@@ -49,6 +50,8 @@ const ReportViewer = forwardRef<ReportViewerHandle>(
   const workList = useSettingStore(state => state.workList);
   const userData = useUserStore(state => state.userData);
   const vcSession = useUserStore(state => state.vcSession);
+
+  const stepUpPending = useRef(false);
 
   // Vision-Certi state
   const [vcConfig, setVcConfig] = useState<VcConfig | null>(null);
@@ -696,8 +699,31 @@ const ReportViewer = forwardRef<ReportViewerHandle>(
 
     // Vision-Certi 공동인증서 전자서명 게이트
     if (vcConfig?.enabled) {
-      if (!vcSession) {
-        Toast("공동인증서 세션이 필요합니다. 먼저 Vision-Certi 공동인증서 로그인을 진행해주세요.", "warning");
+      if (!vcSession || Date.parse(vcSession.sessionExpiresAt) <= Date.now()) {
+        if (stepUpPending.current) return;
+        stepUpPending.current = true;
+        const before = useUserStore.getState();
+        const originalUser = before.userData?.user_idx;
+        const originalToken = before.token;
+        try {
+          const code = await requestCertificateHandoff(vcConfig);
+          const current = useUserStore.getState();
+          if (current.token !== originalToken || current.userData?.user_idx !== originalUser) {
+            throw new Error('로그인 상태가 변경되었습니다. 다시 로그인한 뒤 시도해 주세요.');
+          }
+          const result = vcSession
+            ? await VisionCertiService.certificateLogin(code)
+            : await VisionCertiService.certificateStepUp(code);
+          if (useUserStore.getState().token !== originalToken || result.user_data.user_idx !== originalUser) {
+            throw new Error('PACS 로그인 사용자와 인증서 소유자가 일치하지 않습니다.');
+          }
+          await useUserStore.getState().actions.loginWithCertificate(result);
+          Toast('본인확인이 완료되었습니다. 판독문을 확인한 뒤 승인 버튼을 다시 눌러 주세요.', 'info');
+        } catch (err: unknown) {
+          Toast(err instanceof Error ? err.message : '판독 승인에 필요한 본인확인에 실패했습니다.', 'error');
+        } finally {
+          stepUpPending.current = false;
+        }
         return;
       }
 

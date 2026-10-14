@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from .service import VcError, VcIntegrationService
+from .service import TOKEN_PREFIX, VcError, VcIntegrationService
 
 _NO_STORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
 
@@ -49,6 +49,20 @@ def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
+def _session_body(token: str, row, user) -> dict:
+    return {
+        "token": token,
+        "expiresAt": row.expires_at.isoformat() + "Z",
+        "user_data": {"user_idx": user.user_idx, "user_id": user.user_id, "user_name": user.user_name,
+                      "group_level": user.group_level, "doctor_license_number": user.doctor_license_number},
+        "vc": {"tenantId": row.vc_tenant_id, "doctorId": row.vc_doctor_id,
+               "certificateEnrollmentId": row.vc_enrollment_id,
+               "certificateFingerprintSha256": row.vc_certificate_fingerprint,
+               "identityMode": row.vc_identity_mode,
+               "sessionExpiresAt": row.vc_session_expires_at.isoformat() + "Z"},
+    }
+
+
 def build_router(deps: VcApiDeps) -> APIRouter:
     router = APIRouter(prefix="/vc", tags=["vision-certi"])
 
@@ -67,17 +81,28 @@ def build_router(deps: VcApiDeps) -> APIRouter:
             service = deps.service()
             token, row, user = service.certificate_login(session, manage, body.get("handoffCode"),
                                                          _client_ip(request))
-            return _ok({
-                "token": token,
-                "expiresAt": row.expires_at.isoformat() + "Z",
-                "user_data": {"user_idx": user.user_idx, "user_id": user.user_id, "user_name": user.user_name,
-                              "group_level": user.group_level, "doctor_license_number": user.doctor_license_number},
-                "vc": {"tenantId": row.vc_tenant_id, "doctorId": row.vc_doctor_id,
-                       "certificateEnrollmentId": row.vc_enrollment_id,
-                       "certificateFingerprintSha256": row.vc_certificate_fingerprint,
-                       "identityMode": row.vc_identity_mode,
-                       "sessionExpiresAt": row.vc_session_expires_at.isoformat() + "Z"},
-            })
+            return _ok(_session_body(token, row, user))
+        except VcError as e:
+            return _error(e)
+
+    @router.post("/auth/certificate-step-up")
+    async def certificate_step_up(request: Request, session: Session = Depends(deps.main_session),
+                                  manage: Session = Depends(deps.manage_session)):
+        """Password-logged-in user (legacy bearer, authenticated by the middleware) proves the same identity with a
+        certificate handoff. A vc1 bearer is refused: it already is a certificate session."""
+        try:
+            service = deps.service()
+            service.require_operational()
+            bearer = (request.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+            if bearer.startswith(TOKEN_PREFIX):
+                raise VcError(409, "VC_ALREADY_CERTIFICATE_SESSION", "이미 인증서 세션입니다.")
+            legacy_user_idx = deps.legacy_user_idx(request)
+            if legacy_user_idx is None:
+                raise VcError(401, "VC_LOGIN_REQUIRED", "PACS에 먼저 로그인해야 인증서 확인을 할 수 있습니다.")
+            body = await _json_body(request)
+            token, row, user = service.certificate_step_up(session, manage, legacy_user_idx,
+                                                           body.get("handoffCode"), _client_ip(request))
+            return _ok({**_session_body(token, row, user), "stepUp": True})
         except VcError as e:
             return _error(e)
 

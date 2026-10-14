@@ -35,6 +35,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -963,6 +964,14 @@ public class DoctorService implements RegisteredSigners {
         gate.confirmBinding(doctorId, new CertificateGate.EnrollmentBinding(enrollmentId,
                 identity.certificateFingerprint(), null));
         return identity;
+    }
+
+    /**
+     * The license number an administrator recorded, with license evidence, when pre-registering the doctor. For
+     * integrations that cross-check their own account data; it is never an authenticator.
+     */
+    public Optional<String> registeredLicenseNumber(UUID doctorId) {
+        return store.tx(tx -> tx.get(DOCTORS, doctorId).map(d -> d.licenseNumber));
     }
 
     // ------------------------------------------------------------------ certificate enrollment support

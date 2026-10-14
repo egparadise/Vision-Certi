@@ -1,5 +1,5 @@
 # The SV70 manifest validates exact artifact bytes on Windows and Linux.
-integrations/sv70/** -text
+integrations/sv70/** -text whitespace=cr-at-eol
 integrations/sv70/*.patch -whitespace
 apps/backend/gradlew text eol=lf
 *.bat text eol=crlf

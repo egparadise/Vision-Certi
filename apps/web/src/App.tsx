@@ -129,13 +129,13 @@ export const App: React.FC = () => {
     );
   }
 
-  if (hash.startsWith('#/certificates/enroll') || hash.startsWith('#/doctor/sign-requests')) {
+  if (hash.startsWith('#/certificates/enroll') || hash.startsWith('#/certificates/pacs-login') || hash.startsWith('#/doctor/sign-requests')) {
     return (
       <div className="app-container">
         <Header />
         <Navigation />
         <main className="main-content" id="main-content">
-          <CertificateEnrollmentView />
+          <CertificateEnrollmentView initialMode={hash.startsWith('#/certificates/pacs-login') ? 'PC_LOGIN' : 'PC_ENROLL'} />
         </main>
       </div>
     );

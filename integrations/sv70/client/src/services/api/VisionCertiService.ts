@@ -38,6 +38,11 @@ export default class VisionCertiService {
   /**
    * VC Handoff 코드를 통한 의사 인증서 로그인
    */
+  public static async certificateStepUp(handoffCode: string): Promise<VcCertificateLoginResponse> {
+    const response = await client.post('/vc/auth/certificate-step-up', { handoffCode });
+    return response.data;
+  }
+
   public static async certificateLogin(handoffCode: string): Promise<VcCertificateLoginResponse> {
     try {
       const response = await client.post("/vc/auth/certificate-login", { handoffCode });

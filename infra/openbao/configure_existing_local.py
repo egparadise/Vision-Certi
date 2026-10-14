@@ -1,6 +1,8 @@
 import json, re, urllib.request, urllib.error, pathlib, datetime, sys
 root=pathlib.Path(__file__).resolve().parents[2]; runtime=root/'work/openbao'
-token=re.search(r'Root Token:\s*(\S+)', (runtime/'server.stdout.log').read_text()).group(1)
+bootstrap_file=runtime/'private/bootstrap.json'
+token=(json.loads(bootstrap_file.read_text())['root_token'] if bootstrap_file.exists()
+       else re.search(r'Root Token:\s*(\S+)', (runtime/'server.stdout.log').read_text()).group(1))
 opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
 def call(path,data=None,method=None):
  req=urllib.request.Request('http://127.0.0.1:18200/v1/'+path,data=None if data is None else json.dumps(data).encode(),headers={'X-Vault-Token':token,'Content-Type':'application/json'},method=method)
@@ -12,7 +14,8 @@ for mount,kind in [('transit/','transit'),('pki/','pki')]:
 try:
  ca=call('pki/cert/ca')
 except urllib.error.HTTPError as e:
- if e.code != 404: raise
+ errors=json.loads(e.read()).get('errors',[])
+ if e.code != 404 and not (e.code == 400 and errors == ['no default issuer currently configured']): raise
  ca=call('pki/root/generate/internal',{'common_name':'INVIZ LOCAL DEVELOPMENT CA - NOT CLINICAL','ttl':'87600h','key_type':'ec','key_bits':256})
 (runtime/'ca.pem').write_text(ca['data']['certificate'])
 role={'allow_any_name':False,'allowed_domains':['vc-doctor-*'],'allow_glob_domains':True,'allow_bare_domains':True,'enforce_hostnames':False,'key_type':'ec','key_bits':256,'key_usage':['DigitalSignature','ContentCommitment'],'ext_key_usage':[],'server_flag':False,'client_flag':False,'no_store':False,'max_ttl':'8760h'}

@@ -49,6 +49,7 @@ class ApiTest(unittest.TestCase):
         self.env.add_user(7)
         self.env.add_study(100, assignee=7)
         self.http = TestClient(make_app(self.env))
+        self.env.fake.licenses[DOCTOR] = "7"  # Vision-Certi's registered license for the doctor linked over HTTP
 
     def test_full_http_flow_with_evidence_endpoints(self):
         config = self.http.get("/api/vc/config").json()

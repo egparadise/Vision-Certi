@@ -127,7 +127,8 @@ public class PacsHandoffService {
                 Map.of("certificateEnrollmentId", current.certificateEnrollmentId().toString()));
         return new VerifiedIdentityResponse(current.tenantId(), current.doctorId(), "ACTIVE", current.identityMode(),
                 current.certificateEnrollmentId(), current.certificateFingerprint(), current.authenticatedAt(),
-                current.sessionExpiresAt(), now, true);
+                current.sessionExpiresAt(), now, true,
+                doctors.registeredLicenseNumber(current.doctorId()).orElse(null));
     }
 
     private static ApiException handoffInvalid() {

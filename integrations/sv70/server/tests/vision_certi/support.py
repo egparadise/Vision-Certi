@@ -95,17 +95,25 @@ class FakeVisionCerti:
         self.tamper_signature = False
         self.tamper_document_sha = False
         self.fail_next = 0
+        self.enrollments = {}  # doctor_id -> enrollment proved by the doctor's latest certificate login
+        self.evidence_enrollment = None  # set to sign with a different enrollment than the login proved
+        self.licenses = {}  # doctor_id -> license registered at Vision-Certi (Env.link keeps it equal to PACS)
 
     def issue_handoff(self, doctor_id, *, tenant=TENANT, mode="PC_CERTIFICATE", session_minutes=30,
-                      enrollment_id=None, fingerprint=None):
+                      enrollment_id=None, fingerprint=None, license_number=None, omit_license=False):
         code = secrets.token_urlsafe(32)
+        enrollment_id = enrollment_id or self.enrollments.get(doctor_id) or str(uuid.uuid4())
+        self.enrollments[doctor_id] = enrollment_id
         self.handoffs[code] = {
             "tenantId": tenant, "doctorId": doctor_id, "doctorStatus": "ACTIVE", "identityMode": mode,
-            "certificateEnrollmentId": enrollment_id or str(uuid.uuid4()),
+            "certificateEnrollmentId": enrollment_id,
             "certificateFingerprintSha256": fingerprint or hashlib.sha256(doctor_id.encode()).hexdigest(),
             "authenticatedAt": (self.clock() - datetime.timedelta(minutes=1)).isoformat() + "Z",
             "sessionExpiresAt": (self.clock() + datetime.timedelta(minutes=session_minutes)).isoformat() + "Z",
             "verifiedAt": self.clock().isoformat() + "Z", "activeSigner": True}
+        if not omit_license:
+            self.handoffs[code]["doctorLicenseNumber"] = (
+                license_number if license_number is not None else self.licenses.get(doctor_id, "0"))
         return code
 
     def approve(self, sign_request_id):
@@ -126,7 +134,9 @@ class FakeVisionCerti:
                 "signingBackend": "OPENBAO_TRANSIT", "cryptographicallyAttributable": True,
                 "revocationCheckedAtSigning": True,
                 "certificateKind": "X509", "keyName": "vc-doctor-x", "keyVersion": 1,
-                "publicKeySpki": self.signer.spki_b64, "certificateEnrollmentId": str(uuid.uuid4()),
+                "publicKeySpki": self.signer.spki_b64,
+                "certificateEnrollmentId": self.evidence_enrollment
+                or self.enrollments.get(r["payload"]["doctorId"]) or str(uuid.uuid4()),
                 "certificateEnrollmentFingerprint": "ab" * 32, "signatureFormat": "RAW_ECDSA_P256_SHA256_DER"}}
 
     # -- transport -----------------------------------------------------------------------------------------------
@@ -272,6 +282,7 @@ class Env:
         return self.sql("SELECT * FROM pacs_study_report WHERE report_idx = :r", r=report_idx).mappings().first()
 
     def link(self, user_idx, doctor_id):
+        self.fake.licenses[doctor_id] = str(user_idx)  # PACS fixture license is "LIC-<user_idx>"
         main, manage = self.sessions()
         try:
             return self.service.create_link(main, manage, 1, {

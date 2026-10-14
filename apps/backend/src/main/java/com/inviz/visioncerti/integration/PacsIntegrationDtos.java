@@ -29,7 +29,7 @@ public final class PacsIntegrationDtos {
 
     public record VerifiedIdentityResponse(String tenantId, UUID doctorId, String doctorStatus, String identityMode,
             UUID certificateEnrollmentId, String certificateFingerprintSha256, Instant authenticatedAt,
-            Instant sessionExpiresAt, Instant verifiedAt, boolean activeSigner) {
+            Instant sessionExpiresAt, Instant verifiedAt, boolean activeSigner, String doctorLicenseNumber) {
     }
 
     public record ReportSignRequestCreate(String tenantId, String doctorId, String externalReportId,

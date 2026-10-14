@@ -10,6 +10,7 @@ import {useSettingStore} from "@stores/useSettingStore";
 import {measureAsync} from "@libs/PerformanceLogger";
 import ReleaseNotesModal from "@components/modal/ReleaseNotesModal";
 import { VisionCertiService } from "@services/api/VisionCertiService";
+import { requestCertificateHandoff } from "@services/api/certificateHandoff";
 import { VcConfig } from "@shared/types/visionCerti.types";
 
 export default function LoginForm() {
@@ -97,76 +98,20 @@ export default function LoginForm() {
     };
   }, []);
 
-  const handleCertificateLogin = () => {
-    if (!vcConfig || !vcConfig.enabled) {
-      setVcError("공동인증서 로그인이 비활성화되어 있거나 설정을 불러오지 못했습니다.");
-      return;
-    }
+  const handleCertificateLogin = async () => {
+    if (!vcConfig || vcLoading) return;
     setVcError(null);
     setVcLoading(true);
-
-    const nonce = 'pacs-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    let expectedOrigin = '';
     try {
-      expectedOrigin = new URL(vcConfig.visionCertiBaseUrl).origin;
-    } catch (e) {
-      setVcError("유효하지 않은 Vision-Certi 기본 URL 설정입니다.");
+      const code = await requestCertificateHandoff(vcConfig);
+      const loginRes = await VisionCertiService.certificateLogin(code);
+      await userActions.loginWithCertificate(loginRes);
+      navigate('/', { replace: true });
+    } catch (err: unknown) {
+      setVcError(err instanceof Error ? err.message : '공동인증서 로그인에 실패했습니다.');
+    } finally {
       setVcLoading(false);
-      return;
     }
-
-    const popupUrl = `${vcConfig.visionCertiBaseUrl}/#/certificates/enroll?nonce=${encodeURIComponent(nonce)}&audience=sv70-pacs`;
-    const popup = window.open(popupUrl, 'VisionCertiAuthPopup', 'width=620,height=780,menubar=no,toolbar=no,location=no');
-
-    if (!popup) {
-      setVcError("팝업 차단이 감지되었습니다. 팝업을 허용해주세요.");
-      setVcLoading(false);
-      return;
-    }
-
-    const onMessage = async (event: MessageEvent) => {
-      if (event.origin !== expectedOrigin) {
-        return;
-      }
-      if (event.source !== popup) {
-        return;
-      }
-      const data = event.data;
-      if (!data || data.type !== 'VC_HANDOFF_CODE') {
-        return;
-      }
-      if (data.nonce !== nonce) {
-        setVcError("보안 토큰(Nonce) 불일치: 위조된 인증 응답일 가능성이 있습니다.");
-        cleanup();
-        return;
-      }
-
-      cleanup();
-      try {
-        const loginRes = await VisionCertiService.certificateLogin(data.handoffCode);
-        userActions.loginWithCertificate(loginRes);
-        navigate('/', { replace: true });
-      } catch (err: any) {
-        setVcError(err?.message || "공동인증서 교환 로그인에 실패했습니다.");
-      }
-    };
-
-    const cleanup = () => {
-      window.removeEventListener('message', onMessage);
-      clearInterval(pollTimer);
-      setVcLoading(false);
-      try {
-        if (popup && !popup.closed) popup.close();
-      } catch (e) {}
-    };
-
-    window.addEventListener('message', onMessage);
-
-    const pollTimer = setInterval(() => {
-      if (popup.closed) {
-        cleanup();
-      }
-    }, 1000);
   };
 
   const onSubmit = handleSubmit((data)=>{

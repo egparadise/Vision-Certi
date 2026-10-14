@@ -258,6 +258,8 @@ class PacsIntegrationApiTest {
                 .andExpect(jsonPath("$.certificateEnrollmentId").value(doctor.registrationId()))
                 .andExpect(jsonPath("$.certificateFingerprintSha256").value(doctor.leaf().fingerprint()))
                 .andExpect(jsonPath("$.activeSigner").value(true))
+                // The admin-registered license, for PACS to cross-check its local account (never an authenticator).
+                .andExpect(jsonPath("$.doctorLicenseNumber").value(org.hamcrest.Matchers.matchesPattern("[0-9]{1,20}")))
                 .andExpect(jsonPath("$.handoffCode").doesNotExist());
         // Single use.
         servicePost(redeem, "{\"handoffCode\":\"" + code + "\"}")

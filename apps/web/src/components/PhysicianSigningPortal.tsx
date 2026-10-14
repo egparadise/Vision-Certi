@@ -81,7 +81,7 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
 
   // PACS Handoff state
-  const [pacsAudience, setPacsAudience] = useState<string>('pacs-sv70');
+  const [pacsAudience, setPacsAudience] = useState<string>(() => getQueryOrHashParam('audience') || 'pacs-sv70');
   const [pacsHandoffResult, setPacsHandoffResult] = useState<PacsHandoffResponse | null>(null);
   const [pacsHandoffLoading, setPacsHandoffLoading] = useState(false);
   const [pacsHandoffMsg, setPacsHandoffMsg] = useState<string | null>(null);
@@ -119,7 +119,7 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
   // Handle cross-window postMessage correlation from SV70 PACS popup
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
-      if (window.opener && e.source !== window.opener) {
+      if (!window.opener || e.source !== window.opener) {
         return;
       }
       const allowedOriginsStr = (import.meta.env?.VITE_PACS_ALLOWED_ORIGINS as string | undefined) ||

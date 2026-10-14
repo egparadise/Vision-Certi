@@ -36,6 +36,7 @@ TOKEN_PREFIX = "vc1."
 _TOKEN = re.compile(r"^vc1\.[A-Za-z0-9_-]{43}$")
 _HANDOFF = re.compile(r"^[A-Za-z0-9_-]{43}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_LICENSE = re.compile(r"^[0-9]{1,20}$")  # same rule as Vision-Certi doctor pre-registration
 _CERT_MODES = {"PC_CERTIFICATE", "MOBILE_CERTIFICATE"}
 _ADMIN_GROUP_LEVEL = 98  # same threshold as router/StudyReport._can_read_others_studies
 
@@ -76,6 +77,23 @@ class VcPrincipal:
     identity_mode: str
     expires_at: datetime.datetime
     user: LocalUser
+
+
+@dataclass(frozen=True)
+class VerifiedIdentity:
+    """Identity returned by Vision-Certi's server-side handoff redeem, after local validation."""
+    tenant_id: str
+    doctor_id: str
+    enrollment_id: str
+    certificate_fingerprint: str
+    identity_mode: str
+    authenticated_at: datetime.datetime
+    session_expires_at: datetime.datetime
+    license_number: object  # as sent by Vision-Certi (admin-verified there); validated by _require_license_match
+
+
+def _license_digits(value) -> str:
+    return re.sub(r"[^0-9]", "", value) if isinstance(value, str) else ""
 
 
 def utcnow() -> datetime.datetime:
@@ -144,17 +162,59 @@ class VcIntegrationService:
 
     def certificate_login(self, session: Session, manage_session: Session, handoff_code, client_ip: str | None):
         self.require_operational()
+        identity, link = self._redeem_linked_identity(session, handoff_code, "VC_LOGIN")
+        user = self.port.get_user(manage_session, link.user_idx)
+        self._require_local_doctor(session, user, "VC_LOGIN")
+        self._require_license_match(session, user, identity, "VC_LOGIN")
+        return self._issue_session(session, identity, link, user, client_ip, "VC_LOGIN")
+
+    def certificate_step_up(self, session: Session, manage_session: Session, legacy_user_idx, handoff_code,
+                            client_ip: str | None):
+        """Password-logged-in PACS user proves the same identity with a certificate. The code is redeemed only for an
+        authenticated legacy user, and a session is issued only when the linked PACS user is that same user."""
+        self.require_operational()
+        if legacy_user_idx is None:
+            raise VcError(401, "VC_LOGIN_REQUIRED", "PACS에 먼저 로그인해야 인증서 확인을 할 수 있습니다.")
+        legacy_user_idx = int(legacy_user_idx)
+        identity, link = self._redeem_linked_identity(session, handoff_code, "VC_STEP_UP")
+        if link.user_idx != legacy_user_idx:
+            self._audit(session, legacy_user_idx, "VC_STEP_UP", "VC_DOCTOR", identity.doctor_id, "DENIED",
+                        code="IDENTITY_MISMATCH")
+            session.commit()
+            raise VcError(403, "VC_STEP_UP_IDENTITY_MISMATCH",
+                          "이 인증서는 현재 로그인한 PACS 계정과 연결된 의사의 인증서가 아닙니다.")
+        user = self.port.get_user(manage_session, link.user_idx)
+        self._require_local_doctor(session, user, "VC_STEP_UP")
+        self._require_license_match(session, user, identity, "VC_STEP_UP")
+        return self._issue_session(session, identity, link, user, client_ip, "VC_STEP_UP")
+
+    def _redeem_linked_identity(self, session: Session, handoff_code, action: str):
+        """One-use server-to-server redeem, identity validation and the ACTIVE admin link for that doctor."""
         if not isinstance(handoff_code, str) or not _HANDOFF.match(handoff_code):
             raise VcError(401, "VC_HANDOFF_INVALID", "인증서 로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요.")
         try:
-            identity = self.client.redeem_handoff(handoff_code)
+            raw = self.client.redeem_handoff(handoff_code)
         except VcRejected as e:
-            self._audit(session, None, "VC_LOGIN", "HANDOFF", None, "DENIED", code=e.code)
+            self._audit(session, None, action, "HANDOFF", None, "DENIED", code=e.code)
             session.commit()
             raise VcError(401, "VC_HANDOFF_INVALID", "인증서 로그인 정보가 올바르지 않거나 만료되었습니다.")
         except VcUnavailable:
             raise VcError(503, "VC_UNAVAILABLE", "Vision-Certi에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
                           retryable=True)
+        identity = self._verified_identity(raw)
+        if identity is None:
+            self._audit(session, None, action, "HANDOFF", None, "DENIED", code="IDENTITY_REJECTED")
+            session.commit()
+            raise VcError(401, "VC_HANDOFF_INVALID", "인증서 로그인 결과를 확인할 수 없습니다.")
+        link = self._active_link_for_doctor(session, identity.tenant_id, identity.doctor_id)
+        if link is None:
+            self._audit(session, None, action, "VC_DOCTOR", identity.doctor_id, "DENIED", code="NOT_LINKED")
+            session.commit()
+            raise VcError(403, "VC_DOCTOR_NOT_LINKED",
+                          "이 인증서 의사 계정이 PACS 사용자와 연결되어 있지 않습니다. 관리자에게 연결을 요청하세요.")
+        return identity, link
+
+    def _verified_identity(self, identity) -> Optional["VerifiedIdentity"]:
         now = self.clock()
         try:
             tenant_id = identity["tenantId"]
@@ -164,35 +224,46 @@ class VcIntegrationService:
             mode = identity["identityMode"]
             vc_expires = _parse_instant(identity["sessionExpiresAt"])
             authenticated_at = _parse_instant(identity["authenticatedAt"])
+            license_number = identity.get("doctorLicenseNumber")
             valid = (tenant_id == self.config.tenant_id and doctor_id and enrollment_id
                      and isinstance(fingerprint, str) and _HEX64.match(fingerprint) and mode in _CERT_MODES
                      and identity.get("activeSigner") is True and identity.get("doctorStatus") == "ACTIVE"
                      and vc_expires > now)
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, AttributeError):
             valid = False
         if not valid:
-            self._audit(session, None, "VC_LOGIN", "HANDOFF", None, "DENIED", code="IDENTITY_REJECTED")
+            return None
+        return VerifiedIdentity(tenant_id, doctor_id, enrollment_id, fingerprint, mode, authenticated_at, vc_expires,
+                                license_number)
+
+    def _require_license_match(self, session: Session, user: LocalUser, identity: "VerifiedIdentity",
+                               action: str) -> None:
+        """Required deny condition, never an authenticator: Vision-Certi must report the admin-verified license number
+        and the local PACS doctor's license must be that number. Absent or malformed fails closed."""
+        expected = identity.license_number.strip() if isinstance(identity.license_number, str) else ""
+        if not _LICENSE.match(expected) or _license_digits(user.doctor_license_number) != expected:
+            self._audit(session, user.user_idx, action, "USER", user.user_idx, "DENIED", code="LICENSE_MISMATCH",
+                        doctorId=identity.doctor_id)
             session.commit()
-            raise VcError(401, "VC_HANDOFF_INVALID", "인증서 로그인 결과를 확인할 수 없습니다.")
-        link = self._active_link_for_doctor(session, tenant_id, doctor_id)
-        if link is None:
-            self._audit(session, None, "VC_LOGIN", "VC_DOCTOR", doctor_id, "DENIED", code="NOT_LINKED")
-            session.commit()
-            raise VcError(403, "VC_DOCTOR_NOT_LINKED",
-                          "이 인증서 의사 계정이 PACS 사용자와 연결되어 있지 않습니다. 관리자에게 연결을 요청하세요.")
-        user = self.port.get_user(manage_session, link.user_idx)
-        self._require_local_doctor(session, user, "VC_LOGIN")
+            raise VcError(403, "VC_LICENSE_MISMATCH",
+                          "PACS 계정의 의사면허번호가 Vision-Certi에 등록된 면허번호와 다릅니다. 관리자에게 확인을 요청하세요.")
+
+    def _issue_session(self, session: Session, identity: "VerifiedIdentity", link: VcDoctorLink, user: LocalUser,
+                       client_ip: str | None, action: str):
+        now = self.clock()
         token = TOKEN_PREFIX + secrets.token_urlsafe(32)
-        expires_at = min(now + datetime.timedelta(minutes=self.config.session_max_minutes), vc_expires)
+        expires_at = min(now + datetime.timedelta(minutes=self.config.session_max_minutes), identity.session_expires_at)
         row = VcSession(token_sha256=token_sha256(token), user_idx=user.user_idx, link_idx=link.link_idx,
-                        vc_tenant_id=tenant_id, vc_doctor_id=doctor_id, vc_enrollment_id=enrollment_id,
-                        vc_certificate_fingerprint=fingerprint, vc_identity_mode=mode,
-                        vc_authenticated_at=authenticated_at, vc_session_expires_at=vc_expires, created_at=now,
+                        vc_tenant_id=identity.tenant_id, vc_doctor_id=identity.doctor_id,
+                        vc_enrollment_id=identity.enrollment_id,
+                        vc_certificate_fingerprint=identity.certificate_fingerprint,
+                        vc_identity_mode=identity.identity_mode, vc_authenticated_at=identity.authenticated_at,
+                        vc_session_expires_at=identity.session_expires_at, created_at=now,
                         expires_at=expires_at, client_ip=(client_ip or "")[:64] or None)
         session.add(row)
         session.flush()
-        self._audit(session, user.user_idx, "VC_LOGIN", "VC_SESSION", row.session_idx, "SUCCESS",
-                    doctorId=doctor_id, enrollmentId=enrollment_id)
+        self._audit(session, user.user_idx, action, "VC_SESSION", row.session_idx, "SUCCESS",
+                    doctorId=identity.doctor_id, enrollmentId=identity.enrollment_id, licenseChecked=True)
         session.commit()
         return token, row, user
 
@@ -626,10 +697,16 @@ class VcIntegrationService:
             user = self.port.get_user(manage_session, approval.user_idx)
             link = session.get(VcDoctorLink, approval.link_idx)
             study = self.port.get_study(session, approval.study_idx)
+            cert_session = session.get(VcSession, approval.session_idx)
             if user is None or not user.active or not user.is_doctor or not user.pacs_user:
                 refusal = (COMMIT_REFUSED, "LOCAL_USER_INACTIVE")
             elif link is None or link.status != "ACTIVE" or link.user_idx != approval.user_idx:
                 refusal = (COMMIT_REFUSED, "LINK_REVOKED")
+            elif (cert_session is None or cert_session.user_idx != approval.user_idx
+                  or cert_session.vc_doctor_id != approval.vc_doctor_id
+                  or cert_session.vc_enrollment_id != approval.vc_certificate_enrollment_id):
+                # The signing certificate must be the one proved by the login/step-up that prepared this approval.
+                refusal = (COMMIT_REFUSED, "CERTIFICATE_CHANGED")
             elif report is None or report.report_idx != approval.report_idx or study is None:
                 refusal = (SUPERSEDED_AFTER_SIGNATURE, "REPORT_MISSING")
             elif snap.content_sha256(report) != approval.content_sha256:

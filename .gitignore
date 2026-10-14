@@ -1,0 +1,37 @@
+**/node_modules/
+**/build/
+**/dist/
+**/.gradle/
+**/.cache/
+**/coverage/
+.env
+.env.*
+!.env.example
+work/
+*.log
+infra/data/
+
+# Original handover contains deployment secrets and third-party source bundles.
+# Publish only the reviewed integration kit under integrations/sv70/.
+SaintViewPACS-handover-full-*/
+SaintViewPACS-handover-full-*.zip
+Inviz_*.pdf
+outputs/
+**/__pycache__/
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/*.pyc
+**/*.p12
+**/*.pfx
+**/*.key
+**/*.key.pem
+**/*.secret
+**/*.password
+**/*.jks
+**/*.keystore
+**/*secrets*.json
+infra/production/secrets/
+infra/production/certs/
+
+**/*.tsbuildinfo

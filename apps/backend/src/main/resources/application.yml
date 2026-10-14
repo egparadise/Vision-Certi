@@ -1,0 +1,84 @@
+# Shared defaults. Startup fails closed unless either the explicit 'dev' profile is active, or 'prod' is active
+# with the complete production configuration (see com.inviz.visioncerti.security.FailClosedProfileGuard and
+# com.inviz.visioncerti.runtime.ProductionReadiness).
+spring:
+  application:
+    name: vision-certi-backend
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
+  mvc:
+    problemdetails:
+      enabled: false
+
+server:
+  port: 8080
+  error:
+    include-stacktrace: never
+    include-message: never
+
+visioncerti:
+  # Runtime state (docs/PRODUCTION_RUNTIME.md). dev defaults to IN_MEMORY; prod requires POSTGRESQL.
+  persistence:
+    mode: ${VISIONCERTI_PERSISTENCE_MODE:}
+  db:
+    url: ${VISIONCERTI_DB_URL:}
+    username: ${VISIONCERTI_DB_USERNAME:}
+    password-file: ${VISIONCERTI_DB_PASSWORD_FILE:}
+    pool-size: ${VISIONCERTI_DB_POOL_SIZE:10}
+    lock-timeout: ${VISIONCERTI_DB_LOCK_TIMEOUT:PT5S}
+  # Staff authentication: DEV_HEADERS (dev only, not authentication) or OIDC (required in prod).
+  staff-auth:
+    mode: ${VISIONCERTI_STAFF_AUTH_MODE:DEV_HEADERS}
+    bootstrap-file: ${VISIONCERTI_STAFF_BOOTSTRAP_FILE:}
+    oidc:
+      issuer: ${VISIONCERTI_STAFF_OIDC_ISSUER:}
+      audience: ${VISIONCERTI_STAFF_OIDC_AUDIENCE:}
+      jwks-uri: ${VISIONCERTI_STAFF_OIDC_JWKS_URI:}
+      client-id: ${VISIONCERTI_STAFF_OIDC_CLIENT_ID:}
+  documents:
+    max-bytes: 20971520
+  sign-requests:
+    ttl: PT10M
+  dev:
+    synthetic-identities-enabled: false
+  # Physician activation and signing keys (docs/DOCTOR_ACTIVATION.md). Empty values mean "not configured".
+  doctor:
+    google:
+      client-id: ${VISIONCERTI_GOOGLE_CLIENT_ID:}
+      jwks-uri: ${VISIONCERTI_GOOGLE_JWKS_URI:https://www.googleapis.com/oauth2/v3/certs}
+    dev-identity-enabled: ${VISIONCERTI_DOCTOR_DEV_IDENTITY_ENABLED:false}
+    signing-backend: ${VISIONCERTI_SIGNING_BACKEND:NOT_CONFIGURED}
+    activation-policy: ${VISIONCERTI_DOCTOR_ACTIVATION_POLICY:CERTIFICATE_REQUIRED}
+  # External authentication certificates (docs/CERTIFICATE_ENROLLMENT.md); separate from OpenBao signing certificates.
+  cert:
+    trust-anchors-file: ${VISIONCERTI_CERT_TRUST_ANCHORS_FILE:}
+    crl-files: ${VISIONCERTI_CERT_CRL_FILES:}
+    service-id: ${VISIONCERTI_CERT_SERVICE_ID:vision-certi-dev}
+    challenge-ttl: ${VISIONCERTI_CERT_CHALLENGE_TTL:PT5M}
+    dev-mock-enabled: ${VISIONCERTI_CERT_DEV_MOCK_ENABLED:false}
+  mobile:
+    provider: ${VISIONCERTI_MOBILE_PROVIDER:}
+  # SV70 PACS integration (docs/SV70_PACS_INTEGRATION.md). Empty client-id means "not configured" (503).
+  pacs:
+    client-id: ${VISIONCERTI_PACS_CLIENT_ID:}
+    client-secret-file: ${VISIONCERTI_PACS_CLIENT_SECRET_FILE:}
+    audience: ${VISIONCERTI_PACS_AUDIENCE:vision-certi:pacs-integration:v1}
+    tenant-ids: ${VISIONCERTI_PACS_TENANT_IDS:}
+    handoff-ttl: ${VISIONCERTI_PACS_HANDOFF_TTL:PT60S}
+    max-certificate-login-age: ${VISIONCERTI_PACS_MAX_CERTIFICATE_LOGIN_AGE:PT10M}
+  openbao:
+    addr: ${VISIONCERTI_OPENBAO_ADDR:}
+    namespace: ${VISIONCERTI_OPENBAO_NAMESPACE:}
+    provisioning-token: ${VISIONCERTI_OPENBAO_PROVISIONING_TOKEN:}
+    signing-token: ${VISIONCERTI_OPENBAO_SIGNING_TOKEN:}
+    provisioning-token-file: ${VISIONCERTI_OPENBAO_PROVISIONING_TOKEN_FILE:}
+    signing-token-file: ${VISIONCERTI_OPENBAO_SIGNING_TOKEN_FILE:}
+    transit-mount: ${VISIONCERTI_OPENBAO_TRANSIT_MOUNT:transit}
+    pki-mount: ${VISIONCERTI_OPENBAO_PKI_MOUNT:pki}
+    pki-role: ${VISIONCERTI_OPENBAO_PKI_ROLE:vision-certi-doctor}
+    key-prefix: ${VISIONCERTI_OPENBAO_KEY_PREFIX:vc-doctor}
+    cert-ttl: ${VISIONCERTI_OPENBAO_CERT_TTL:8760h}
+    ca-cert-file: ${VISIONCERTI_OPENBAO_CA_CERT_FILE:}
+    timeout: ${VISIONCERTI_OPENBAO_TIMEOUT:PT10S}

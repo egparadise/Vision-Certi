@@ -11,6 +11,17 @@ import {
 } from "@shared/types/visionCerti.types";
 
 export default class VisionCertiService {
+  public static async getEnrollmentStatus(): Promise<{
+    registrationStatus: 'NOT_REQUIRED' | 'NOT_REGISTERED' | 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED';
+    doctorId: string | null;
+  }> {
+    return (await client.get('/vc/auth/enrollment-status')).data;
+  }
+
+  public static async startEnrollment(): Promise<{ doctorId: string; challenge: Record<string, unknown> }> {
+    return (await client.post('/vc/auth/enrollment-start', {})).data;
+  }
+
   /**
    * Vision-Certi 연동 설정 조회 (공개 엔드포인트)
    */

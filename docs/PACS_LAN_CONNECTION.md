@@ -37,7 +37,9 @@ PACS 서버에서:
 curl --cacert /etc/vision-certi/vision-certi-lan-ca.cer https://192.168.45.160:5174/v1/runtime/capabilities
 ```
 
-PACS API의 `GET /api/vc/config`가 `state: ENABLED`를 반환하는지 확인한다. 관리자 화면에서 `PACS user_idx ↔ INVIZ Doctor ID`를 증빙과 함께 연결한다. 같은 면허번호가 양쪽에 등록되어 있어야 한다.
+PACS API의 `GET /api/vc/config`가 `state: ENABLED`를 반환하는지 확인한다. 최초 PACS ID·비밀번호 로그인 후 `GET /api/vc/auth/enrollment-status`로 등록 상태를 확인하고, 미등록 계정은 `POST /api/vc/auth/enrollment-start`로 공동인증서 등록을 시작한다. 성명·면허·소속은 PACS 서버 DB에서 읽는다. 사용자에게 초대코드를 요구하거나 관리자가 계정을 일괄 사전등록하지 않는다. 인증서 검증·동의·검토·활성화가 완료되면 `PACS user_idx ↔ INVIZ Doctor ID`가 자동 연결된다.
+
+이후에는 기존 PACS ID·비밀번호로 로그인한다. 일반 PACS API에서도 활성 등록 여부를 확인하므로 화면 경로를 직접 입력하거나 캐시된 토큰으로 최초 등록을 건너뛸 수 없다. 기존 관리자 등록 계정은 면허번호만으로 자동 연결하지 않으며 별도 이전 절차가 필요하다. 백엔드에는 V006 마이그레이션을 적용한다. [상세 계약](../apps/backend/docs/PACS_SELF_ENROLLMENT.md)을 참고한다.
 
 ID/비밀번호로 PACS에 로그인한 경우에도 영상 열람·판독문 초안 작성은 가능하다. 최종 승인에서는 공동인증서 본인확인을 거쳐 현재 PACS 사용자와 일치해야 하며, 서명 확인 후에만 A/RA로 확정한다. 다른 의사의 인증서, 만료·해제된 연결, 변경된 판독문은 승인할 수 없다.
 

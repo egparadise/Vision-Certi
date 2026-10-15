@@ -46,6 +46,8 @@ final class Doctor {
     InvitationState invitationState;
     int invitationFailures;
     int invitationChallenges;
+    /** Durable HMAC-authenticated PACS account binding, never released on revocation. */
+    String pacsAccountKey;
 
     Doctor(UUID id, String tenantId, String name, String licenseNumber, String centerName, String googleEmail,
             String identityEvidenceRef, String licenseEvidenceRef, Instant createdAt, String createdBy) {

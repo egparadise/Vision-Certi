@@ -929,7 +929,7 @@ export const DoctorAdminView: React.FC = () => {
                       </td>
                       <td style={{ padding: '10px 12px' }}>{doc.centerName}</td>
                       <td style={{ padding: '10px 12px' }}>
-                        <code>{doc.googleEmail}</code>
+                        <code>{doc.googleEmail || 'PACS 계정 등록'}</code>
                       </td>
                       <td style={{ padding: '10px 12px' }} data-testid={`doctor-cert-cell-${doc.id}`}>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '2px' }}>
@@ -1210,7 +1210,7 @@ export const DoctorAdminView: React.FC = () => {
               >
                 <div><strong>대상 의사:</strong> {reviewCandidateDoctor.name} (면허번호: {reviewCandidateDoctor.licenseNumber})</div>
                 <div><strong>소속 센터:</strong> {reviewCandidateDoctor.centerName}</div>
-                <div><strong>이메일:</strong> {reviewCandidateDoctor.googleEmail}</div>
+                <div><strong>이메일:</strong> {reviewCandidateDoctor.googleEmail || 'PACS 계정 등록'}</div>
               </div>
 
               <div style={{ marginBottom: '12px', fontSize: '0.8rem', border: '1px solid var(--navy-200)', borderRadius: '6px', padding: '10px 12px' }}>

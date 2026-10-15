@@ -22,6 +22,7 @@ export const useUserStore = createStore<UserStore>((set)=>({
       window.electron?.ipcRenderer?.send('user:remember-user', userAuthProfile);
     },
     login: async (userData) => {
+      setAuthorizationHeader(userData.token);
       window.electron?.ipcRenderer?.send('user:set-user-info', {
         userInfo: userData.user_data,
         token: userData.token,

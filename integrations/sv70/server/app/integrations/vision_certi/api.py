@@ -85,6 +85,36 @@ def build_router(deps: VcApiDeps) -> APIRouter:
         except VcError as e:
             return _error(e)
 
+    def enrollment_user(request):
+        bearer = (request.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+        if bearer.startswith(TOKEN_PREFIX):
+            raise VcError(409, "VC_PASSWORD_LOGIN_REQUIRED", "Use PACS ID/password for initial enrollment")
+        user_idx = deps.legacy_user_idx(request)
+        if user_idx is None:
+            raise VcError(401, "VC_LOGIN_REQUIRED", "PACS login is required")
+        return user_idx
+
+    @router.get("/auth/enrollment-status")
+    def enrollment_status(request: Request, session: Session = Depends(deps.main_session),
+                          manage: Session = Depends(deps.manage_session)):
+        try:
+            return _ok(deps.service().enrollment_status(session, manage, enrollment_user(request)))
+        except VcError as e:
+            return _error(e)
+
+    @router.post("/auth/enrollment-start")
+    async def enrollment_start(request: Request, session: Session = Depends(deps.main_session),
+                               manage: Session = Depends(deps.manage_session)):
+        try:
+            user_idx = enrollment_user(request)
+            # Bootstrap is derived exclusively from the current PACS account. Reject profile/identity overrides.
+            raw = await request.body()
+            if raw.strip() and await _json_body(request):
+                raise VcError(422, "VC_VALIDATION_FAILED", "Enrollment request must not contain profile fields")
+            return _ok(deps.service().enrollment_start(session, manage, user_idx), 201)
+        except VcError as e:
+            return _error(e)
+
     @router.post("/auth/certificate-step-up")
     async def certificate_step_up(request: Request, session: Session = Depends(deps.main_session),
                                   manage: Session = Depends(deps.manage_session)):

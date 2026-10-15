@@ -74,6 +74,26 @@ def legacy_report_write_guard(report_data: dict) -> None:
     _raise_http(lambda: guard_legacy_report_write(service().config, report_data))
 
 
+ENROLLMENT_BOOTSTRAP_PATHS = frozenset({
+    "/api/vc/config", "/api/vc/auth/enrollment-status", "/api/vc/auth/enrollment-start",
+    "/api/user/auth/logout", "/api/vc/auth/logout",
+})
+
+
+def enrollment_access_guard(path: str, user_idx) -> None:
+    """Run after token authentication on every protected request, even a cached legacy token."""
+    if path in ENROLLMENT_BOOTSTRAP_PATHS or not service().config.guard_active:
+        return
+    from app.database import db, manageDB
+    main_gen, manage_gen = db.session(), manageDB.session()
+    try:
+        main, manage = next(main_gen), next(manage_gen)
+        service().require_enrolled_pacs_access(main, manage, user_idx)
+    finally:
+        main_gen.close()
+        manage_gen.close()
+
+
 def legacy_report_delete_guard(session, report_idx) -> None:
     from app.integrations.vision_certi.service import guard_legacy_report_delete
     _raise_http(lambda: guard_legacy_report_delete(service().config, session, report_idx))

@@ -17,6 +17,7 @@ import { DoctorActivationView } from './components/DoctorActivationView';
 import { CertificateEnrollmentView } from './components/CertificateEnrollmentView';
 import { CertificateLoginView } from './components/CertificateLoginView';
 import { PersonalCertificateRegistration } from './components/PersonalCertificateRegistration';
+import { PacsCertificateEnrollment } from './components/PacsCertificateEnrollment';
 
 export const AppContent: React.FC = () => {
   const { activeTab, tenantId, actorId, isMockMode, runtimeCapabilities } = useApp();
@@ -99,6 +100,7 @@ export const App: React.FC = () => {
 
   if (hash === '#/login' || hash === '#/certificates/login') return <CertificateLoginView />;
   if (hash === '#/certificates/register') return <PersonalCertificateRegistration />;
+  if (hash.startsWith('#/certificates/pacs-enroll') || hash.startsWith('#/certificates/enroll')) return <main className="personal-certificate-page"><PacsCertificateEnrollment /></main>;
 
   if (hash.startsWith('#/signup')) {
     const allowSignup = isDemoEnabled() || Boolean(runtimeCapabilities?.personalSignup?.available);
@@ -129,7 +131,7 @@ export const App: React.FC = () => {
     );
   }
 
-  if (hash.startsWith('#/certificates/enroll') || hash.startsWith('#/certificates/pacs-login') || hash.startsWith('#/doctor/sign-requests')) {
+  if (hash.startsWith('#/certificates/pacs-login') || hash.startsWith('#/doctor/sign-requests')) {
     return (
       <div className="app-container">
         <Header />

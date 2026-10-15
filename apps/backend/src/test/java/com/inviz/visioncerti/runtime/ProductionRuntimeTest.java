@@ -411,7 +411,7 @@ class ProductionRuntimeTest {
         String caps = body(mvc.perform(get("/v1/runtime/capabilities")).andExpect(status().isOk()));
         assertThat((String) JsonPath.read(caps, "$.profile")).isEqualTo("prod");
         assertThat((String) JsonPath.read(caps, "$.persistence.mode")).isEqualTo("POSTGRESQL");
-        assertThat((Integer) JsonPath.read(caps, "$.persistence.schemaVersion")).isEqualTo(5);
+        assertThat((Integer) JsonPath.read(caps, "$.persistence.schemaVersion")).isEqualTo(6);
         assertThat((String) JsonPath.read(caps, "$.staffAuth.mode")).isEqualTo("OIDC");
         assertThat((String) JsonPath.read(caps, "$.staffAuth.issuer")).isEqualTo(TestOidc.ISSUER);
         assertThat((String) JsonPath.read(caps, "$.staffAuth.clientId")).isEqualTo(TestOidc.CLIENT_ID);

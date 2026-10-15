@@ -24,6 +24,7 @@ import com.inviz.visioncerti.doctor.DoctorDtos.ConsentRequest;
 import com.inviz.visioncerti.doctor.DoctorDtos.SessionResponse;
 import com.inviz.visioncerti.doctor.DoctorPrincipal;
 import com.inviz.visioncerti.doctor.DoctorService;
+import com.inviz.visioncerti.doctor.DoctorStatus;
 import com.inviz.visioncerti.doctor.DoctorService.CertificateIdentity;
 import com.inviz.visioncerti.doctor.DoctorService.CertificateInvitation;
 import com.inviz.visioncerti.doctor.DoctorService.DoctorRef;
@@ -194,6 +195,18 @@ public class CertificateEnrollmentService implements CertificateGate {
         requireTrust();
         doctors.countLoginChallenge(source);
         return newChallenge(PURPOSE_LOGIN, null, null, null);
+    }
+
+    /** Internal entry point for an authenticated PACS account. Never exposed as a public doctor-id challenge. */
+    public ChallengeResponse createPacsEnrollmentChallenge(DoctorRef ref, String source) {
+        requireTrust();
+        DoctorRef current = doctors.doctorRef(ref.id());
+        if (current == null || !current.tenantId().equals(ref.tenantId()) || current.status().blocked()
+                || current.status() == DoctorStatus.ACTIVE) {
+            throw ApiException.forbidden("DOCTOR_NOT_ALLOWED", "인증서 최초 등록을 진행할 수 없는 계정입니다.");
+        }
+        doctors.countLoginChallenge(source);
+        return newChallenge(PURPOSE_ENROLLMENT, current.id(), current.tenantId(), null);
     }
 
     private ChallengeResponse newChallenge(String purpose, UUID doctorId, String tenantId, String invitationHash) {

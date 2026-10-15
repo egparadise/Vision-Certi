@@ -17,7 +17,11 @@ import {
 import { PhysicianSigningPortal } from './PhysicianSigningPortal';
 import { getLocalCertSdkAdapter } from '../services/localCertSdkAdapter';
 
-export const CertificateEnrollmentView: React.FC<{ initialMode?: 'PC_ENROLL' | 'PC_LOGIN' }> = ({ initialMode = 'PC_ENROLL' }) => {
+export const CertificateEnrollmentView: React.FC<{
+  initialMode?: 'PC_ENROLL' | 'PC_LOGIN';
+  initialChallenge?: CertificateChallenge;
+  onEnrollmentComplete?: () => void;
+}> = ({ initialMode = 'PC_ENROLL', initialChallenge, onEnrollmentComplete }) => {
   const { client } = useApp();
 
   // Mode: PC_ENROLL (initial onboarding), PC_LOGIN (returning doctor), MOBILE, GOOGLE_AUX
@@ -27,7 +31,7 @@ export const CertificateEnrollmentView: React.FC<{ initialMode?: 'PC_ENROLL' | '
   // Step 2: Proof Submission & CA Validation
   // Step 3: Physician Consent
   // Step 4: Admin Review Observation, Key Activation & Signing Portal
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(initialChallenge ? 2 : 1);
 
   // Configuration from GET /v1/certificate-enrollment/config
   const [config, setConfig] = useState<CertificateEnrollmentConfig | null>(null);
@@ -36,7 +40,7 @@ export const CertificateEnrollmentView: React.FC<{ initialMode?: 'PC_ENROLL' | '
 
   // Invitation code and challenge
   const [invitationCode, setInvitationCode] = useState('');
-  const [challenge, setChallenge] = useState<CertificateChallenge | null>(null);
+  const [challenge, setChallenge] = useState<CertificateChallenge | null>(initialChallenge ?? null);
 
   // Security critical: activationToken and active session must ONLY be kept in volatile component memory
   // NEVER write to localStorage, sessionStorage, or URL query parameters
@@ -69,6 +73,10 @@ export const CertificateEnrollmentView: React.FC<{ initialMode?: 'PC_ENROLL' | '
 
   // Local SDK state
   const [sdkAvailable, setSdkAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (initialChallenge && certificate && doctor?.status === 'ACTIVE') onEnrollmentComplete?.();
+  }, [initialChallenge, certificate, doctor?.status, onEnrollmentComplete]);
 
   useEffect(() => {
     let active = true;
@@ -451,12 +459,12 @@ export const CertificateEnrollmentView: React.FC<{ initialMode?: 'PC_ENROLL' | '
         data-testid="cert-architecture-banner"
       >
         <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', color: 'var(--primary-color, #0284c7)' }}>
-          의사 본인확인 및 전자서명 인증서 등록 (Certificate Enrollment)
+          {initialChallenge ? 'PACS 최초 공동인증서 등록' : '의사 본인확인 및 전자서명 인증서 등록 (Certificate Enrollment)'}
         </h2>
         <p style={{ margin: 0, fontSize: '0.875rem', lineHeight: '1.5', color: 'var(--text-muted, #64748b)' }}>
-          본 의료 플랫폼은 <strong>2계층 암호화 아키텍처</strong>를 운영합니다.<br />
+          {initialChallenge ? <>로그인한 PACS 계정에 본인의 공동인증서를 연결합니다. 등록과 활성화가 완료되면 다음부터 기존 PACS ID·비밀번호로 로그인할 수 있습니다.</> : <>본 의료 플랫폼은 <strong>2계층 암호화 아키텍처</strong>를 운영합니다.<br />
           • <strong>1계층 (의사 본인확인):</strong> 외부 공인/공동/금융인증서를 통한 비대면 신원 검증 (개인키/비밀번호 입력 절대 금지)<br />
-          • <strong>2계층 (판독문 전자서명):</strong> OpenBao Transit 소프트웨어 키 관리(Software Transit) 기반의 전용 전자서명키 발급
+          • <strong>2계층 (판독문 전자서명):</strong> OpenBao Transit 소프트웨어 키 관리(Software Transit) 기반의 전용 전자서명키 발급</>}
         </p>
       </div>
 
@@ -497,7 +505,7 @@ export const CertificateEnrollmentView: React.FC<{ initialMode?: 'PC_ENROLL' | '
       )}
 
       {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color, #e2e8f0)', marginBottom: '1.5rem' }}>
+      {!initialChallenge && <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color, #e2e8f0)', marginBottom: '1.5rem' }}>
         <button
           type="button"
           data-testid="tab-cert-enroll"
@@ -562,7 +570,7 @@ export const CertificateEnrollmentView: React.FC<{ initialMode?: 'PC_ENROLL' | '
         >
           Google 보조 신원확인
         </button>
-      </div>
+      </div>}
 
       {/* Status & Error Messages */}
       {error && (
@@ -1536,7 +1544,7 @@ export const CertificateEnrollmentView: React.FC<{ initialMode?: 'PC_ENROLL' | '
           )}
 
           {/* Physician Signing Portal Component directly in memory per Defect #5 */}
-          {activationToken && doctor && (
+          {!initialChallenge && activationToken && doctor && (
             <PhysicianSigningPortal
               token={activationToken}
               doctor={doctor}

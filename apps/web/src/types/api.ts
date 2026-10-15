@@ -271,7 +271,7 @@ export interface Doctor {
   name: string;
   licenseNumber: string;
   centerName: string;
-  googleEmail: string;
+  googleEmail: string | null;
   status: DoctorStatus;
   identityMode: DoctorIdentityMode;
   googleAccountLinked: boolean;
@@ -474,4 +474,3 @@ export interface PacsReportSnapshot {
 }
 
 export * from './certificate';
-

@@ -10,6 +10,19 @@ public final class PacsIntegrationDtos {
     private PacsIntegrationDtos() {
     }
 
+    public record EnrollmentStartRequest(String tenantId, String pacsUserId, String name,
+            String licenseNumber, String centerName) {
+        @Override public String toString() { return "EnrollmentStartRequest[<personal data redacted>]"; }
+    }
+
+    public record EnrollmentStatusRequest(String tenantId, String pacsUserId) { }
+
+    public record EnrollmentStartResponse(UUID doctorId,
+            com.inviz.visioncerti.certificate.CertificateDtos.ChallengeResponse challenge) { }
+
+    public record EnrollmentStatusResponse(UUID doctorId, String registrationStatus,
+            UUID certificateEnrollmentId, String fingerprintSha256, String doctorLicenseNumber) { }
+
     public record HandoffRequest(String audience) {
     }
 

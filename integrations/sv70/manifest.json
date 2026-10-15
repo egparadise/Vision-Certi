@@ -35,14 +35,14 @@
       "path": "app/integrations/vision_certi/api.py",
       "originalSha256": null,
       "originalNormalizedSha256": null,
-      "sha256": "077432be46330eeec2433b872d408a9c057debc271ad3506ddedf08aa4038980"
+      "sha256": "79b4c85c36848add27a87b879f9a161f158502e68890d416aafc477a9ad7b63c"
     },
     {
       "component": "server",
       "path": "app/integrations/vision_certi/client.py",
       "originalSha256": null,
       "originalNormalizedSha256": null,
-      "sha256": "84da43bf0e2abc2c43d1af8b4d23fd48d511413814c1c2c70d5532eb78bdb7a2"
+      "sha256": "339ec1fcab8de5c0bfde53dae7b69944d4fff900d9641378620bd2d10fe89862"
     },
     {
       "component": "server",
@@ -70,7 +70,7 @@
       "path": "app/integrations/vision_certi/legacy_port.py",
       "originalSha256": null,
       "originalNormalizedSha256": null,
-      "sha256": "b3cdffe3143bd94b7b284d799ae1408d60310a8b3e8f0a0410a64f045910d1b4"
+      "sha256": "f26603494ea1a4de8625f0ce582e1d4c68f2d101029098fa631229953ae54585"
     },
     {
       "component": "server",
@@ -84,14 +84,14 @@
       "path": "app/integrations/vision_certi/runtime.py",
       "originalSha256": null,
       "originalNormalizedSha256": null,
-      "sha256": "85e45da2f3957d381086f84cb8ea080b375ccd1b0bdc52eeafeefc2867e6bc31"
+      "sha256": "0dff66a182a7e88fd8a997cd1a0848d2956c8a49901812e23cbbe4582677b350"
     },
     {
       "component": "server",
       "path": "app/integrations/vision_certi/service.py",
       "originalSha256": null,
       "originalNormalizedSha256": null,
-      "sha256": "dceb9d46d234d67ab7393a6bdd431a23e66955173dc2909d609fd4cf6da01d1c"
+      "sha256": "1e8312f2301ca767a89fc797281e6f209ca0afbed1cddac0db790813b861568c"
     },
     {
       "component": "server",
@@ -112,7 +112,7 @@
       "path": "app/middlewares/TokenHTTPMiddleware.py",
       "originalSha256": "5a5d70665408f54aaca7b63e97c7ecdaa1b6b1d157ab173bb2ad92fb92849799",
       "originalNormalizedSha256": "bd80782d4c64c26eae924c9ee5c7f55fc1581078b0d8f86575da5524afc446ba",
-      "sha256": "82386e2ca2da0b9c80c9f7e44a09e03cf5795962e2f93ddf6b8b14bc37e38a78"
+      "sha256": "89828df141a8d3ed91f83081040139094bf871425bbb20845098efe7ca47a3d9"
     },
     {
       "component": "server",
@@ -179,10 +179,24 @@
     },
     {
       "component": "server",
+      "path": "tests/vision_certi/test_vc_self_enrollment.py",
+      "originalSha256": null,
+      "originalNormalizedSha256": null,
+      "sha256": "0d2ac6bf6bfe5c8f1bc2827dc81e07013cfc83771365e300ffd3bb5875c09e15"
+    },
+    {
+      "component": "server",
       "path": "tests/vision_certi/test_vc_step_up.py",
       "originalSha256": null,
       "originalNormalizedSha256": null,
       "sha256": "f71f678fbcb478e09d0730c36296ac9686bd9d2bfc00092898c5d09c3f1608c7"
+    },
+    {
+      "component": "client",
+      "path": "src/App.tsx",
+      "originalSha256": "d743fe5c3094564f30f7945da12f5b772b248a543adf6606f89f7f8366f5e93b",
+      "originalNormalizedSha256": "c25d2ef22c7d98625b1f6d6a5d5b992de14cac1e673a505a833ac586a45e8667",
+      "sha256": "37cb4898c73d022ed269d90e1067c6ddf00c3caccf8e7c6312d8bb8e153a272e"
     },
     {
       "component": "client",
@@ -196,7 +210,7 @@
       "path": "src/components/user/LoginForm.tsx",
       "originalSha256": "0a6d769b1b4e2b3b3aa5751d54d418bc8a6b342827986d8412120d625948efad",
       "originalNormalizedSha256": "810a3ceae512004a60069e045b0bf025c4edf48e16306d609a1cd88696499563",
-      "sha256": "9101a6c793fc8c88e50eca228d67186728262718e854aac6773a8c49c31dc39b"
+      "sha256": "c554ef163a6dfd4c171ca78712f6cb2dbbc7e36c112d350b6071acb6be5ef76c"
     },
     {
       "component": "client",
@@ -214,6 +228,20 @@
     },
     {
       "component": "client",
+      "path": "src/pages/user/CertificateEnrollment.tsx",
+      "originalSha256": null,
+      "originalNormalizedSha256": null,
+      "sha256": "43fac3bbf119241f5fae0838772bedb9a3a61a8b5e496b1466840003595e5a4f"
+    },
+    {
+      "component": "client",
+      "path": "src/queries/useUsers.ts",
+      "originalSha256": "71a53d96940fad7d53eef5c8f8c578437072aaaab35032db6db6802361e2de41",
+      "originalNormalizedSha256": "853b498d21ca6b8ce816853c2f02f74ba645409c6df68a476ff36c3ad80c7d38",
+      "sha256": "7cf65e3bae0f57067ee118ed5be8eec6e8e39e1f0a6282be0939157c0983e54c"
+    },
+    {
+      "component": "client",
       "path": "src/services/api/certificateHandoff.ts",
       "originalSha256": null,
       "originalNormalizedSha256": null,
@@ -221,10 +249,17 @@
     },
     {
       "component": "client",
+      "path": "src/services/api/pacsCertificateEnrollment.ts",
+      "originalSha256": null,
+      "originalNormalizedSha256": null,
+      "sha256": "e3a84cb8c2e00151d9c6d5c6a4155734a54d0fb7d2a7746f8282d1f5cb9ba569"
+    },
+    {
+      "component": "client",
       "path": "src/services/api/VisionCertiService.ts",
       "originalSha256": null,
       "originalNormalizedSha256": null,
-      "sha256": "4ff6fe9059f15d775c3ddb255b25b612dd185778c7576f021ef1816600dc388e"
+      "sha256": "98de979a04a688a611686390d3a9ad3eb4bda01e759435a1719890d4d7eccfb0"
     },
     {
       "component": "client",
@@ -245,7 +280,7 @@
       "path": "src/stores/useUserStore.ts",
       "originalSha256": "0fed6db50814f2fb4a45f5c39814c7c9801bd944f0126c238240a38a2a012e3c",
       "originalNormalizedSha256": "a7391c842adf4e05be877d09ba55d5408df5da14c3817cbebab85bdcba2a81ab",
-      "sha256": "c1865afa89958e74bf675eb858cdc5f1e6e95919fed5a434d03aa9373e813a35"
+      "sha256": "11227935bb0fbcee4ce3156457e886384d9759edcbf50c902a0cad80fff4f84a"
     }
   ],
   "excludes": [

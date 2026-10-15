@@ -134,6 +134,7 @@ public final class PostgresTestDatabase {
     /** The reviewed migration file itself (database/migrations/V005__production_runtime.sql). */
     public static String migration() throws IOException {
         Path file = Path.of("..", "..", "database", "migrations", "V005__production_runtime.sql");
-        return Files.readString(file, StandardCharsets.UTF_8);
+        return Files.readString(file, StandardCharsets.UTF_8) + "\n"
+                + Files.readString(file.resolveSibling("V006__pacs_self_enrollment.sql"), StandardCharsets.UTF_8);
     }
 }

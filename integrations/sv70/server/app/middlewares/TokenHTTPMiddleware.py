@@ -19,6 +19,7 @@ from app.libs import exception_handler, event_logger
 from app.crud import get_user
 from app.core import EXCEPT_PATH_REGEX, EXCEPT_PATH_LIST
 from app.errors import NotAuthorized
+from app.integrations.vision_certi.service import VcError
 
 # 토큰 캐시: { token_key: { "data": user_data, "expires": timestamp } }
 _token_cache: dict = {}
@@ -154,6 +155,17 @@ class TokenASGIMiddleware:
                     )
                     if not is_vc_token:
                         _set_cached_user(token_key, scope["state"]["user"])
+                # Certificate enrollment gates normal PACS access, including cache hits. It does not replace JWT
+                # authentication or issue certificate sessions for password-only logins.
+                from app.integrations.vision_certi.runtime import enrollment_access_guard
+                authenticated = scope["state"]["user"] or {}
+                await asyncio.to_thread(enrollment_access_guard, url, authenticated.get("user_idx"))
+        except VcError as e:
+            response = JSONResponse(status_code=e.status, content={
+                "status": e.status, "code": e.code, "message": e.message, "retryable": e.retryable, **e.data},
+                headers={"Cache-Control": "no-store"})
+            await response(scope, receive, send)
+            return
         except Exception as e:
             error = await exception_handler(e)
             error_dict = dict(

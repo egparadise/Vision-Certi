@@ -29,19 +29,22 @@ with psycopg.connect(**owner,dbname='postgres',autocommit=True) as c:
     c.execute('GRANT certi_app TO vc_local_runtime')
     if not c.execute("SELECT 1 FROM pg_database WHERE datname='vision_certi_local'").fetchone():
         c.execute('CREATE DATABASE vision_certi_local')
-migration=ROOT/'database/migrations/V005__production_runtime.sql'
-checksum=hashlib.sha256(migration.read_bytes()).hexdigest()
+migrations=[ROOT/'database/migrations'/name for name in (
+    'V005__production_runtime.sql', 'V006__pacs_self_enrollment.sql')]
+checksums={m.name:hashlib.sha256(m.read_bytes()).hexdigest() for m in migrations}
 with psycopg.connect(**owner,dbname='vision_certi_local') as c:
     c.execute('CREATE TABLE IF NOT EXISTS public.vc_local_migrations(name text PRIMARY KEY,sha256 text NOT NULL)')
-    applied=c.execute('SELECT sha256 FROM public.vc_local_migrations WHERE name=%s',(migration.name,)).fetchone()
-    if applied:
-        assert applied[0]==checksum,'Applied runtime migration changed; deliberate upgrade required'
-    else:
-        c.execute(migration.read_text(encoding='utf8'))
-        c.execute('INSERT INTO public.vc_local_migrations VALUES(%s,%s)',(migration.name,checksum))
+    for migration in migrations:
+        checksum=checksums[migration.name]
+        applied=c.execute('SELECT sha256 FROM public.vc_local_migrations WHERE name=%s',(migration.name,)).fetchone()
+        if applied:
+            assert applied[0]==checksum,'Applied runtime migration changed; deliberate upgrade required'
+        else:
+            c.execute(migration.read_text(encoding='utf8'))
+            c.execute('INSERT INTO public.vc_local_migrations VALUES(%s,%s)',(migration.name,checksum))
     c.execute('REVOKE CREATE ON SCHEMA public FROM PUBLIC')
 result={'url':'jdbc:postgresql://127.0.0.1:15432/vision_certi_local','username':'vc_local_runtime',
-        'passwordFile':str(password),'migrationSha256':checksum}
+        'passwordFile':str(password),'migrationSha256':checksums[migrations[0].name], 'migrationChecksums':checksums}
 (ROOT/'work/postgres/runtime-connection.json').write_text(json.dumps(result,indent=2),encoding='utf8')
 secret=ROOT/'work/sv70-integration.secret'
 if not secret.exists(): secret.write_text(secrets.token_hex(32),encoding='ascii')

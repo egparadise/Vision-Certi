@@ -5,6 +5,7 @@ token middleware); studies and reports from the main PACS schema.
 from __future__ import annotations
 
 import datetime
+import json
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -95,6 +96,18 @@ class SqlLegacyPort:
         )
 
     # ------------------------------------------------------------------ studies and reports (main schema)
+
+    def enrollment_center(self, manage_session: Session, user_idx: int) -> str:
+        raw = manage_session.execute(text(
+            f"SELECT center_list FROM {self._users} WHERE user_idx = :u"), {"u": int(user_idx)}).scalar()
+        try:
+            centers = json.loads(raw) if isinstance(raw, str) else raw
+            names = sorted({item["center_name"].strip() for item in centers
+                            if isinstance(item, dict) and isinstance(item.get("center_name"), str)
+                            and item["center_name"].strip()})
+        except (TypeError, ValueError):
+            return ""
+        return ", ".join(names)
 
     def get_study(self, session: Session, study_idx: int) -> Optional[StudyInfo]:
         row = session.execute(text(

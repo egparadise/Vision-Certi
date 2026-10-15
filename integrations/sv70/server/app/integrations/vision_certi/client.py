@@ -99,6 +99,13 @@ class VisionCertiClient:
     def redeem_handoff(self, code: str) -> dict:
         return self._call("POST", self.REDEEM, {"handoffCode": code})
 
+    def enrollment_status(self, tenant_id: str, pacs_user_id: str) -> dict:
+        return self._call("POST", "/v1/integrations/pacs/enrollments/status",
+                          {"tenantId": tenant_id, "pacsUserId": pacs_user_id})
+
+    def enrollment_start(self, payload: dict) -> dict:
+        return self._call("POST", "/v1/integrations/pacs/enrollments/start", payload)
+
     def create_report_sign_request(self, payload: dict, idempotency_key: str) -> dict:
         return self._call("POST", self.SIGN_REQUESTS, payload, {"Idempotency-Key": idempotency_key})
 

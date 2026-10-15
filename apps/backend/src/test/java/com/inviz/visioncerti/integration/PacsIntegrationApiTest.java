@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -81,6 +82,88 @@ class PacsIntegrationApiTest {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private static final String START = "/v1/integrations/pacs/enrollments/start";
+    private static final String STATUS = "/v1/integrations/pacs/enrollments/status";
+
+    private static String enrollmentBody(String user, String license) {
+        return "{\"tenantId\":\"" + A + "\",\"pacsUserId\":\"" + user
+                + "\",\"name\":\"김판독\",\"licenseNumber\":\"" + license + "\",\"centerName\":\"판독센터\"}";
+    }
+
+    @Test
+    void pacsSelfEnrollmentRequiresServiceAuthAndCannotTakeExistingLicense() throws Exception {
+        String license = Integer.toString(SEQ.incrementAndGet());
+        String user = "first-" + license;
+        String body = enrollmentBody(user, license);
+        mvc.perform(post(START).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        servicePost(START, body.replace(A, "other-hospital")).andExpect(status().isForbidden());
+        servicePost(START, body).andExpect(status().isCreated());
+        servicePost(START, enrollmentBody("other-" + license, license)).andExpect(status().isConflict());
+        servicePost(START, enrollmentBody(user, Integer.toString(SEQ.incrementAndGet())))
+                .andExpect(status().isConflict());
+        // Null Google email is not an invented shared address and must not collide across doctors.
+        servicePost(START, enrollmentBody("independent-" + SEQ.incrementAndGet(), Integer.toString(SEQ.get())))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/v1/certificate-enrollment/challenges").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"doctorId\":\"00000000-0000-0000-0000-000000000001\"}"))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void pacsFirstEnrollmentUsesRealProofConsentReviewAndKeepsDurableAccountBinding() throws Exception {
+        String license = Integer.toString(SEQ.incrementAndGet());
+        String user = "flow-" + license;
+        String query = "{\"tenantId\":\"" + A + "\",\"pacsUserId\":\"" + user + "\"}";
+        servicePost(STATUS, query).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationStatus").value("NOT_REGISTERED"));
+        String start = servicePost(START, enrollmentBody(user, license)).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String doctorId = JsonPath.read(start, "$.doctorId");
+        servicePost(START, enrollmentBody(user, license)).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.doctorId").value(doctorId));
+        mvc.perform(admin(get("/v1/admin/doctors/" + doctorId + "/evidence")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+        byte[] payload = Base64.getDecoder().decode((String) JsonPath.read(start, "$.challenge.signedPayloadBase64"));
+        TestPki.Leaf leaf = PKI.leaf(TestPki.rsa(2048));
+        String proof = "{\"registrationId\":\"" + JsonPath.read(start, "$.challenge.registrationId")
+                + "\",\"certificate\":\"" + leaf.der() + "\",\"chain\":[\"" + PKI.intermediateDer()
+                + "\"],\"signature\":\"" + TestPki.sign(leaf.keys(), "SHA256withRSA", payload)
+                + "\",\"signatureAlgorithm\":\"SHA256withRSA\"}";
+        String verified = mvc.perform(post("/v1/certificate-enrollment/verify")
+                .contentType(MediaType.APPLICATION_JSON).content(proof)).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.enrollment.reviewStatus").value("PENDING"))
+                .andReturn().getResponse().getContentAsString();
+        mvc.perform(post("/v1/certificate-enrollment/verify").contentType(MediaType.APPLICATION_JSON).content(proof))
+                .andExpect(status().isConflict());
+        String token = JsonPath.read(verified, "$.activationToken");
+        String registration = JsonPath.read(verified, "$.enrollment.registrationId");
+        mvc.perform(bearer(post("/v1/certificate-enrollment/enrollments/" + registration + "/consent"), token)
+                .contentType(MediaType.APPLICATION_JSON).content(CONSENT)).andExpect(status().isOk());
+        servicePost(STATUS, query).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationStatus").value("PENDING"));
+        mvc.perform(bearer(post("/v1/doctor-activation/activate"), token)).andExpect(status().isConflict());
+        mvc.perform(admin(post("/v1/admin/doctors/" + doctorId + "/certificate-reviews"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"registrationId\":\"" + registration
+                        + "\",\"decision\":\"APPROVE\",\"fingerprintSha256\":\"" + leaf.fingerprint()
+                        + "\",\"evidenceRef\":\"evidence://verified-identity-and-license\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(bearer(post("/v1/doctor-activation/activate"), token)).andExpect(status().isOk());
+        servicePost(STATUS, query).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationStatus").value("ACTIVE"))
+                .andExpect(jsonPath("$.certificateEnrollmentId").value(registration))
+                .andExpect(jsonPath("$.fingerprintSha256").value(leaf.fingerprint()))
+                .andExpect(jsonPath("$.doctorLicenseNumber").value(license));
+        servicePost(START, enrollmentBody(user, license)).andExpect(status().isConflict());
+        mvc.perform(admin(patch("/v1/admin/doctors/" + doctorId + "/status"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"REVOKED\",\"reason\":\"test revoked\"}"))
+                .andExpect(status().isOk());
+        servicePost(STATUS, query).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationStatus").value("REVOKED"));
+        servicePost(START, enrollmentBody(user, license)).andExpect(status().isForbidden());
+        servicePost(START, enrollmentBody("replacement-" + user, license)).andExpect(status().isConflict());
+    }
 
     private static <T extends AbstractMockHttpServletRequestBuilder<?>> T admin(T b) {
         b.header("X-Tenant-Id", A).header("X-Actor-Id", "admin-demo");

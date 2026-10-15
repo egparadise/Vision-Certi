@@ -70,11 +70,12 @@ number=secrets.randbelow(100_000_000)+10_000
 with engine.begin() as db:
     # Minimal legacy shape on this isolated DB only. No production schema or settings are read.
     db.execute(text('CREATE TABLE IF NOT EXISTS pacs_users_view(user_idx INT PRIMARY KEY,user_id VARCHAR(100),user_name VARCHAR(100),user_status CHAR(1),user_type VARCHAR(10),group_level INT,doctor_idx INT,doctor_license_number VARCHAR(100))'))
+    db.execute(text('ALTER TABLE pacs_users_view ADD COLUMN IF NOT EXISTS center_list TEXT'))
     db.execute(text('CREATE TABLE IF NOT EXISTS pacs_users(user_idx INT PRIMARY KEY,user_report_edit_all CHAR(1))'))
     db.execute(text('CREATE TABLE IF NOT EXISTS pacs_study(study_idx INT PRIMARY KEY,user_idx INT,study_status VARCHAR(10),study_accession_no VARCHAR(100),patient_id VARCHAR(100),patient_name VARCHAR(100),study_modality VARCHAR(20),study_body_part VARCHAR(30),study_description VARCHAR(100),study_date VARCHAR(30),hospital_idx INT,hospital_name VARCHAR(100))'))
     db.execute(text('CREATE TABLE IF NOT EXISTS pacs_study_report(report_idx INT PRIMARY KEY,study_idx INT UNIQUE,report_status VARCHAR(10),report_reading LONGTEXT,report_conclusion LONGTEXT,report_study_comment VARCHAR(255),report_refer_comment VARCHAR(255),report_cvr_send CHAR(1),report_create_idx INT,report_open_edit CHAR(1),report_approve_idx INT,report_approve_datetime DATETIME(6),report_update_datetime DATETIME(6))'))
     for user,admin in [(number,False),(number+1,True)]:
-        db.execute(text("INSERT INTO pacs_users_view VALUES(:u,:i,'Synthetic User','A','P',:g,:d,'SYNTHETIC-LICENSE')"),{'u':user,'i':'synthetic-'+str(user),'g':99 if admin else 10,'d':None if admin else user})
+        db.execute(text("INSERT INTO pacs_users_view(user_idx,user_id,user_name,user_status,user_type,group_level,doctor_idx,doctor_license_number,center_list) VALUES(:u,:i,'Synthetic User','A','P',:g,:d,'SYNTHETIC-LICENSE',:centers)"),{'u':user,'i':'synthetic-'+str(user),'g':99 if admin else 10,'d':None if admin else user,'centers':json.dumps([{'center_name':'Synthetic PACS'}])})
         db.execute(text("INSERT INTO pacs_users VALUES(:u,'N')"),{'u':user})
     db.execute(text("INSERT INTO pacs_study VALUES(:n,:n,'R','SYNTHETIC','SYNTHETIC','합성 환자','CT','CHEST','Synthetic chest','2026-10-14',1,'Synthetic Hospital')"),{'n':number})
     db.execute(text("INSERT INTO pacs_study_report(report_idx,study_idx,report_status,report_reading,report_conclusion,report_create_idx,report_cvr_send,report_open_edit) VALUES(:n,:n,'R','합성 판독문 원문','검증용 결론',:n,'N','N')"),{'n':number})
@@ -92,12 +93,18 @@ def invoke(fn,*pos,**kw):
         return fn(main,manage,*pos,**kw)
 
 run=uuid.uuid4().hex
-created=api('POST','/v1/admin/doctors',{'name':'Synthetic SV70 Doctor','licenseNumber':str(int(run,16))[:20],'centerName':'Synthetic PACS',
-    'googleEmail':run+'@example.invalid','identityEvidenceRef':'synthetic/id','licenseEvidenceRef':'synthetic/license'},admin=True,expected=201)
-doctor=created['doctor']['id']
 with engine.begin() as db:
     db.execute(text('UPDATE pacs_users_view SET doctor_license_number=:license WHERE user_idx=:u'),
                {'license': str(int(run,16))[:20], 'u': number})
+assert invoke(service.enrollment_status,number)['registrationStatus']=='NOT_REGISTERED'
+try: invoke(service.require_enrolled_pacs_access,number)
+except VcError as error: assert error.code=='VC_ENROLLMENT_REQUIRED'
+else: raise AssertionError('Unregistered doctor admitted')
+started=invoke(service.enrollment_start,number)
+doctor=started['doctorId']
+challenge=started['challenge']
+assert invoke(service.enrollment_status,number)['registrationStatus']=='PENDING'
+checks.append('first-login account binding from PACS profile without admin preregistration or invitation')
 fixture=ROOT/'work/certificate-fixtures'
 ca=x509.load_pem_x509_certificate((fixture/'ca.pem').read_bytes())
 ca_key=serialization.load_pem_private_key((fixture/'ca.key.pem').read_bytes(),None)
@@ -117,24 +124,25 @@ def proof(challenge,login=False):
     result['challengeId' if login else 'registrationId']=challenge['challengeId' if login else 'registrationId']
     if login: result['fingerprintSha256']=hashlib.sha256(der).hexdigest()
     return result
-challenge=api('POST','/v1/certificate-enrollment/challenges',{'invitationCode':created['invitationCode']},expected=201)
 verified=api('POST','/v1/certificate-enrollment/verify',proof(challenge),expected=201)
 token=verified['activationToken']; reg=verified['enrollment']['registrationId']
 api('POST',f'/v1/certificate-enrollment/enrollments/{reg}/consent',{'version':'2026-10-13-draft','authentication':True,'signature':True,'privacy':True},token=token)
 api('POST',f'/v1/admin/doctors/{doctor}/certificate-reviews',{'registrationId':reg,'decision':'APPROVE','fingerprintSha256':hashlib.sha256(der).hexdigest(),'evidenceRef':'synthetic/local-proof-review'},admin=True)
 active=api('POST','/v1/doctor-activation/activate',{},token=token)
 assert active['status']=='ACTIVE' and active['certificate']['kind']=='X509'
+assert invoke(service.enrollment_status,number)['registrationStatus']=='ACTIVE'
+invoke(service.require_enrolled_pacs_access,number)
+checks.append('verified active enrollment auto-links PACS account and allows existing password-session access')
 checks.append('actual challenge proof, trusted synthetic CA and CRL, doctor consent, real OpenBao X509 activation')
 challenge=api('POST','/v1/certificate-enrollment/login-challenges',{},expected=201)
 token=api('POST','/v1/certificate-enrollment/login',proof(challenge,True))['activationToken']
-invoke(service.create_link,number+1,{'user_idx':number,'vc_tenant_id':'demo-hospital-a','vc_doctor_id':doctor,'evidence_ref':'synthetic/PACS-license-link'})
 handoff=api('POST','/v1/doctor/pacs-handoffs',{'audience':'pacs-sv70'},token=token,expected=201)
 pacs_token,session,user=invoke(service.certificate_login,handoff['handoffCode'],'127.0.0.1')
 try: invoke(service.certificate_login,handoff['handoffCode'],'127.0.0.1')
 except VcError as error: assert error.status==401
 else: raise AssertionError('Handoff replay accepted')
 principal=invoke(service.resolve_session,'Bearer '+pacs_token)
-checks.append('server-to-server HMAC handoff redemption, replay rejection, explicit mapping, hashed PACS session')
+checks.append('server-to-server HMAC handoff redemption, replay rejection, self-enrolled mapping, hashed PACS session')
 with Session() as db: expected=content_sha256(port.get_report_for_study(db,number))
 approval,_=invoke(service.prepare,principal,number,expected)
 request=api('GET',f'/v1/doctor/sign-requests/{approval.vc_sign_request_id}',token=token)

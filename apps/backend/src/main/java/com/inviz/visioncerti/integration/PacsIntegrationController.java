@@ -30,10 +30,27 @@ public class PacsIntegrationController {
 
     private final PacsHandoffService handoffs;
     private final PacsReportSignService reports;
+    private final PacsEnrollmentService enrollments;
 
-    public PacsIntegrationController(PacsHandoffService handoffs, PacsReportSignService reports) {
+    public PacsIntegrationController(PacsHandoffService handoffs, PacsReportSignService reports,
+            PacsEnrollmentService enrollments) {
         this.handoffs = handoffs;
         this.reports = reports;
+        this.enrollments = enrollments;
+    }
+
+    @PostMapping("/v1/integrations/pacs/enrollments/start")
+    ResponseEntity<PacsIntegrationDtos.EnrollmentStartResponse> startEnrollment(HttpServletRequest request,
+            @RequestBody(required = false) PacsIntegrationDtos.EnrollmentStartRequest body) {
+        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore())
+                .body(enrollments.start(client(request), body));
+    }
+
+    @PostMapping("/v1/integrations/pacs/enrollments/status")
+    ResponseEntity<PacsIntegrationDtos.EnrollmentStatusResponse> enrollmentStatus(HttpServletRequest request,
+            @RequestBody(required = false) PacsIntegrationDtos.EnrollmentStatusRequest body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(enrollments.status(client(request), body));
     }
 
     @PostMapping("/v1/doctor/pacs-handoffs")

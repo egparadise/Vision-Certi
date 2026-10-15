@@ -120,11 +120,13 @@ public class DoctorService implements RegisteredSigners {
             .unique("license_key", d -> d.status == DoctorStatus.REVOKED ? null
                             : Hashing.sha256Hex(d.tenantId + "\u0000" + d.licenseNumber),
                     () -> ApiException.conflict("DOCTOR_LICENSE_ALREADY_REGISTERED", "이 기관에 이미 등록된 면허번호입니다."))
-            .unique("email_key", d -> d.status == DoctorStatus.REVOKED ? null : Hashing.sha256Hex(d.googleEmail),
+            .unique("email_key", d -> d.status == DoctorStatus.REVOKED || d.googleEmail == null ? null : Hashing.sha256Hex(d.googleEmail),
                     () -> ApiException.conflict("GOOGLE_EMAIL_ALREADY_REGISTERED", "이미 다른 의사에게 등록된 Google 이메일입니다."))
             .unique("invitation_hash", d -> d.invitationState == InvitationState.ISSUED ? d.invitationHash : null, null)
             .unique("binding_key", DoctorService::bindingColumn,
                     () -> ApiException.conflict("GOOGLE_ACCOUNT_ALREADY_BOUND", "이 계정은 이미 다른 의사 계정에 연결되어 있습니다."))
+            .unique("pacs_account_key", d -> d.pacsAccountKey,
+                    () -> ApiException.conflict("PACS_ACCOUNT_ALREADY_BOUND", "이미 연결된 PACS 계정입니다."))
             .build();
 
     static final Kind<Challenge> CHALLENGES = Kind.of("doctor_challenges", Challenge.class)
@@ -975,6 +977,50 @@ public class DoctorService implements RegisteredSigners {
     }
 
     // ------------------------------------------------------------------ certificate enrollment support
+
+    /** Called only by the HMAC-authenticated PACS enrollment service; does not attest identity or license. */
+    public DoctorRef selfEnrollFromPacs(String accountKey, String tenantId, String actorId, String name,
+            String licenseNumber, String centerName) {
+        String normalizedName = text(name, 2, 50, "이름은 2~50자여야 합니다.");
+        String license = licenseNumber == null ? "" : licenseNumber.strip();
+        if (!LICENSE.matcher(license).matches()) {
+            throw invalid("면허번호는 숫자 1~20자리여야 합니다.");
+        }
+        String center = text(centerName, 2, 100, "소속 기관명은 2~100자여야 합니다.");
+        return store.tx(tx -> {
+            tx.lock("pacs-account|" + accountKey);
+            Doctor existing = tx.lockFindOne(DOCTORS, "pacs_account_key", accountKey).orElse(null);
+            if (existing != null) {
+                if (existing.status.blocked()) throw notAllowed();
+                if (!existing.tenantId.equals(tenantId) || !existing.licenseNumber.equals(license)
+                        || !existing.name.equals(normalizedName) || !existing.centerName.equals(center)) {
+                    throw ApiException.conflict("PACS_ACCOUNT_DETAILS_CHANGED", "등록된 PACS 계정 정보와 일치하지 않습니다.");
+                }
+                if (existing.status == DoctorStatus.ACTIVE) {
+                    throw ApiException.conflict("PACS_ALREADY_ENROLLED", "공동인증서 등록이 완료된 계정입니다.");
+                }
+                return new DoctorRef(existing.id, existing.tenantId, existing.status, null);
+            }
+            tx.lock("doctor-license|" + tenantId + "|" + license);
+            if (tx.find(DOCTORS, "tenant_id", tenantId).stream().anyMatch(d -> d.licenseNumber.equals(license))) {
+                throw ApiException.conflict("DOCTOR_LICENSE_ALREADY_REGISTERED", "이미 등록된 면허번호입니다. 계정 연결을 확인해 주세요.");
+            }
+            if (tx.countAll(DOCTORS) >= policy.maxDoctors()) throw capacity();
+            Doctor doctor = new Doctor(UUID.randomUUID(), tenantId, normalizedName, license, center, null,
+                    null, null, clock.instant(), actorId);
+            doctor.pacsAccountKey = accountKey;
+            doctor.invitationState = InvitationState.VOID;
+            tx.insert(DOCTORS, doctor);
+            audit.record(tenantId, actorId, "DOCTOR_SELF_ENROLLMENT_STARTED", "DOCTOR", doctor.id.toString(),
+                    AuditService.SUCCESS, Map.of("source", "PACS", "identityReview", "REQUIRED"));
+            return new DoctorRef(doctor.id, doctor.tenantId, doctor.status, null);
+        });
+    }
+
+    public DoctorRef pacsAccountDoctor(String accountKey) {
+        return store.tx(tx -> tx.findOne(DOCTORS, "pacs_account_key", accountKey)
+                .map(d -> new DoctorRef(d.id, d.tenantId, d.status, d.expectedCertificateFingerprint)).orElse(null));
+    }
 
     /** Resolves an invitation for a certificate challenge (PENDING doctors, or re-enrollment after reissue). */
     public CertificateInvitation claimInvitationForCertificate(String invitationCode, String source) {

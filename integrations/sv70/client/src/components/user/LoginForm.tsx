@@ -74,7 +74,7 @@ export default function LoginForm() {
   useEffect(() => {
     // 이미 로그인된 경우
     if (userData && userToken) {
-      navigate("/", { replace: true }); // 메인으로 리다이렉트
+      navigate("/certificate-enrollment", { replace: true });
     }
   }, [userData, userToken]);
 

@@ -2,7 +2,7 @@
 legacy A/RA guard. Framework-free; the HTTP layer is api.py.
 
 Invariants:
-- Identity comes only from Vision-Certi's server-side handoff redeem plus an admin-created link (never e-mail, never
+- Identity comes only from Vision-Certi's server-side handoff redeem plus a verified account link (never e-mail, never
   a browser-supplied doctorId or "authenticated" flag).
 - PACS bearer tokens are random (``vc1.`` + 43 chars), stored as SHA-256 only, expire at
   min(now + session_max_minutes, Vision-Certi session expiry), and are re-validated on every request.
@@ -159,6 +159,111 @@ class VcIntegrationService:
         return user.report_edit_all or (report is not None and report.open_edit == "Y")
 
     # ------------------------------------------------------------------ certificate login
+
+    def _enrollment_user(self, session, manage_session, user_idx, *, doctor_required=False):
+        if user_idx is None:
+            raise VcError(401, "VC_LOGIN_REQUIRED", "PACS login is required")
+        user = self.port.get_user(manage_session, int(user_idx))
+        if user is None or not user.active or not user.pacs_user:
+            raise VcError(403, "VC_LOCAL_USER_INACTIVE", "An active PACS account is required")
+        if doctor_required:
+            self._require_local_doctor(session, user, "VC_SELF_ENROLLMENT")
+        return user
+
+    @staticmethod
+    def _enrollment_remote(action):
+        try:
+            return action()
+        except VcUnavailable:
+            raise VcError(503, "VC_UNAVAILABLE", "Certificate enrollment service is unavailable", retryable=True)
+        except VcRejected as e:
+            raise VcError(e.status, e.code, "Certificate enrollment request was rejected")
+
+    def enrollment_status(self, session, manage_session, user_idx):
+        user = self._enrollment_user(session, manage_session, user_idx)
+        if not user.is_doctor:
+            return {"doctorId": None, "registrationStatus": "NOT_REQUIRED",
+                    "certificateEnrollmentId": None, "fingerprintSha256": None}
+        self.require_operational()
+        result = self._enrollment_remote(lambda: self.client.enrollment_status(
+            self.config.tenant_id, str(user.user_idx)))
+        state = result.get("registrationStatus")
+        doctor_id = _uuid(result.get("doctorId"))
+        if state not in {"NOT_REGISTERED", "PENDING", "ACTIVE", "SUSPENDED", "REVOKED"} or (
+                state != "NOT_REGISTERED" and doctor_id is None):
+            raise VcError(503, "VC_ENROLLMENT_RESPONSE_INVALID", "Invalid enrollment status", retryable=True)
+        if state == "ACTIVE":
+            enrollment_id = _uuid(result.get("certificateEnrollmentId"))
+            fingerprint = result.get("fingerprintSha256")
+            license_number = result.get("doctorLicenseNumber")
+            if not enrollment_id or not isinstance(fingerprint, str) or not _HEX64.fullmatch(fingerprint):
+                raise VcError(503, "VC_ENROLLMENT_RESPONSE_INVALID", "Invalid enrollment evidence", retryable=True)
+            if (not isinstance(license_number, str) or not _LICENSE.fullmatch(license_number)
+                    or _license_digits(user.doctor_license_number) != license_number):
+                raise VcError(403, "VC_LICENSE_MISMATCH", "PACS and registered doctor licenses differ")
+            self._link_self_enrollment(session, user, doctor_id, enrollment_id)
+        return {"doctorId": doctor_id, "registrationStatus": state,
+                "certificateEnrollmentId": result.get("certificateEnrollmentId"),
+                "fingerprintSha256": result.get("fingerprintSha256")}
+
+    def _link_self_enrollment(self, session, user, doctor_id, enrollment_id):
+        """Only verified server status for this tenant/client/user can authorize this mapping. No reactivation."""
+        links = session.execute(select(VcDoctorLink).where(
+            (VcDoctorLink.user_idx == user.user_idx) |
+            ((VcDoctorLink.vc_tenant_id == self.config.tenant_id) & (VcDoctorLink.vc_doctor_id == doctor_id))
+        )).scalars().all()
+        if links:
+            if (len(links) == 1 and links[0].status == "ACTIVE" and links[0].user_idx == user.user_idx
+                    and links[0].vc_tenant_id == self.config.tenant_id and links[0].vc_doctor_id == doctor_id):
+                return
+            raise VcError(409, "VC_LINK_CONFLICT", "Existing or revoked certificate mapping requires review")
+        link = VcDoctorLink(user_idx=user.user_idx, vc_tenant_id=self.config.tenant_id, vc_doctor_id=doctor_id,
+                            status="ACTIVE", active_user_idx=user.user_idx,
+                            active_doctor_key=f"{self.config.tenant_id}:{doctor_id}",
+                            evidence_ref=f"pacs-self-enrollment:{enrollment_id}",
+                            note="Verified first-login certificate enrollment", created_by_user_idx=user.user_idx,
+                            created_at=self.clock())
+        try:
+            session.add(link)
+            session.flush()
+            self._audit(session, user.user_idx, "VC_SELF_ENROLLMENT_LINKED", "VC_LINK", link.link_idx, "SUCCESS",
+                        doctorId=doctor_id, enrollmentId=enrollment_id)
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            # A simultaneous identical completion is idempotent; other mappings remain denied.
+            current = self._active_link_for_doctor(session, self.config.tenant_id, doctor_id)
+            if current is None or current.status != "ACTIVE" or current.user_idx != user.user_idx:
+                raise VcError(409, "VC_LINK_CONFLICT", "Conflicting certificate mapping")
+
+    def enrollment_start(self, session, manage_session, user_idx):
+        self.require_operational()
+        user = self._enrollment_user(session, manage_session, user_idx, doctor_required=True)
+        license_number = _license_digits(user.doctor_license_number)
+        center_name = self.port.enrollment_center(manage_session, user.user_idx)
+        if not _LICENSE.fullmatch(license_number) or not user.user_name.strip() or not center_name:
+            raise VcError(409, "VC_PACS_PROFILE_INCOMPLETE", "PACS doctor name, license and center are required")
+        result = self._enrollment_remote(lambda: self.client.enrollment_start({
+            "tenantId": self.config.tenant_id, "pacsUserId": str(user.user_idx),
+            "name": user.user_name.strip(), "licenseNumber": license_number, "centerName": center_name}))
+        if not _uuid(result.get("doctorId")) or not isinstance(result.get("challenge"), dict):
+            raise VcError(503, "VC_ENROLLMENT_RESPONSE_INVALID", "Invalid enrollment challenge", retryable=True)
+        self._audit(session, user.user_idx, "VC_SELF_ENROLLMENT_STARTED", "VC_DOCTOR", result["doctorId"], "SUCCESS")
+        session.commit()
+        return {"doctorId": result["doctorId"], "challenge": result["challenge"]}
+
+    def require_enrolled_pacs_access(self, session, manage_session, user_idx):
+        if not self.config.guard_active:
+            return
+        # The certificate policy applies only to doctors. A misconfigured provider must not lock staff out of PACS.
+        if user_idx is not None:
+            user = self.port.get_user(manage_session, int(user_idx))
+            if user is not None and user.active and user.pacs_user and not user.is_doctor:
+                return
+        result = self.enrollment_status(session, manage_session, user_idx)
+        if result["registrationStatus"] not in {"ACTIVE", "NOT_REQUIRED"}:
+            raise VcError(403, "VC_ENROLLMENT_REQUIRED", "Complete first-login certificate registration",
+                          data={"registrationStatus": result["registrationStatus"]})
 
     def certificate_login(self, session: Session, manage_session: Session, handoff_code, client_ip: str | None):
         self.require_operational()

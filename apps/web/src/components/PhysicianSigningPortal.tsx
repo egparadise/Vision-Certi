@@ -101,8 +101,10 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
           return;
         }
       }
-      if (res.items.length > 0 && !selectedSignRequest) {
-        setSelectedSignRequest(res.items[0]);
+      if (res.items.length > 0) {
+        // Functional update: depending on selectedSignRequest here re-created loadRequests on every fetch
+        // (new object identity) and re-ran the effect forever, so the document preview never finished.
+        setSelectedSignRequest(prev => prev ?? res.items[0]);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '판독문 목록을 불러오지 못했습니다.';
@@ -110,7 +112,7 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
     } finally {
       setLoadingRequests(false);
     }
-  }, [client, token, selectedSignRequest]);
+  }, [client, token]);
 
   useEffect(() => {
     loadRequests();

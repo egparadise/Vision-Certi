@@ -1,3 +1,4 @@
+import { PhysicianAccountView } from './components/PhysicianAccountView';
 import React from 'react';
 import { useApp } from './context/AppContext';
 import { isDemoEnabled } from './utils/env';
@@ -96,6 +97,9 @@ export const App: React.FC = () => {
       window.close();
     }
   }, []);
+
+  if (hash === '#/physician/register' || hash === '#/physician/account') return <PhysicianAccountView />;
+  if (hash === '#/physician/login') return <main className="personal-certificate-page"><a href="#/physician/register">의사 가입·가입 이어하기</a><CertificateEnrollmentView initialMode="PC_LOGIN" proofMethod="external" /></main>;
 
   if (hash === '#/login' || hash === '#/certificates/login') return <CertificateLoginView />;
   if (hash === '#/certificates/register') return <PersonalCertificateRegistration />;

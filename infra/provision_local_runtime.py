@@ -30,7 +30,7 @@ with psycopg.connect(**owner,dbname='postgres',autocommit=True) as c:
     if not c.execute("SELECT 1 FROM pg_database WHERE datname='vision_certi_local'").fetchone():
         c.execute('CREATE DATABASE vision_certi_local')
 migrations=[ROOT/'database/migrations'/name for name in (
-    'V005__production_runtime.sql', 'V006__pacs_self_enrollment.sql')]
+    'V005__production_runtime.sql', 'V006__pacs_self_enrollment.sql', 'V007__physician_accounts.sql')]
 checksums={m.name:hashlib.sha256(m.read_bytes()).hexdigest() for m in migrations}
 with psycopg.connect(**owner,dbname='vision_certi_local') as c:
     c.execute('CREATE TABLE IF NOT EXISTS public.vc_local_migrations(name text PRIMARY KEY,sha256 text NOT NULL)')

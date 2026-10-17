@@ -1,3 +1,4 @@
+import { ExternalCertificateProof } from './ExternalCertificateProof';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { ApiClientError } from '../api/client';
@@ -21,9 +22,10 @@ import { MedicalCredentialsForm } from './MedicalCredentialsForm';
 
 export const CertificateEnrollmentView: React.FC<{
   initialMode?: 'PC_ENROLL' | 'PC_LOGIN';
+  proofMethod?: 'sdk' | 'external';
   initialChallenge?: CertificateChallenge;
   onEnrollmentComplete?: () => void;
-}> = ({ initialMode = 'PC_LOGIN', initialChallenge, onEnrollmentComplete }) => {
+}> = ({ initialMode = 'PC_LOGIN', initialChallenge, onEnrollmentComplete, proofMethod = 'sdk' }) => {
   const { client } = useApp();
 
   // Mode: PC_ENROLL (initial onboarding), PC_LOGIN (returning doctor), MOBILE, GOOGLE_AUX
@@ -513,7 +515,7 @@ export const CertificateEnrollmentView: React.FC<{
       )}
 
       {/* Navigation Tabs */}
-      {!initialChallenge && <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color, #e2e8f0)', marginBottom: '1.5rem' }}>
+      {!initialChallenge && proofMethod !== 'external' && <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color, #e2e8f0)', marginBottom: '1.5rem' }}>
         <button
           type="button"
           data-testid="tab-cert-enroll"
@@ -833,10 +835,11 @@ export const CertificateEnrollmentView: React.FC<{
             </div>
           )}
 
-          <CertificateSecurityStep key={challenge.challengeId} challenge={challenge} busy={loading || configLoading || !config || !config.pcCertificate.trustConfigured}
+          {proofMethod === 'external' ? <ExternalCertificateProof key={challenge.challengeId} challenge={challenge}
+            busy={loading || configLoading || !config?.pcCertificate.trustConfigured} onProof={submitSdkProof} /> : <CertificateSecurityStep key={challenge.challengeId} challenge={challenge} busy={loading || configLoading || !config || !config.pcCertificate.trustConfigured}
             onProof={submitSdkProof} onRestart={initialChallenge ? undefined : () => { if (authMode === 'PC_LOGIN') void handleRequestChallenge('CERTIFICATE_LOGIN'); else void handleStartRenewal(); }} onExpired={() => setError(initialChallenge
-              ? '인증 시간이 만료되었습니다. 이 창을 닫고 PACS에서 인증서 등록을 다시 시작해주세요.'
-              : '인증 시간이 만료되었습니다. 처음으로 돌아가 새 인증 요청을 받아주세요.')} />
+              ? '인증 시간이 만료되었습니다. 가입 화면 또는 PACS에서 새 인증서 등록 요청을 시작해주세요.'
+              : '인증 시간이 만료되었습니다. 처음으로 돌아가 새 인증 요청을 받아주세요.')} />}
           {diagnostics && <details data-testid="certificate-diagnostics"><summary>개발·연동 진단</summary>
           {/* Challenge Box */}
           <div
@@ -1103,7 +1106,7 @@ export const CertificateEnrollmentView: React.FC<{
           <div style={{ textAlign: 'center' }}>
             <button
               type="button"
-              onClick={() => { if (initialChallenge) { setError('이 창을 닫고 PACS에서 인증서 등록을 다시 시작해주세요.'); } else { operationVersion.current++; setChallenge(null); setStep(1); } }}
+              onClick={() => { if (initialChallenge) { setError('가입 화면 또는 PACS에서 새 인증서 등록 요청을 시작해주세요.'); } else { operationVersion.current++; setChallenge(null); setStep(1); } }}
               style={{
                 background: 'none',
                 border: 'none',

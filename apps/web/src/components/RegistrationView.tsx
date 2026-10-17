@@ -154,14 +154,14 @@ export function RegistrationView() {
               <div className="enroll-clinician-guide" style={{ marginTop: '16px', padding: '16px', backgroundColor: 'var(--navy-50, #f8fafc)', borderRadius: '8px', border: '1px solid var(--teal-500, #14b8a6)' }} data-testid="clinician-activation-notice">
                 <h3 style={{ fontSize: '0.95rem', color: 'var(--navy-900, #0f172a)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Stethoscope size={18} style={{ color: 'var(--teal-700, #0f766e)' }} />
-                  판독의사가 PACS에서 공동인증서를 직접 등록합니다
+                  판독의사가 직접 가입하고 공동인증서를 등록합니다
                 </h3>
                 <p style={{ fontSize: '0.85rem', color: 'var(--navy-700, #334155)', lineHeight: '1.5', marginBottom: '12px' }}>
-                  PACS에서 본인 계정을 확인한 뒤 인증서 검증, 이용 동의 및 신원·면허 연결 검토를 진행합니다. <strong>관리자 초대코드는 필요하지 않으며, 등록 후에도 매번 공동인증서로 로그인합니다.</strong>
+                  INVIZ에 직접 가입한 뒤 인증서 검증, 이용 동의 및 신원·면허 연결 검토를 진행합니다. <strong>관리자 초대코드는 필요하지 않으며, 등록 후에도 매번 공동인증서로 로그인합니다.</strong>
                 </p>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <a href="#/activate" className="enroll-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }} data-testid="link-to-doctor-activation">
-                    공동인증서 직접 등록 안내 <ArrowRight size={16} />
+                  <a href="#/physician/register" className="enroll-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }} data-testid="link-to-doctor-activation">
+                    의사 직접 가입·인증서 등록 <ArrowRight size={16} />
                   </a>
                   <a href="#/doctors" className="enroll-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }} data-testid="link-to-doctor-admin">
                     관리자 인증서 검토·계정 관리

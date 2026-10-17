@@ -1,3 +1,4 @@
+import type { PhysicianAccountConfig, PhysicianAccountRegistration, PhysicianAccountReceipt } from '../types/physicianAccount';
 import type { MedicalCredentialsRequest } from '../types/certificate';
 import {
   ActivationChallenge,
@@ -528,6 +529,34 @@ export class ApiClient {
       },
     });
     return this.handleResponse<CertificateEnrollmentConfig>(res);
+  }
+
+  async getPhysicianAccountConfig(): Promise<PhysicianAccountConfig> {
+    return this.handleResponse(await fetch(`${this.baseUrl}/physician-accounts/config`, { cache: 'no-store' }));
+  }
+
+  async registerPhysicianAccount(body: PhysicianAccountRegistration): Promise<PhysicianAccountReceipt> {
+    return this.handleResponse(await fetch(`${this.baseUrl}/physician-accounts/registrations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }));
+  }
+
+  async resumePhysicianAccount(username: string, password: string): Promise<PhysicianAccountReceipt> {
+    return this.handleResponse(await fetch(`${this.baseUrl}/physician-accounts/sessions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }),
+    }));
+  }
+
+  async createPhysicianAccountChallenge(token: string): Promise<CertificateChallenge> {
+    return this.handleResponse(await fetch(`${this.baseUrl}/physician-accounts/certificate-challenges`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    }));
+  }
+
+  async logoutPhysicianAccount(token: string): Promise<void> {
+    return this.handleResponse(await fetch(`${this.baseUrl}/physician-accounts/logout`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    }));
   }
 
   async createCertificateChallenge(

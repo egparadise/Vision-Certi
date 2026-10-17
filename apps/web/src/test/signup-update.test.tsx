@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { RegistrationView } from '../components/RegistrationView';
 
 describe('RegistrationView Account Type Distinction Tests', () => {
-  it('explains doctor self-enrollment and links to #/activate and #/doctors when clinician type is selected', () => {
+  it('explains doctor self-enrollment and links to direct signup and review when clinician type is selected', () => {
     render(<RegistrationView />);
 
     // Click on clinician / doctor radio option
@@ -13,10 +13,10 @@ describe('RegistrationView Account Type Distinction Tests', () => {
     // Verify explanation banner and links
     const notice = screen.getByTestId('clinician-activation-notice');
     expect(notice).toBeInTheDocument();
-    expect(notice).toHaveTextContent('판독의사가 PACS에서 공동인증서를 직접 등록합니다');
+    expect(notice).toHaveTextContent('판독의사가 직접 가입하고 공동인증서를 등록합니다');
 
     const activateLink = screen.getByTestId('link-to-doctor-activation');
-    expect(activateLink).toHaveAttribute('href', '#/activate');
+    expect(activateLink).toHaveAttribute('href', '#/physician/register');
 
     const adminLink = screen.getByTestId('link-to-doctor-admin');
     expect(adminLink).toHaveAttribute('href', '#/doctors');

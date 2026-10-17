@@ -1,0 +1,14 @@
+.physician-account-page { max-width: 900px; margin: 0 auto; padding: 32px 20px 64px; color: #18344d; }
+.physician-account-page header, .account-actions { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; }
+.physician-account-page h1 { margin:32px 0 16px; }
+.physician-account-page p, .account-proof p { line-height:1.7; margin:12px 0; }
+.account-card, .account-proof { border:1px solid #d9e4ed; border-radius:12px; padding:24px; margin:24px 0; background:#fff; }
+.account-card nav { display:flex; gap:12px; margin-bottom:20px; }
+.account-card nav button { padding:10px 18px; border:1px solid #8cbedc; border-radius:6px; background:#fff; color:#075b8a; }
+.account-card nav button[aria-pressed=true] { background:#087db6; color:#fff; }
+.physician-account-page form label, .account-proof label { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; font-weight:600; }
+.physician-account-page form input:not([type=checkbox]), .account-proof input, .account-proof textarea, .account-proof select { width:100%; box-sizing:border-box; padding:12px; border:1px solid #b8cbd9; border-radius:6px; font:inherit; }
+.physician-account-page .account-consent { flex-direction:row; align-items:flex-start; font-weight:400; }
+.account-error, .account-proof [role=alert] { color:#a32222; background:#fff0f0; padding:12px; border-radius:6px; }
+.account-card button:disabled, .account-proof button:disabled { opacity:.5; cursor:not-allowed; }
+@media(max-width:600px) { .account-card, .account-proof { padding:16px; } .account-actions { align-items:stretch; flex-direction:column; } }

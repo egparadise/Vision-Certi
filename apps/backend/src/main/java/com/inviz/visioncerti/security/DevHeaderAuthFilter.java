@@ -38,7 +38,8 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
     private static final String UUID_SEGMENT = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
     private static final Pattern DOCTOR_GET_ROUTE = Pattern.compile(
             "/v1/doctor-activation/(config|me)|/v1/doctor/sign-requests(/" + UUID_SEGMENT + "(/document)?)?"
-                    + "|/v1/certificate-enrollment/(config|enrollments)");
+                    + "|/v1/certificate-enrollment/(config|enrollments)"
+                    + "|/v1/physician-accounts/(config|me)");
     private static final Pattern DOCTOR_POST_ROUTE = Pattern.compile(
             "/v1/doctor-activation/(challenges|login-challenges|google|dev-identity|consent|activate)"
                     + "|/v1/doctor/sign-requests/" + UUID_SEGMENT + "/approve"
@@ -46,7 +47,8 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
                     + "|/v1/certificate-enrollment/(challenges|verify|login-challenges|login|mobile/transactions"
                     + "|dev/mock-sign)"
                     + "|/v1/certificate-enrollment/mobile/transactions/" + UUID_SEGMENT + "/(callback|consume)"
-                    + "|/v1/certificate-enrollment/enrollments/" + UUID_SEGMENT + "/(consent|unregister)");
+                    + "|/v1/certificate-enrollment/enrollments/" + UUID_SEGMENT + "/(consent|unregister)"
+                    + "|/v1/physician-accounts/(registrations|sessions|certificate-challenges|logout)");
     private static final Pattern DOCTOR_PUT_ROUTE = Pattern.compile(
             "/v1/certificate-enrollment/enrollments/" + UUID_SEGMENT + "/medical-credentials");
 

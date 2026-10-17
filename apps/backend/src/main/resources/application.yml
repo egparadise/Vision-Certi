@@ -19,6 +19,8 @@ server:
     include-message: never
 
 visioncerti:
+  physician-account:
+    tenant-id: ${VISIONCERTI_PHYSICIAN_ACCOUNT_TENANT_ID:}
   # Runtime state (docs/PRODUCTION_RUNTIME.md). dev defaults to IN_MEMORY; prod requires POSTGRESQL.
   persistence:
     mode: ${VISIONCERTI_PERSISTENCE_MODE:}

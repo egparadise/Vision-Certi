@@ -337,6 +337,21 @@ public class CertificateEnrollmentService implements CertificateGate {
             if (proof.publicKeySha256() != null) {
                 tx.lock("certificate-public-key|" + proof.publicKeySha256());
             }
+            // A fresh proof allows a direct signup to resume its existing pending review after session expiry.
+            // It never creates clinical access or resets consent/review evidence.
+            CertificateEnrollment pending = tx.lockFindOne(ENROLLMENTS, "live_fingerprint", proof.fingerprint()).orElse(null);
+            if (pending != null && pending.doctorId.equals(doctorId)
+                    && pending.registrationStatus == RegistrationStatus.PENDING
+                    && doctors.isSelfRegisteredAccount(doctorId)) {
+                pending.externalStatus = proof.revocation();
+                pending.externalCheckedAt = proof.checkedAt();
+                tx.update(ENROLLMENTS, pending);
+                SessionResponse resumed = doctors.completeCertificateIdentity(new CertificateIdentity(doctorId,
+                        null, identityMode(proof.kind()), proof.issuerDn(), proof.fingerprint(),
+                        PURPOSE_ENROLLMENT, registrationId));
+                return new CertificateSessionResponse(pending.toResponse(), resumed.activationToken(), resumed.expiresAt(),
+                        resumed.identityMode(), doctors.doctorResponse(doctorId));
+            }
             requireUnbound(tx, proof.fingerprint(), proof.publicKeySha256(), doctorId);
             SessionResponse session = doctors.completeCertificateIdentity(new CertificateIdentity(doctorId,
                     invitationHash, identityMode(proof.kind()), proof.issuerDn(), proof.fingerprint(),
@@ -404,7 +419,7 @@ public class CertificateEnrollmentService implements CertificateGate {
             String license = body.medicalLicenseNumber() == null ? "" : body.medicalLicenseNumber().strip();
             if (!license.matches("[0-9]{1,20}")
                     || !doctors.registeredLicenseNumber(e.doctorId).filter(license::equals).isPresent()) {
-                throw ApiException.unprocessable("MEDICAL_LICENSE_MISMATCH", "PACS 계정의 의사면허번호와 일치해야 합니다.");
+                throw ApiException.unprocessable("MEDICAL_LICENSE_MISMATCH", "등록 계정의 의사면허번호와 일치해야 합니다.");
             }
             String qualification = optionalMedicalText(body.specialistQualificationNumber(), 50);
             String specialty = optionalMedicalText(body.specialty(), 100);

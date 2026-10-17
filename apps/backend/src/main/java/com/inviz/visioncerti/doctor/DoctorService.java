@@ -1045,7 +1045,27 @@ public class DoctorService implements RegisteredSigners {
     }
 
     public boolean requiresMedicalCredentials(UUID doctorId) {
-        return store.tx(tx -> tx.get(DOCTORS, doctorId).map(d -> d.pacsAccountKey != null).orElse(false));
+        return store.tx(tx -> tx.get(DOCTORS, doctorId).map(d -> d.pacsAccountKey != null || d.selfRegisteredAccount).orElse(false));
+    }
+
+    public boolean isSelfRegisteredAccount(UUID doctorId) {
+        return store.tx(tx -> tx.get(DOCTORS, doctorId).map(d -> d.selfRegisteredAccount).orElse(false));
+    }
+
+    /** Internal call from validated signup; no identity, license, role or PACS affiliation is attested here. */
+    DoctorRef selfEnrollAccount(String tenant, String name, String license, String center) {
+        return store.tx(tx -> {
+            tx.lock("doctor-license|" + tenant + "|" + license);
+            if (tx.find(DOCTORS, "tenant_id", tenant).stream().anyMatch(d -> d.licenseNumber.equals(license)))
+                throw ApiException.conflict("DOCTOR_LICENSE_ALREADY_REGISTERED", "이미 등록된 면허번호입니다. 기존 계정을 확인해 주세요.");
+            if (tx.countAll(DOCTORS) >= policy.maxDoctors()) throw capacity();
+            Doctor d = new Doctor(UUID.randomUUID(), tenant, name, license, center, null, null, null,
+                    clock.instant(), "SELF_REGISTRATION");
+            d.selfRegisteredAccount = true;
+            d.invitationState = InvitationState.VOID;
+            tx.insert(DOCTORS, d);
+            return new DoctorRef(d.id, d.tenantId, d.status, null);
+        });
     }
 
     /** Resolves an invitation for a certificate challenge (PENDING doctors, or re-enrollment after reissue). */

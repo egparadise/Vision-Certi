@@ -32,12 +32,14 @@ public class DoctorSigningController {
 
     @GetMapping
     ResponseEntity<ListResponse<SignRequestResponse>> list(DoctorPrincipal principal) {
+        doctors.signerFor(principal).assertCanSign();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ListResponse.of(
                 signRequests.listForDoctor(principal.tenantId(), principal.doctorId().toString())));
     }
 
     @GetMapping("/{id}")
     ResponseEntity<SignRequestResponse> get(DoctorPrincipal principal, @PathVariable UUID id) {
+        doctors.signerFor(principal).assertCanSign();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(signRequests.getForDoctor(principal.tenantId(), principal.doctorId().toString(), id));
     }
@@ -45,6 +47,7 @@ public class DoctorSigningController {
     /** The exact bound PDF bytes, so the physician can read what they are about to sign. */
     @GetMapping("/{id}/document")
     ResponseEntity<byte[]> document(DoctorPrincipal principal, @PathVariable UUID id) {
+        doctors.signerFor(principal).assertCanSign();
         SignRequestService.BoundDocument document = signRequests.documentForDoctor(principal.tenantId(),
                 principal.doctorId().toString(), id);
         return ResponseEntity.ok()

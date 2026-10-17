@@ -48,6 +48,8 @@ final class Doctor {
     int invitationChallenges;
     /** Durable HMAC-authenticated PACS account binding, never released on revocation. */
     String pacsAccountKey;
+    /** Direct INVIZ signup is unverified until certificate proof, medical review and consent. */
+    boolean selfRegisteredAccount;
 
     Doctor(UUID id, String tenantId, String name, String licenseNumber, String centerName, String googleEmail,
             String identityEvidenceRef, String licenseEvidenceRef, Instant createdAt, String createdBy) {

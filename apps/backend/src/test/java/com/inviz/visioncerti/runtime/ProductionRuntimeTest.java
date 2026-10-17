@@ -412,7 +412,7 @@ class ProductionRuntimeTest {
         String caps = body(mvc.perform(get("/v1/runtime/capabilities")).andExpect(status().isOk()));
         assertThat((String) JsonPath.read(caps, "$.profile")).isEqualTo("prod");
         assertThat((String) JsonPath.read(caps, "$.persistence.mode")).isEqualTo("POSTGRESQL");
-        assertThat((Integer) JsonPath.read(caps, "$.persistence.schemaVersion")).isEqualTo(6);
+        assertThat((Integer) JsonPath.read(caps, "$.persistence.schemaVersion")).isEqualTo(7);
         assertThat((String) JsonPath.read(caps, "$.staffAuth.mode")).isEqualTo("OIDC");
         assertThat((String) JsonPath.read(caps, "$.staffAuth.issuer")).isEqualTo(TestOidc.ISSUER);
         assertThat((String) JsonPath.read(caps, "$.staffAuth.clientId")).isEqualTo(TestOidc.CLIENT_ID);
@@ -750,15 +750,19 @@ class ProductionRuntimeTest {
         assertThat(countSql("SELECT count(*) FROM certi_rt.signatures WHERE sign_request_id = ?", requestId))
                 .isZero();
 
-        // The CA revokes the doctor's authentication certificate (new CRL published): signing and login stop.
-        writeCrls(doctor.leaf().certificate());
+        // Prepare approval while authorized. After revocation even reading a new approval nonce is denied.
         String next = body(createReport(mvc, "revoked-" + UUID.randomUUID(),
                 reportRequest(doctor.id(), "report-revoked", 1)).andExpect(status().isCreated()));
         String nextId = JsonPath.read(next, "$.signRequestId");
+        String beforeRevocation = approveBody(mvc, doctor.token(), nextId);
+        writeCrls(doctor.leaf().certificate());
         mvc.perform(bearer(post("/v1/doctor/sign-requests/" + nextId + "/approve"), doctor.token())
-                        .contentType(MediaType.APPLICATION_JSON).content(approveBody(mvc, doctor.token(), nextId)))
+                        .contentType(MediaType.APPLICATION_JSON).content(beforeRevocation))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CERTIFICATE_ENROLLMENT_NOT_VALID"));
+        mvc.perform(bearer(get("/v1/doctor/sign-requests"), doctor.token())).andExpect(status().isForbidden());
+        mvc.perform(bearer(get("/v1/doctor/sign-requests/" + nextId + "/document"), doctor.token()))
+                .andExpect(status().isForbidden());
         String enrollments = body(mvc.perform(staff(get("/v1/admin/doctors/" + doctor.id()
                 + "/certificate-enrollments"), "admin-a-subject")).andExpect(status().isOk()));
         assertThat((String) JsonPath.read(enrollments, "$.items[0].registrationStatus")).isEqualTo("REVOKED");

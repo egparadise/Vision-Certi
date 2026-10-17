@@ -1,5 +1,7 @@
 # DEVELOPMENT ONLY: synthetic tenants/actors via X-Tenant-Id / X-Actor-Id headers (not authentication),
 # MOCK_NOT_VALID_FOR_CLINICAL_USE signing with an ephemeral in-memory key, in-memory storage.
 visioncerti:
+  physician-account:
+    tenant-id: ${VISIONCERTI_PHYSICIAN_ACCOUNT_TENANT_ID:demo-hospital-a}
   dev:
     synthetic-identities-enabled: true

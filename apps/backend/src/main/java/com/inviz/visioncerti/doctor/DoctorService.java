@@ -1044,6 +1044,10 @@ public class DoctorService implements RegisteredSigners {
                 .map(d -> new DoctorRef(d.id, d.tenantId, d.status, d.expectedCertificateFingerprint)).orElse(null));
     }
 
+    public boolean requiresMedicalCredentials(UUID doctorId) {
+        return store.tx(tx -> tx.get(DOCTORS, doctorId).map(d -> d.pacsAccountKey != null).orElse(false));
+    }
+
     /** Resolves an invitation for a certificate challenge (PENDING doctors, or re-enrollment after reissue). */
     public CertificateInvitation claimInvitationForCertificate(String invitationCode, String source) {
         requireAdminInvitationsEnabled();

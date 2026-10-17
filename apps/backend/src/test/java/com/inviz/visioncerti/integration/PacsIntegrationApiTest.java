@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -141,6 +142,15 @@ class PacsIntegrationApiTest {
         String token = JsonPath.read(verified, "$.activationToken");
         String registration = JsonPath.read(verified, "$.enrollment.registrationId");
         mvc.perform(bearer(post("/v1/certificate-enrollment/enrollments/" + registration + "/consent"), token)
+                .contentType(MediaType.APPLICATION_JSON).content(CONSENT)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MEDICAL_CREDENTIALS_REQUIRED"));
+        String medical = mvc.perform(bearer(put("/v1/certificate-enrollment/enrollments/" + registration + "/medical-credentials"), token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"medicalLicenseNumber\":\"" + license + "\",\"specialist\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.medicalCredentialsRequired").value(true))
+                .andExpect(jsonPath("$.reviewStatus").value("PENDING"))
+                .andReturn().getResponse().getContentAsString();
+        String medicalSubmittedAt = JsonPath.read(medical, "$.medicalCredentialsSubmittedAt");
+        mvc.perform(bearer(post("/v1/certificate-enrollment/enrollments/" + registration + "/consent"), token)
                 .contentType(MediaType.APPLICATION_JSON).content(CONSENT)).andExpect(status().isOk());
         servicePost(STATUS, query).andExpect(status().isOk())
                 .andExpect(jsonPath("$.registrationStatus").value("PENDING"));
@@ -148,7 +158,7 @@ class PacsIntegrationApiTest {
         mvc.perform(admin(post("/v1/admin/doctors/" + doctorId + "/certificate-reviews"))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"registrationId\":\"" + registration
                         + "\",\"decision\":\"APPROVE\",\"fingerprintSha256\":\"" + leaf.fingerprint()
-                        + "\",\"evidenceRef\":\"evidence://verified-identity-and-license\"}"))
+                        + "\",\"evidenceRef\":\"evidence://verified-identity-and-license\",\"medicalCredentialsSubmittedAt\":\"" + medicalSubmittedAt + "\"}"))
                 .andExpect(status().isOk());
         mvc.perform(bearer(post("/v1/doctor-activation/activate"), token)).andExpect(status().isOk());
         servicePost(STATUS, query).andExpect(status().isOk())

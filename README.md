@@ -16,7 +16,7 @@ INVIZ 인증·전자서명 서버와 SV70 PACS 연동 프로젝트입니다. 의
 
 [실행·CA 설치](docs/LAN_TEST.md), [PACS 연결 값](docs/PACS_LAN_CONNECTION.md), [로그인·판독 승인 흐름](docs/PACS_EXECUTION_FLOW.md)을 따릅니다. 실제 PACS의 웹 주소를 허용 출처로 등록하고, 연동 코드와 DB 마이그레이션을 적용해야 합니다.
 
-PACS 최초 로그인에서 공동인증서를 등록하고, 등록·활성화 이후에도 매번 공동인증서로 로그인합니다. 관리자 사전등록·초대코드 발급 API는 기본 비활성화됩니다. 관리자 일괄 사전등록이나 초대코드 입력은 필요하지 않습니다. [최초 등록 계약](apps/backend/docs/PACS_SELF_ENROLLMENT.md)에 따라 V006 마이그레이션을 적용합니다. 판독문 최종 승인에 필요한 문서별 서명 확인은 별도입니다.
+PACS 최초 로그인에서 공동인증서를 등록하고, 등록·활성화 이후에도 매번 공동인증서로 로그인합니다. 관리자 사전등록·초대코드 발급 API는 기본 비활성화됩니다. 관리자 일괄 사전등록이나 초대코드 입력은 필요하지 않습니다. [최초 등록 계약](apps/backend/docs/PACS_SELF_ENROLLMENT.md) 및 [의료인 등록·보안프로그램 연결](docs/MEDICAL_CERTIFICATE_ONBOARDING.md)에 따라 V006 마이그레이션을 적용합니다. 판독문 최종 승인에 필요한 문서별 서명 확인은 별도입니다.
 
 ## 개발 검증
 

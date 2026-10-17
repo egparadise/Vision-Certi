@@ -1,0 +1,30 @@
+.vc-security-step { color: #18354a; border: 1px solid #dce5ed; border-radius: 12px; background: #fff; padding: 24px; }
+.vc-security-step header { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 24px; }
+.vc-security-step h2 { margin: 0 0 8px; font-size: 22px; }
+.vc-security-step header p { margin: 0; color: #536b7d; line-height: 1.6; }
+.vc-security-icon { border-radius: 50%; color: #087eba; background: #eaf6ff; padding: 10px 15px; font-size: 24px; }
+.vc-security-install { background: #f5f9fc; border: 1px solid #dce5ed; padding: 20px; border-radius: 8px; }
+.vc-security-install strong { display: block; }
+.vc-security-state { display: inline-block; margin-top: 8px; font-size: 14px; }
+.vc-security-ready { color: #06714e; }
+.vc-security-unavailable { color: #986100; }
+.vc-security-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.vc-security-button, .vc-security-submit { display: inline-flex; justify-content: center; align-items: center; padding: 12px 18px; background: #0089d4; color: #fff; border: 1px solid #0089d4; border-radius: 5px; font: inherit; text-decoration: none; cursor: pointer; }
+.vc-security-button.secondary { background: white; color: #0878b6; }
+.vc-security-step button:disabled { background: #edf1f5; color: #758392; border-color: #d4dce3; cursor: not-allowed; }
+.vc-security-step fieldset { border: 0; padding: 0; margin: 24px 0; min-width: 0; }
+.vc-security-step legend { font-weight: 700; font-size: 18px; margin-bottom: 12px; }
+.vc-security-certificate { display: flex; align-items: center; gap: 12px; padding: 16px; margin-bottom: 8px; border: 1px solid #dce5ed; border-radius: 6px; overflow-wrap: anywhere; }
+.vc-security-certificate.selected { border-color: #0089d4; background: #f1f9ff; }
+.vc-security-certificate > span { display: grid; gap: 5px; }
+.vc-security-certificate span span { font-size: 14px; color: #536b7d; }
+.vc-security-certificate input { width: 18px; height: 18px; flex-shrink: 0; }
+.vc-security-help { font-size: 14px; color: #536b7d; line-height: 1.7; }
+.vc-security-step [role="alert"] { color: #a32f2f; line-height: 1.6; }
+.vc-security-submit { width: 100%; font-weight: 700; margin-top: 10px; }
+@media (max-width: 520px) {
+  .vc-security-step { padding: 16px; }
+  .vc-security-step h2 { font-size: 19px; }
+  .vc-security-install { padding: 14px; }
+  .vc-security-actions > * { width: 100%; }
+}

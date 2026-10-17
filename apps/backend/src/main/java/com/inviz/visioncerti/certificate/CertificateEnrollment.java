@@ -51,6 +51,13 @@ final class CertificateEnrollment {
     Instant revokedAt;
     String revocationReason;
     UUID supersedes;
+    /** Null for historical records; only new PACS registrations require these declarations. */
+    Boolean medicalCredentialsRequired;
+    String medicalLicenseNumber;
+    Boolean specialist;
+    String specialistQualificationNumber;
+    String specialty;
+    Instant medicalCredentialsSubmittedAt;
 
     CertificateEnrollment(UUID registrationId, UUID doctorId, String tenantId, Kind kind, String fingerprintSha256,
             String publicKeySha256, String subjectDn, String issuerDn, String serialNumber, Instant notBefore,
@@ -92,7 +99,9 @@ final class CertificateEnrollment {
                 reviewStatus.name(), reviewMethod, reviewedBy, reviewedAt, consentedAt, fingerprintSha256,
                 publicKeySha256, subjectDn,
                 issuerDn, serialNumber, notBefore, notAfter, signatureAlgorithm, keyAlgorithm, provider,
-                providerSubject, createdAt, activatedAt, revokedAt, revocationReason, supersedes);
+                providerSubject, createdAt, activatedAt, revokedAt, revocationReason, supersedes,
+                medicalCredentialsRequired, medicalLicenseNumber, specialist, specialistQualificationNumber,
+                specialty, medicalCredentialsSubmittedAt);
     }
 
     @Override

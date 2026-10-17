@@ -47,6 +47,8 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
                     + "|dev/mock-sign)"
                     + "|/v1/certificate-enrollment/mobile/transactions/" + UUID_SEGMENT + "/(callback|consume)"
                     + "|/v1/certificate-enrollment/enrollments/" + UUID_SEGMENT + "/(consent|unregister)");
+    private static final Pattern DOCTOR_PUT_ROUTE = Pattern.compile(
+            "/v1/certificate-enrollment/enrollments/" + UUID_SEGMENT + "/medical-credentials");
 
     private final ActorDirectory directory;
 
@@ -70,7 +72,8 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
     static boolean isPhysicianRoute(HttpServletRequest request, String path) {
         String method = request.getMethod();
         return ("GET".equals(method) && DOCTOR_GET_ROUTE.matcher(path).matches())
-                || ("POST".equals(method) && DOCTOR_POST_ROUTE.matcher(path).matches());
+                || ("POST".equals(method) && DOCTOR_POST_ROUTE.matcher(path).matches())
+                || ("PUT".equals(method) && DOCTOR_PUT_ROUTE.matcher(path).matches());
     }
 
     /**

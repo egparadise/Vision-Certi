@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { ApiClientError } from '../api/client';
 import {
@@ -15,7 +15,9 @@ import {
   computeCertificateFingerprint,
 } from '../utils/cryptoCert';
 import { PhysicianSigningPortal } from './PhysicianSigningPortal';
-import { getLocalCertSdkAdapter } from '../services/localCertSdkAdapter';
+import type { LocalSignResult } from '../services/localCertSdkAdapter';
+import { CertificateSecurityStep } from './CertificateSecurityStep';
+import { MedicalCredentialsForm } from './MedicalCredentialsForm';
 
 export const CertificateEnrollmentView: React.FC<{
   initialMode?: 'PC_ENROLL' | 'PC_LOGIN';
@@ -70,27 +72,12 @@ export const CertificateEnrollmentView: React.FC<{
   // Mobile state
   const [mobileError, setMobileError] = useState<string | null>(null);
 
-  // Local SDK state
-  const [sdkAvailable, setSdkAvailable] = useState<boolean | null>(null);
-
+  const diagnostics = import.meta.env.DEV && import.meta.env.VITE_CERTIFICATE_DIAGNOSTICS === 'true';
+  const operationVersion = useRef(0);
+  useEffect(() => () => { operationVersion.current++; }, []);
   useEffect(() => {
     if (initialChallenge && certificate && doctor?.status === 'ACTIVE') onEnrollmentComplete?.();
   }, [initialChallenge, certificate, doctor?.status, onEnrollmentComplete]);
-
-  useEffect(() => {
-    let active = true;
-    getLocalCertSdkAdapter()
-      .isAvailable()
-      .then((res) => {
-        if (active) setSdkAvailable(res);
-      })
-      .catch(() => {
-        if (active) setSdkAvailable(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Load server configuration
   const loadConfig = useCallback(async () => {
@@ -114,6 +101,9 @@ export const CertificateEnrollmentView: React.FC<{
 
   // Reset state when authMode changes (Security invariant: clear memory)
   const handleAuthModeChange = (mode: 'PC_ENROLL' | 'PC_LOGIN' | 'MOBILE' | 'GOOGLE') => {
+    operationVersion.current++;
+    setLoading(false);
+    setConsentAuth(false); setConsentSig(false); setConsentPriv(false);
     setAuthMode(mode);
     setStep(1);
     setChallenge(null);
@@ -130,6 +120,7 @@ export const CertificateEnrollmentView: React.FC<{
 
   // Sign out / clear session
   const handleSignOut = () => {
+    operationVersion.current++;
     setActivationToken(null);
     setDoctor(null);
     setEnrollment(null);
@@ -215,21 +206,38 @@ export const CertificateEnrollmentView: React.FC<{
       return;
     }
 
+    await submitSdkProof({ certificateDerBase64: leafDerBase64, chainDerBase64: chainDerArray,
+      signatureBase64: signatureBase64.trim(), signatureAlgorithm: selectedAlgorithm, fingerprintSha256: '' }).catch(() => undefined);
+  };
+
+  const submitSdkProof = async (proof: LocalSignResult) => {
+    if (!challenge || !config || !config.pcCertificate.trustConfigured) {
+      setError('인증서 서비스를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    if (!Number.isFinite(Date.parse(challenge.expiresAt)) || Date.parse(challenge.expiresAt) <= Date.now()) {
+      setError('인증 시간이 만료되었습니다. 새 인증 요청으로 다시 진행해주세요.');
+      return;
+    }
+    const version = operationVersion.current;
+    setError(null);
+    setStatusMessage(null);
     setLoading(true);
     try {
       if (authMode === 'PC_LOGIN') {
         // Compute full-DER SHA-256 fingerprint for login
-        const fingerprintSha256 = await computeCertificateFingerprint(leafDerBase64);
+        const fingerprintSha256 = await computeCertificateFingerprint(proof.certificateDerBase64);
 
         const res = await client.loginWithCertificate({
           challengeId: challenge.challengeId,
           fingerprintSha256,
-          certificate: leafDerBase64,
-          chain: chainDerArray,
-          signature: signatureBase64.trim(),
-          signatureAlgorithm: selectedAlgorithm,
+          certificate: proof.certificateDerBase64,
+          chain: proof.chainDerBase64,
+          signature: proof.signatureBase64,
+          signatureAlgorithm: proof.signatureAlgorithm,
         });
 
+        if (version !== operationVersion.current) return;
         setActivationToken(res.activationToken);
         setEnrollment(res.enrollment);
         setDoctor(res.doctor);
@@ -241,12 +249,13 @@ export const CertificateEnrollmentView: React.FC<{
       } else {
         const res = await client.verifyCertificateProof({
           registrationId: challenge.registrationId || challenge.challengeId,
-          certificate: leafDerBase64,
-          chain: chainDerArray,
-          signature: signatureBase64.trim(),
-          signatureAlgorithm: selectedAlgorithm,
+          certificate: proof.certificateDerBase64,
+          chain: proof.chainDerBase64,
+          signature: proof.signatureBase64,
+          signatureAlgorithm: proof.signatureAlgorithm,
         });
 
+        if (version !== operationVersion.current) return;
         setEnrollment(res.enrollment);
         setDoctor(res.doctor);
         if (res.activationToken) {
@@ -264,14 +273,17 @@ export const CertificateEnrollmentView: React.FC<{
           return;
         }
 
-        // Progress to Step 3: Physician Consent
+        // Each enrollment/renewal needs fresh explicit consent.
+        setConsentAuth(false); setConsentSig(false); setConsentPriv(false);
         setStep(3);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '인증서 서명 검증에 실패했습니다.';
+      if (version !== operationVersion.current) return;
+      const msg = err instanceof Error ? err.message : '인증서 확인에 실패했습니다.';
       setError(msg);
+      throw err;
     } finally {
-      setLoading(false);
+      if (version === operationVersion.current) setLoading(false);
     }
   };
 
@@ -308,6 +320,10 @@ export const CertificateEnrollmentView: React.FC<{
     e.preventDefault();
     if (!activationToken || !enrollment) {
       setError('활성화 세션 토큰이 유실되었습니다. 처음부터 다시 진행해주세요.');
+      return;
+    }
+    if (enrollment.medicalCredentialsRequired && !enrollment.medicalCredentialsSubmittedAt) {
+      setError('의사면허 및 전문의 자격 정보를 먼저 제출해주세요.');
       return;
     }
     if (!consentAuth || !consentSig || !consentPriv) {
@@ -453,12 +469,10 @@ export const CertificateEnrollmentView: React.FC<{
         data-testid="cert-architecture-banner"
       >
         <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', color: 'var(--primary-color, #0284c7)' }}>
-          {initialChallenge ? 'PACS 최초 공동인증서 등록' : '의사 본인확인 및 전자서명 인증서 등록 (Certificate Enrollment)'}
+          {authMode === 'PC_LOGIN' ? '의료인 공동인증서 로그인' : '의료인 공동인증서 등록'}
         </h2>
         <p style={{ margin: 0, fontSize: '0.875rem', lineHeight: '1.5', color: 'var(--text-muted, #64748b)' }}>
-          {initialChallenge ? <>로그인한 PACS 계정에 본인의 공동인증서를 연결합니다. 등록과 활성화 후에도 매번 공동인증서로 로그인합니다.</> : <>본 의료 플랫폼은 <strong>2계층 암호화 아키텍처</strong>를 운영합니다.<br />
-          • <strong>1계층 (의사 본인확인):</strong> 외부 공인/공동/금융인증서를 통한 비대면 신원 검증 (개인키/비밀번호 입력 절대 금지)<br />
-          • <strong>2계층 (판독문 전자서명):</strong> OpenBao Transit 소프트웨어 키 관리(Software Transit) 기반의 전용 전자서명키 발급</>}
+          공동인증서로 본인임을 확인하고 의사면허 및 전문의 자격 정보를 등록합니다. 등록 이후에는 공동인증서로 로그인해주세요.
         </p>
       </div>
 
@@ -601,6 +615,13 @@ export const CertificateEnrollmentView: React.FC<{
         </div>
       )}
 
+      {(authMode === 'PC_ENROLL' || authMode === 'PC_LOGIN') && <ol className="medical-registration-progress" aria-label="인증 진행 순서">
+        {(authMode === 'PC_LOGIN' ? ['인증서 확인', '로그인 완료'] : ['인증서 확인', '면허·자격 및 동의', '등록 결과']).map((label, index) => {
+          const active = step <= 2 ? 0 : authMode === 'PC_LOGIN' ? 1 : step === 3 ? 1 : 2;
+          return <li key={label} aria-current={index === active ? 'step' : undefined}>{String(index + 1).padStart(2, '0')} {label}</li>;
+        })}
+      </ol>}
+
       {/* STEP 1: Challenge Initiation */}
       {step === 1 && (
         <div className="card" style={{ padding: '1.5rem', background: 'var(--bg-card, #ffffff)', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)' }}>
@@ -616,7 +637,7 @@ export const CertificateEnrollmentView: React.FC<{
           {authMode === 'PC_LOGIN' && (
             <div data-testid="pc-login-step-1">
               <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                1단계: 기존 등록 인증서 로그인 챌린지 생성
+                등록한 공동인증서로 로그인
               </h3>
               <p style={{ color: 'var(--text-muted, #64748b)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
                 이미 등록이 승인된 외부 인증서를 사용하여 로그인 챌린지 서명을 제출합니다.
@@ -639,7 +660,7 @@ export const CertificateEnrollmentView: React.FC<{
                   cursor: loading ? 'not-allowed' : 'pointer',
                 }}
               >
-                {loading ? '로그인 챌린지 생성 중...' : '인증서 로그인 챌린지 수령 (Start Login)'}
+                {loading ? '로그인 준비 중…' : '공동인증서 로그인 시작'}
               </button>
             </div>
           )}
@@ -762,7 +783,7 @@ export const CertificateEnrollmentView: React.FC<{
       {step === 2 && challenge && (
         <div className="card" style={{ padding: '1.5rem', background: 'var(--bg-card, #ffffff)', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)' }} data-testid="cert-step-2">
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-            2단계: 전자서명 챌린지 확인 및 외부 인증서 서명 검증
+            공동인증서 확인
           </h3>
 
           {/* CA Revocation / Fail-Closed Status Alert */}
@@ -812,6 +833,11 @@ export const CertificateEnrollmentView: React.FC<{
             </div>
           )}
 
+          <CertificateSecurityStep key={challenge.challengeId} challenge={challenge} busy={loading || configLoading || !config || !config.pcCertificate.trustConfigured}
+            onProof={submitSdkProof} onRestart={initialChallenge ? undefined : () => { if (authMode === 'PC_LOGIN') void handleRequestChallenge('CERTIFICATE_LOGIN'); else void handleStartRenewal(); }} onExpired={() => setError(initialChallenge
+              ? '인증 시간이 만료되었습니다. 이 창을 닫고 PACS에서 인증서 등록을 다시 시작해주세요.'
+              : '인증 시간이 만료되었습니다. 처음으로 돌아가 새 인증 요청을 받아주세요.')} />
+          {diagnostics && <details data-testid="certificate-diagnostics"><summary>개발·연동 진단</summary>
           {/* Challenge Box */}
           <div
             style={{
@@ -861,71 +887,6 @@ export const CertificateEnrollmentView: React.FC<{
                 }}
               >
                 바이너리 다운로드 (challenge.bin)
-              </button>
-            </div>
-          </div>
-
-          {/* Local Bridge Module status */}
-          <div
-            data-testid="local-sdk-status-box"
-            style={{
-              padding: '1rem',
-              background: 'rgba(59, 130, 246, 0.05)',
-              border: '1px solid rgba(59, 130, 246, 0.2)',
-              borderRadius: '6px',
-              marginBottom: '1.5rem',
-              fontSize: '0.85rem',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <strong>PC 로컬 서명 SDK 어댑터 (Local Signing SDK)</strong>
-                  <span
-                    data-testid="sdk-availability-badge"
-                    style={{
-                      fontSize: '0.7rem',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      fontWeight: 600,
-                      background: sdkAvailable ? '#dcfce7' : '#fee2e2',
-                      color: sdkAvailable ? '#15803d' : '#b91c1c',
-                    }}
-                  >
-                    {sdkAvailable ? '연동 준비됨 (Ready)' : '미설치 / 미감지 (Unavailable)'}
-                  </span>
-                </div>
-                <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted, #64748b)' }}>
-                  {sdkAvailable
-                    ? '로컬 보안 클라이언트 모듈이 활성화되어 안전한 인증서 서명을 수행할 수 있습니다.'
-                    : '로컬 PC 인증서 연동 모듈(SDK)이 감지되지 않았습니다. 실서버 환경에서는 전용 보안 모듈이 실행 중이어야 자동 인증서 선택 및 서명이 지원됩니다.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                data-testid="invoke-bridge-btn"
-                onClick={async () => {
-                  const adapter = getLocalCertSdkAdapter();
-                  const ready = await adapter.isAvailable();
-                  if (!ready) {
-                    alert('PC 로컬 인증서 보안 모듈(SDK)이 설치되어 있지 않거나 브라우저 연동 포트가 닫혀 있습니다. 개발 검증 시에는 아래의 수동 서명 페이로드 입력을 이용하십시오.');
-                  } else {
-                    alert('PC 로컬 인증서 서명 모듈이 연결되었습니다.');
-                  }
-                }}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  background: '#fff',
-                  border: '1px solid var(--primary-color, #0284c7)',
-                  color: 'var(--primary-color, #0284c7)',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                로컬 SDK 모듈 확인
               </button>
             </div>
           </div>
@@ -1137,10 +1098,12 @@ export const CertificateEnrollmentView: React.FC<{
             </form>
           </div>
 
+          </details>}
+
           <div style={{ textAlign: 'center' }}>
             <button
               type="button"
-              onClick={() => setStep(1)}
+              onClick={() => { if (initialChallenge) { setError('이 창을 닫고 PACS에서 인증서 등록을 다시 시작해주세요.'); } else { operationVersion.current++; setChallenge(null); setStep(1); } }}
               style={{
                 background: 'none',
                 border: 'none',
@@ -1160,9 +1123,17 @@ export const CertificateEnrollmentView: React.FC<{
       {step === 3 && enrollment && (
         <div className="card" style={{ padding: '1.5rem', background: 'var(--bg-card, #ffffff)', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)' }} data-testid="cert-step-3">
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-            3단계: 검증된 외부 인증서 확인 및 의사 서명 위탁 동의
+            의료인 자격 정보 및 이용 동의
           </h3>
 
+          {(enrollment.medicalCredentialsRequired || enrollment.medicalCredentialsSubmittedAt) && <MedicalCredentialsForm
+            key={enrollment.registrationId} doctor={doctor} enrollment={enrollment} onSave={async body => {
+              if (!activationToken) throw new Error('인증 시간이 만료되었습니다. 다시 로그인해주세요.');
+              const updated = await client.submitMedicalCredentials(activationToken, enrollment.registrationId, body);
+              setEnrollment(updated);
+            }} />}
+          <p>인증서 확인을 마쳤습니다. 면허·자격 정보를 제출하고 이용 동의를 완료해주세요.</p>
+          <details><summary>선택한 인증서 정보</summary>
           {/* Candidate Card */}
           <div
             style={{
@@ -1217,6 +1188,8 @@ export const CertificateEnrollmentView: React.FC<{
             </div>
           </div>
 
+          </details>
+
           {/* Consent Checkboxes (MANDATORY 3 UNCHECKED CONSENTS per defect #3) */}
           <form onSubmit={handleConsentSubmit}>
             <div style={{ border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '6px', padding: '1rem', marginBottom: '1.25rem' }}>
@@ -1269,7 +1242,7 @@ export const CertificateEnrollmentView: React.FC<{
             <button
               type="submit"
               data-testid="submit-consent-btn"
-              disabled={loading || !consentAuth || !consentSig || !consentPriv}
+              disabled={loading || !consentAuth || !consentSig || !consentPriv || Boolean(enrollment.medicalCredentialsRequired && !enrollment.medicalCredentialsSubmittedAt)}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -1282,7 +1255,7 @@ export const CertificateEnrollmentView: React.FC<{
                 cursor: (!consentAuth || !consentSig || !consentPriv || loading) ? 'not-allowed' : 'pointer',
               }}
             >
-              {loading ? '위탁 동의 제출 중...' : '동의 완료 및 최종 키 발급/활성화 단계로 진행'}
+              {loading ? '위탁 동의 제출 중...' : '동의하고 등록 신청'}
             </button>
           </form>
         </div>

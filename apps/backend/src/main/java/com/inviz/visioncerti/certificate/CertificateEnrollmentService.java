@@ -158,7 +158,7 @@ public class CertificateEnrollmentService implements CertificateGate {
                 new PcCertificateConfig(anchors > 0, anchors, crls, CertificateValidator.ALLOWED_ALGORITHMS, "CRL",
                         false),
                 new MobileConfig(mobile.configured(), mobile.configured() ? mobile.name() : null), mockCa != null,
-                false);
+                false, true);
     }
 
     public boolean devMockEnabled() {
@@ -374,7 +374,9 @@ public class CertificateEnrollmentService implements CertificateGate {
                 proof.chainDer(), proof.provider(), proof.providerSubject(), now);
         enrollment.externalStatus = proof.revocation();
         enrollment.externalCheckedAt = proof.checkedAt();
-        if (expectedFingerprint != null && expectedFingerprint.equals(proof.fingerprint())) {
+        enrollment.medicalCredentialsRequired = doctors.requiresMedicalCredentials(doctorId);
+        if (!Boolean.TRUE.equals(enrollment.medicalCredentialsRequired)
+                && expectedFingerprint != null && expectedFingerprint.equals(proof.fingerprint())) {
             enrollment.reviewStatus = ReviewStatus.APPROVED;
             enrollment.reviewMethod = "EXPECTED_FINGERPRINT";
             enrollment.reviewedBy = "PREREGISTRATION";
@@ -389,10 +391,75 @@ public class CertificateEnrollmentService implements CertificateGate {
 
     // ------------------------------------------------------------------ consent, review, activation
 
+    public EnrollmentResponse submitMedicalCredentials(DoctorPrincipal principal, String registrationId,
+            CertificateDtos.MedicalCredentialsRequest body) {
+        return store.tx(tx -> {
+            CertificateEnrollment e = own(tx, principal, parseUuid(registrationId));
+            if (e.registrationStatus != RegistrationStatus.PENDING || e.reviewStatus != ReviewStatus.PENDING) {
+                throw invalidState();
+            }
+            if (body == null || body.specialist() == null) {
+                throw ApiException.unprocessable("MEDICAL_CREDENTIALS_INVALID", "의사면허번호와 전문의 여부를 입력해 주세요.");
+            }
+            String license = body.medicalLicenseNumber() == null ? "" : body.medicalLicenseNumber().strip();
+            if (!license.matches("[0-9]{1,20}")
+                    || !doctors.registeredLicenseNumber(e.doctorId).filter(license::equals).isPresent()) {
+                throw ApiException.unprocessable("MEDICAL_LICENSE_MISMATCH", "PACS 계정의 의사면허번호와 일치해야 합니다.");
+            }
+            String qualification = optionalMedicalText(body.specialistQualificationNumber(), 50);
+            String specialty = optionalMedicalText(body.specialty(), 100);
+            if (body.specialist() && (qualification == null || specialty == null)) {
+                throw ApiException.unprocessable("SPECIALIST_CREDENTIALS_REQUIRED", "전문의 자격번호와 전문과목을 입력해 주세요.");
+            }
+            if (!body.specialist() && (qualification != null || specialty != null)) {
+                throw ApiException.unprocessable("MEDICAL_CREDENTIALS_INVALID", "전문의가 아닌 경우 전문의 자격번호와 과목을 비워 주세요.");
+            }
+            e.medicalLicenseNumber = license;
+            e.specialist = body.specialist();
+            e.specialistQualificationNumber = qualification;
+            e.specialty = specialty;
+            Instant submitted = clock.instant();
+            e.medicalCredentialsSubmittedAt = e.medicalCredentialsSubmittedAt != null
+                    && !submitted.isAfter(e.medicalCredentialsSubmittedAt)
+                    ? e.medicalCredentialsSubmittedAt.plusNanos(1) : submitted;
+            tx.update(ENROLLMENTS, e);
+            audit.record(e.tenantId, principal.doctorId().toString(), "MEDICAL_CREDENTIALS_SUBMITTED",
+                    "CERTIFICATE_ENROLLMENT", e.registrationId.toString(), AuditService.SUCCESS,
+                    Map.of("specialist", e.specialist.toString(), "verification", "PENDING_REVIEW"));
+            return e.toResponse();
+        });
+    }
+
+    private static String optionalMedicalText(String value, int max) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.strip();
+        if (normalized.length() > max || normalized.codePoints().anyMatch(Character::isISOControl)) {
+            throw ApiException.unprocessable("MEDICAL_CREDENTIALS_INVALID", "자격정보의 형식이나 길이를 확인해 주세요.");
+        }
+        return normalized;
+    }
+
+    private static void requireMedicalCredentials(CertificateEnrollment e) {
+        if (Boolean.TRUE.equals(e.medicalCredentialsRequired)
+                && (e.medicalCredentialsSubmittedAt == null || e.medicalLicenseNumber == null || e.specialist == null
+                    || (e.specialist && (e.specialistQualificationNumber == null || e.specialty == null)))) {
+            throw ApiException.conflict("MEDICAL_CREDENTIALS_REQUIRED", "의사면허 및 전문의 자격정보를 먼저 제출해 주세요.");
+        }
+    }
+
+    private static void requireReviewedMedicalVersion(CertificateEnrollment e, ReviewRequest body) {
+        requireMedicalCredentials(e);
+        if (Boolean.TRUE.equals(e.medicalCredentialsRequired)
+                && !e.medicalCredentialsSubmittedAt.equals(body.medicalCredentialsSubmittedAt())) {
+            throw ApiException.conflict("MEDICAL_CREDENTIALS_CHANGED", "자격정보가 변경되었습니다. 최신 정보와 증빙을 다시 검토해 주세요.");
+        }
+    }
+
     public EnrollmentResponse consent(DoctorPrincipal principal, String registrationId, ConsentRequest body) {
         UUID id = parseUuid(registrationId);
         return store.tx(tx -> {
             CertificateEnrollment e = own(tx, principal, id);
+            requireMedicalCredentials(e);
             if (e.registrationStatus != RegistrationStatus.PENDING || e.reviewStatus == ReviewStatus.REJECTED
                     || e.consentedAt != null) {
                 throw invalidState();
@@ -445,6 +512,7 @@ public class CertificateEnrollmentService implements CertificateGate {
                 auditReview(admin, snapshot, "REJECT");
                 return new Outcome(snapshot, snapshot.toResponse());
             }
+            requireReviewedMedicalVersion(snapshot, body);
             String fingerprint = body.fingerprintSha256() == null ? ""
                     : body.fingerprintSha256().replace(":", "").strip().toLowerCase(Locale.ROOT);
             if (!FINGERPRINT.matcher(fingerprint).matches()
@@ -467,6 +535,7 @@ public class CertificateEnrollmentService implements CertificateGate {
             if (e.registrationStatus != RegistrationStatus.PENDING || e.reviewStatus != ReviewStatus.PENDING) {
                 throw invalidState();
             }
+            requireReviewedMedicalVersion(e, body);
             e.reviewStatus = ReviewStatus.APPROVED;
             e.reviewMethod = "ADMIN_REVIEW";
             e.reviewedBy = admin.actorId();
@@ -487,6 +556,9 @@ public class CertificateEnrollmentService implements CertificateGate {
         if (e.reviewEvidenceRef != null) {
             details.put("evidenceRef", e.reviewEvidenceRef);
         }
+        if (e.medicalCredentialsSubmittedAt != null) {
+            details.put("medicalCredentialsSubmittedAt", e.medicalCredentialsSubmittedAt.toString());
+        }
         audit.record(e.tenantId, admin.actorId(), "CERTIFICATE_ENROLLMENT_REVIEWED", "CERTIFICATE_ENROLLMENT",
                 e.registrationId.toString(), AuditService.SUCCESS, details);
     }
@@ -496,6 +568,7 @@ public class CertificateEnrollmentService implements CertificateGate {
      * previous ACTIVE enrollment. The caller persists {@code e} afterwards.
      */
     private void maybeActivate(Tx tx, CertificateEnrollment e) {
+        requireMedicalCredentials(e);
         if (e.registrationStatus != RegistrationStatus.PENDING || e.reviewStatus != ReviewStatus.APPROVED
                 || e.consentedAt == null) {
             return;

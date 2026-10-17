@@ -19,6 +19,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
   beforeEach(() => {
     originalFetch = globalThis.fetch;
+    vi.stubEnv('VITE_CERTIFICATE_DIAGNOSTICS', 'true');
     localStorage.clear();
     sessionStorage.clear();
     globalThis.URL.createObjectURL = vi.fn().mockReturnValue('blob:http://localhost/mock-doc-pdf');
@@ -30,6 +31,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
     localStorage.clear();
     sessionStorage.clear();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const mockEnrollmentConfig: CertificateEnrollmentConfig = {
@@ -348,6 +350,9 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
   it('4. POST /v1/certificate-enrollment/enrollments/{registrationId}/consent: requires 3 explicit unchecked consents before activation', async () => {
     let capturedConsentReq: any = null;
     let activated = false;
+    let capturedMedical: any = null;
+    const medical = { ...mockCandidateGood, medicalCredentialsRequired: true, medicalLicenseNumber: '998811', specialist: true,
+      specialistQualificationNumber: 'SP-9988', specialty: '영상의학과', medicalCredentialsSubmittedAt: new Date().toISOString() };
 
     globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.includes('/certificate-enrollment/config')) {
@@ -358,7 +363,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
       }
       if (url.includes('/certificate-enrollment/verify')) {
         const res: CertificateSessionResponse = {
-          enrollment: mockCandidateGood,
+          enrollment: { ...mockCandidateGood, medicalCredentialsRequired: true },
           activationToken: 'token-valid-memory-9988',
           expiresAt: new Date(Date.now() + 1800000).toISOString(),
           identityMode: 'PC_CERTIFICATE',
@@ -366,9 +371,15 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
         };
         return new Response(JSON.stringify(res), { status: 201 });
       }
+      if (url.includes('/medical-credentials')) {
+        expect(init?.method).toBe('PUT');
+        expect((init?.headers as Record<string,string>).Authorization).toBe('Bearer token-valid-memory-9988');
+        capturedMedical = JSON.parse(init?.body as string);
+        return new Response(JSON.stringify(medical), { status: 200 });
+      }
       if (url.includes('/consent')) {
         capturedConsentReq = JSON.parse(init?.body as string);
-        return new Response(JSON.stringify({ ...mockCandidateGood, consentedAt: new Date().toISOString() }), { status: 200 });
+        return new Response(JSON.stringify({ ...medical, consentedAt: new Date().toISOString() }), { status: 200 });
       }
       if (url.includes('/doctor-activation/me')) {
         return new Response(JSON.stringify({ doctor: mockDoctorActive }), { status: 200 });
@@ -417,7 +428,13 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
     // Check 3rd
     fireEvent.click(chkPriv);
-    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.disabled).toBe(true); // Consent alone cannot skip medical credentials.
+    fireEvent.click(screen.getByLabelText('전문의'));
+    fireEvent.change(screen.getByLabelText(/전문의 자격번호/), { target: { value: 'SP-9988' } });
+    fireEvent.change(screen.getByLabelText(/전문과목/), { target: { value: '영상의학과' } });
+    fireEvent.click(screen.getByRole('button', { name: '면허·자격 정보 제출' }));
+    await waitFor(() => expect(submitBtn.disabled).toBe(false));
+    expect(capturedMedical).toEqual({ medicalLicenseNumber: '998811', specialist: true, specialistQualificationNumber: 'SP-9988', specialty: '영상의학과' });
 
     // Submit consent
     fireEvent.click(submitBtn);

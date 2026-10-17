@@ -432,6 +432,10 @@ export const DoctorAdminView: React.FC = () => {
 
   const handleReviewCandidateSubmit = async (decision: 'APPROVED' | 'REJECTED') => {
     if (!reviewCandidateDoctor || !selectedCandidate) return;
+    if (decision === 'APPROVED' && selectedCandidate.medicalCredentialsRequired && !selectedCandidate.medicalCredentialsSubmittedAt) {
+      setReviewError('의사가 면허·자격 정보를 먼저 제출해야 합니다.');
+      return;
+    }
     if (decision === 'APPROVED' && !reviewConfirmed) {
       setReviewError('관리자의 신원 및 의사 면허 대조 검증 확인(체크박스)이 필수입니다.');
       return;
@@ -485,6 +489,7 @@ export const DoctorAdminView: React.FC = () => {
           decision: decision === 'APPROVED' ? 'APPROVE' : 'REJECT',
           fingerprintSha256: selectedCandidate.fingerprintSha256,
           evidenceRef: reviewEvidenceRef.trim(),
+          medicalCredentialsSubmittedAt: selectedCandidate.medicalCredentialsSubmittedAt || undefined,
           note: reviewNote.trim() || undefined,
         });
 
@@ -1249,6 +1254,13 @@ export const DoctorAdminView: React.FC = () => {
                 </div>
               </div>
 
+              {selectedCandidate.medicalCredentialsRequired && <section className="alert alert-info" data-testid="admin-medical-credentials">
+                <strong>의료인 자격 대조</strong>
+                <p>의사면허번호: {selectedCandidate.medicalLicenseNumber || '미제출'}</p>
+                <p>전문의 자격: {selectedCandidate.specialist == null ? '미제출' : selectedCandidate.specialist
+                  ? `${selectedCandidate.specialty} / ${selectedCandidate.specialistQualificationNumber}` : '해당 없음'}</p>
+                <p>제출 상태: {selectedCandidate.medicalCredentialsSubmittedAt ? '제출 완료 · 증빙 대조 필요' : '제출 대기 · 승인 불가'}</p>
+              </section>}
               <form onSubmit={(e) => { e.preventDefault(); handleReviewCandidateSubmit('APPROVED'); }}>
                 <div style={{ marginBottom: '12px' }}>
                   <label htmlFor="review-evidence" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px' }}>
@@ -1300,7 +1312,7 @@ export const DoctorAdminView: React.FC = () => {
                     />
                     <span style={{ fontSize: '0.82rem', color: 'var(--navy-900)', fontWeight: 600 }}>
                       <FileCheck2 size={16} style={{ display: 'inline', verticalAlign: '-3px', marginRight: '4px', color: 'var(--teal-700)' }} />
-                      관리자 본인은 위 인증서 소유자 정보가 등록된 의사의 신원 및 의사 면허 정보와 일치함을 검증하였습니다.
+                      위 인증서 소유자의 신원·의사면허 및 제출된 전문의 자격번호·전문과목을 증빙과 대조하여 확인했습니다.
                     </span>
                   </label>
                 </div>
@@ -1337,7 +1349,7 @@ export const DoctorAdminView: React.FC = () => {
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    disabled={reviewProcessing || !reviewConfirmed || !reviewEvidenceRef.trim()}
+                    disabled={reviewProcessing || !reviewConfirmed || !reviewEvidenceRef.trim() || Boolean(selectedCandidate.medicalCredentialsRequired && !selectedCandidate.medicalCredentialsSubmittedAt)}
                     data-testid="admin-cert-review-approve-btn"
                   >
                     {reviewProcessing ? '처리 중...' : '신원·면허 일치 승인 (APPROVE)'}

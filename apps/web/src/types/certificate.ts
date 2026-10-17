@@ -36,6 +36,7 @@ export interface CertificateEnrollmentConfig {
   mobile: MobileConfig;
   devMockCertificateEnabled: boolean;
   clinicalUseAllowed: boolean;
+  medicalCredentialsRequiredForPacs?: boolean;
 }
 
 export interface CertificateChallenge {
@@ -83,6 +84,13 @@ export interface Enrollment {
   revocationReason: string | null;
   supersedes: string | null;
 
+  medicalCredentialsRequired?: boolean | null;
+  medicalLicenseNumber?: string | null;
+  specialist?: boolean | null;
+  specialistQualificationNumber?: string | null;
+  specialty?: string | null;
+  medicalCredentialsSubmittedAt?: string | null;
+
   // Convenient optional aliases for view and legacy compatibility
   candidateId?: string;
   algorithm?: string;
@@ -129,7 +137,15 @@ export interface CertificateConsentRequest {
   privacy: boolean;
 }
 
+export interface MedicalCredentialsRequest {
+  medicalLicenseNumber: string;
+  specialist: boolean;
+  specialistQualificationNumber: string | null;
+  specialty: string | null;
+}
+
 export interface AdminCertificateReviewRequest {
+  medicalCredentialsSubmittedAt?: string | null;
   registrationId: string;
   decision: 'APPROVE' | 'REJECT';
   fingerprintSha256: string;

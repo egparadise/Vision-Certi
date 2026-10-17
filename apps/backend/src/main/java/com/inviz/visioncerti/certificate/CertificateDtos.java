@@ -21,7 +21,7 @@ public final class CertificateDtos {
 
     public record ConfigResponse(String activationPolicy, String serviceId, long challengeTtlSeconds,
             PcCertificateConfig pcCertificate, MobileConfig mobile, boolean devMockCertificateEnabled,
-            boolean clinicalUseAllowed) {
+            boolean clinicalUseAllowed, boolean medicalCredentialsRequiredForPacs) {
     }
 
     public record EnrollmentChallengeRequest(String invitationCode) {
@@ -82,7 +82,18 @@ public final class CertificateDtos {
             Instant activatedAt,
             Instant revokedAt,
             String revocationReason,
-            UUID supersedes) {
+            UUID supersedes,
+            Boolean medicalCredentialsRequired,
+            String medicalLicenseNumber,
+            Boolean specialist,
+            String specialistQualificationNumber,
+            String specialty,
+            Instant medicalCredentialsSubmittedAt) {
+    }
+
+    public record MedicalCredentialsRequest(String medicalLicenseNumber, Boolean specialist,
+            String specialistQualificationNumber, String specialty) {
+        @Override public String toString() { return "MedicalCredentialsRequest[<personal data redacted>]"; }
     }
 
     public record CertificateSessionResponse(EnrollmentResponse enrollment, String activationToken, Instant expiresAt,
@@ -98,7 +109,11 @@ public final class CertificateDtos {
     }
 
     public record ReviewRequest(String registrationId, String decision, String fingerprintSha256, String evidenceRef,
-            String note) {
+            String note, Instant medicalCredentialsSubmittedAt) {
+        public ReviewRequest(String registrationId, String decision, String fingerprintSha256, String evidenceRef,
+                String note) {
+            this(registrationId, decision, fingerprintSha256, evidenceRef, note, null);
+        }
     }
 
     public record MobileStartRequest(String purpose, String invitationCode) {

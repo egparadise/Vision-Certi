@@ -111,6 +111,72 @@ class CertificateEnrollmentServiceTest {
 
     // ------------------------------------------------------------------ helpers
 
+    @Test
+    void pacsMedicalDeclarationsRequireOwnerMatchingLicenseAndEvidenceReviewOfCurrentVersion() {
+        String license = "99110";
+        DoctorService.DoctorRef doctor = doctors.selfEnrollFromPacs("pacs-medical-test", TENANT,
+                "integration:pacs", "김의사", license, "영상센터");
+        ChallengeResponse challenge = service.createPacsEnrollmentChallenge(doctor, "pacs-medical-test");
+        TestPki.Leaf leaf = pki.leaf(TestPki.rsa(2048));
+        CertificateSessionResponse session = service.verifyEnrollment(proof(challenge, leaf, "SHA256withRSA"));
+        DoctorPrincipal principal = principal(session);
+        String id = session.enrollment().registrationId().toString();
+        assertThat(session.enrollment().medicalCredentialsRequired()).isTrue();
+        assertThat(session.enrollment().medicalCredentialsSubmittedAt()).isNull();
+        assertThatThrownBy(() -> service.consent(principal, id, CONSENT))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("MEDICAL_CREDENTIALS_REQUIRED"));
+        assertThatThrownBy(() -> approve(doctor.id(), session))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("MEDICAL_CREDENTIALS_REQUIRED"));
+        var valid = new CertificateDtos.MedicalCredentialsRequest(license, true, "SPEC-88201", "영상의학과");
+        var other = new DoctorPrincipal(UUID.randomUUID(), TENANT, "PC_CERTIFICATE", clock.instant().plusSeconds(60),
+                UUID.randomUUID(), leaf.fingerprint(), clock.instant());
+        assertThatThrownBy(() -> service.submitMedicalCredentials(other, id, valid))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("ENROLLMENT_NOT_FOUND"));
+        assertThatThrownBy(() -> service.submitMedicalCredentials(principal, id,
+                new CertificateDtos.MedicalCredentialsRequest("99999", false, null, null)))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("MEDICAL_LICENSE_MISMATCH"));
+        assertThatThrownBy(() -> service.submitMedicalCredentials(principal, id,
+                new CertificateDtos.MedicalCredentialsRequest(license, true, null, "영상의학과")))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("SPECIALIST_CREDENTIALS_REQUIRED"));
+        assertThatThrownBy(() -> service.submitMedicalCredentials(principal, id,
+                new CertificateDtos.MedicalCredentialsRequest(license, false, "SPEC-88201", null)))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("MEDICAL_CREDENTIALS_INVALID"));
+        EnrollmentResponse first = service.submitMedicalCredentials(principal, id, valid);
+        EnrollmentResponse latest = service.submitMedicalCredentials(principal, id, valid);
+        assertThat(latest.medicalCredentialsSubmittedAt()).isAfter(first.medicalCredentialsSubmittedAt());
+        assertThat(latest.specialistQualificationNumber()).isEqualTo("SPEC-88201");
+        assertThat(latest.specialty()).isEqualTo("영상의학과");
+        assertThat(latest.reviewStatus()).isEqualTo("PENDING");
+        assertThat(service.listForAdmin(ADMIN, doctor.id()).getFirst().medicalLicenseNumber()).isEqualTo(license);
+        assertThatThrownBy(() -> service.review(ADMIN, doctor.id(), new ReviewRequest(id, "APPROVE",
+                leaf.fingerprint(), "evidence://medical", null, first.medicalCredentialsSubmittedAt())))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("MEDICAL_CREDENTIALS_CHANGED"));
+        service.review(ADMIN, doctor.id(), new ReviewRequest(id, "APPROVE", leaf.fingerprint(),
+                "evidence://medical", null, latest.medicalCredentialsSubmittedAt()));
+        assertThatThrownBy(() -> service.submitMedicalCredentials(principal, id, valid))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("INVALID_ENROLLMENT_STATE"));
+        assertThat(service.consent(principal, id, CONSENT).registrationStatus()).isEqualTo("ACTIVE");
+        doctors.activate(principal);
+        ChallengeResponse renewal = service.createEnrollmentChallenge(null, principal, "renewal");
+        CertificateSessionResponse renewed = service.verifyEnrollment(proof(renewal,
+                pki.leaf(TestPki.rsa(2048)), "SHA256withRSA"));
+        assertThat(renewed.enrollment().medicalCredentialsRequired()).isTrue();
+        assertThat(renewed.enrollment().medicalCredentialsSubmittedAt()).isNull();
+        assertThatThrownBy(() -> service.consent(principal(renewed), renewed.enrollment().registrationId().toString(), CONSENT))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("MEDICAL_CREDENTIALS_REQUIRED"));
+        assertThat(audit.list(TENANT).stream().filter(e -> e.action().equals("MEDICAL_CREDENTIALS_SUBMITTED"))
+                .map(e -> e.details().toString())).allSatisfy(details ->
+                        assertThat(details).doesNotContain(license, "SPEC-88201", "영상의학과"));
+    }
+
+    @Test
+    void historicalJsonWithoutMedicalFieldsRetainsLegacyNullPolicy() {
+        CertificateEnrollment historical = com.inviz.visioncerti.store.JsonCodec.read("{}", CertificateEnrollment.class);
+        assertThat(historical.medicalCredentialsRequired).isNull();
+        assertThat(historical.specialist).isNull();
+        assertThat(historical.medicalCredentialsSubmittedAt).isNull();
+    }
+
     private PreregistrationResponse preregister(String email) {
         return preregister(email, null);
     }

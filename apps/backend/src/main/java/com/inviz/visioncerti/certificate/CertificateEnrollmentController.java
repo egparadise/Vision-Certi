@@ -27,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -88,6 +89,13 @@ public class CertificateEnrollmentController {
     EnrollmentResponse consent(DoctorPrincipal principal, @PathVariable String registrationId,
             @RequestBody ConsentRequest body) {
         return certificates.consent(principal, registrationId, body);
+    }
+
+    @PutMapping("/enrollments/{registrationId}/medical-credentials")
+    ResponseEntity<EnrollmentResponse> medicalCredentials(DoctorPrincipal principal,
+            @PathVariable String registrationId, @RequestBody CertificateDtos.MedicalCredentialsRequest body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(certificates.submitMedicalCredentials(principal, registrationId, body));
     }
 
     @PostMapping("/enrollments/{registrationId}/unregister")

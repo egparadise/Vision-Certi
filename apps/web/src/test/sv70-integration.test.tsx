@@ -369,6 +369,6 @@ describe('SV70 PACS & Production Runtime Integration Tests', () => {
         challengeId: 'test-challenge',
         challengeNonce: 'test-nonce',
       })
-    ).rejects.toThrow('PC 로컬 인증서 보안 모듈이 설치되어 있지 않거나 실행 중이지 않습니다.');
+    ).rejects.toThrow('PC 인증서 보안프로그램에 연결할 수 없습니다. 설치·실행 후 다시 확인해 주세요.');
   });
 });

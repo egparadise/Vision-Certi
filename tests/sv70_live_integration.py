@@ -126,8 +126,14 @@ def proof(challenge,login=False):
     return result
 verified=api('POST','/v1/certificate-enrollment/verify',proof(challenge),expected=201)
 token=verified['activationToken']; reg=verified['enrollment']['registrationId']
+assert verified['enrollment']['medicalCredentialsRequired'] is True
+medical=api('PUT',f'/v1/certificate-enrollment/enrollments/{reg}/medical-credentials',
+    {'medicalLicenseNumber':verified['doctor']['licenseNumber'],'specialist':True,
+     'specialistQualificationNumber':'SYNTHETIC-123','specialty':'Synthetic radiology'},token=token)
+assert medical['reviewStatus']=='PENDING' and medical['medicalCredentialsSubmittedAt']
+checks.append('medical license and specialist qualification saved as pending review, not automatically verified')
 api('POST',f'/v1/certificate-enrollment/enrollments/{reg}/consent',{'version':'2026-10-13-draft','authentication':True,'signature':True,'privacy':True},token=token)
-api('POST',f'/v1/admin/doctors/{doctor}/certificate-reviews',{'registrationId':reg,'decision':'APPROVE','fingerprintSha256':hashlib.sha256(der).hexdigest(),'evidenceRef':'synthetic/local-proof-review'},admin=True)
+api('POST',f'/v1/admin/doctors/{doctor}/certificate-reviews',{'registrationId':reg,'decision':'APPROVE','fingerprintSha256':hashlib.sha256(der).hexdigest(),'evidenceRef':'synthetic/local-proof-review','medicalCredentialsSubmittedAt':medical['medicalCredentialsSubmittedAt']},admin=True)
 active=api('POST','/v1/doctor-activation/activate',{},token=token)
 assert active['status']=='ACTIVE' and active['certificate']['kind']=='X509'
 assert invoke(service.enrollment_status,number)['registrationStatus']=='ACTIVE'

@@ -1,3 +1,4 @@
+import type { MedicalCredentialsRequest } from '../types/certificate';
 import {
   ActivationChallenge,
   ActivationSessionResponse,
@@ -598,6 +599,15 @@ export class ApiClient {
       },
     });
     return this.handleResponse<ListResponse<Enrollment>>(res);
+  }
+
+  async submitMedicalCredentials(token: string, registrationId: string, body: MedicalCredentialsRequest): Promise<Enrollment> {
+    const res = await fetch(`${this.baseUrl}/certificate-enrollment/enrollments/${registrationId}/medical-credentials`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    return this.handleResponse<Enrollment>(res);
   }
 
   async submitCertificateConsent(

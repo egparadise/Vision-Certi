@@ -92,10 +92,13 @@ export default function CertificateEnrollmentPage() {
   };
 
   const blocked = status === 'SUSPENDED' || status === 'REVOKED';
+  const returningDoctor = status === 'ACTIVE';
   return <main style={{ maxWidth: 720, margin: '80px auto', padding: 32 }}>
-    <h1>공동인증서 등록 및 로그인</h1>
-    <p>최초 접속 시 본인의 공동인증서를 PACS 계정에 등록합니다. 판독의는 등록 후에도 매번 공동인증서로 로그인해야 합니다.</p>
-    <p>초대코드 입력이나 관리자 일괄 등록은 필요하지 않습니다. 인증서와 면허 연결 검증 및 전자서명 이용 동의를 완료해 주세요.</p>
+    <h1>{returningDoctor ? '등록된 공동인증서 로그인' : '최초 공동인증서 등록'}</h1>
+    {returningDoctor
+      ? <p>이 PACS 계정에 등록된 공동인증서로 본인확인을 완료해야 로그인할 수 있습니다.</p>
+      : <p>최초 접속 시 본인의 공동인증서를 PACS 계정에 등록합니다. 인증서와 의사면허·전문의 자격을 확인하고 전자서명 이용에 동의해 주세요.</p>}
+    {!returningDoctor && <p>초대코드 입력이나 관리자 일괄 등록은 필요하지 않습니다. 등록이 완료되기 전에는 PACS 판독 화면에 접근할 수 없습니다.</p>}
     {!token && <p role="status">PACS 계정 확인이 필요합니다. <button onClick={() => navigate('/login')}>로그인 화면</button></p>}
     {blocked && <p role="alert">계정 또는 인증서 연결이 정지·해제되어 있습니다. 관리자에게 문의해 주세요.</p>}
     {status === 'PENDING' && <p>인증서 검증·동의·활성화가 완료되면 공동인증서 로그인을 진행할 수 있습니다.</p>}

@@ -3,8 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { PacsCertificateEnrollment } from '../components/PacsCertificateEnrollment';
 
 vi.mock('../components/CertificateEnrollmentView', () => ({
-  CertificateEnrollmentView: ({ initialChallenge, onEnrollmentComplete }: any) =>
-    <button data-testid="accepted-challenge" onClick={onEnrollmentComplete}>{initialChallenge.challengeId}</button>,
+  CertificateEnrollmentView: ({ initialChallenge, onEnrollmentComplete, proofMethod }: any) =>
+    <button data-testid="accepted-challenge" data-proof-method={proofMethod} onClick={onEnrollmentComplete}>{initialChallenge.challengeId}</button>,
 }));
 
 describe('PACS first-login enrollment channel', () => {
@@ -35,6 +35,7 @@ describe('PACS first-login enrollment channel', () => {
     expect(screen.queryByTestId('accepted-challenge')).toBeNull();
     deliver();
     expect(screen.getByTestId('accepted-challenge')).toHaveTextContent('challenge-1');
+    expect(screen.getByTestId('accepted-challenge')).toHaveAttribute('data-proof-method', 'external');
     deliver({ ...data, challenge: { ...challenge, challengeId: 'replacement' } });
     expect(screen.getByTestId('accepted-challenge')).toHaveTextContent('challenge-1');
     fireEvent.click(screen.getByTestId('accepted-challenge'));

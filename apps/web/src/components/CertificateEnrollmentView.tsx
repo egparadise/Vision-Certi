@@ -77,10 +77,6 @@ export const CertificateEnrollmentView: React.FC<{
   const diagnostics = import.meta.env.DEV && import.meta.env.VITE_CERTIFICATE_DIAGNOSTICS === 'true';
   const operationVersion = useRef(0);
   useEffect(() => () => { operationVersion.current++; }, []);
-  useEffect(() => {
-    if (initialChallenge && certificate && doctor?.status === 'ACTIVE') onEnrollmentComplete?.();
-  }, [initialChallenge, certificate, doctor?.status, onEnrollmentComplete]);
-
   // Load server configuration
   const loadConfig = useCallback(async () => {
     setConfigLoading(true);
@@ -360,6 +356,9 @@ export const CertificateEnrollmentView: React.FC<{
 
       setStep(4);
       setStatusMessage('의사 전자서명 위탁 동의가 완료되었습니다.');
+      // The PACS popup has finished collecting the doctor's proof and consent.
+      // PACS still checks the server status; PENDING never becomes a login session.
+      if (initialChallenge) onEnrollmentComplete?.();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '동의 정보 제출에 실패했습니다.';
       setError(msg);

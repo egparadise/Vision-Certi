@@ -37,7 +37,8 @@ def main():
             current=dst.read_bytes()
             if digest(current)==entry['sha256']: continue  # already applied
             expected=entry['originalNormalizedSha256']
-            if expected is None or digest(current.replace(b'\r\n',b'\n'))!=expected:
+            prior=entry.get('upgradeFromSha256',[])
+            if digest(current) not in prior and (expected is None or digest(current.replace(b'\r\n',b'\n'))!=expected):
                 raise ValueError('Local changes/baseline mismatch, nothing written: '+entry['path'])
         elif entry['originalSha256'] is not None:
             raise ValueError('Missing baseline file: '+entry['path'])

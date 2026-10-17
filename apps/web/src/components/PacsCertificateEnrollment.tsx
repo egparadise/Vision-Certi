@@ -54,8 +54,8 @@ export function PacsCertificateEnrollment() {
   }, [context]);
 
   if (challenge) return <>
-    {completed && <p role="status">등록·활성화가 완료되었습니다. PACS에서 등록 상태를 확인한 후 계속 진행해주세요.</p>}
-    <CertificateEnrollmentView key={challenge.challengeId} initialChallenge={challenge} onEnrollmentComplete={complete} />
+    {completed && <p role="status">등록 요청이 접수되었습니다. PACS에서 승인 상태를 확인해 주세요.</p>}
+    <CertificateEnrollmentView key={challenge.challengeId} initialChallenge={challenge} proofMethod="external" onEnrollmentComplete={complete} />
   </>;
   return <section className="personal-certificate-provider-notice" aria-labelledby="pacs-enrollment-title">
     <h2 id="pacs-enrollment-title">PACS 첫 로그인 시 공동인증서 등록</h2>

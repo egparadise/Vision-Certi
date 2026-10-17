@@ -84,6 +84,7 @@ const activeButton = () => screen.findByRole('button', { name: '공동인증서 
   // ACTIVE registration cannot send a password-only user home. The explicit certificate exchange can.
   setup();
   let button = await activeButton();
+  assert.equal(screen.getByRole('heading', { name: '등록된 공동인증서 로그인' }).textContent, '등록된 공동인증서 로그인');
   assert.equal(calls.nav.length, 0);
   await act(async () => fireEvent.click(button));
   assert.equal(calls.step, 1);
@@ -133,12 +134,22 @@ const activeButton = () => screen.findByRole('button', { name: '공동인증서 
   assert.equal(calls.nav.length, 0);
 
   // Completing enrollment still requires certificate login.
+  setup('test-legacy-token', 'NOT_REGISTERED');
+  await screen.findByRole('heading', { name: '최초 공동인증서 등록' });
+  assert.equal((await screen.findByRole('button', { name: '공동인증서 최초 등록' })).disabled, false);
+  assert.equal(screen.queryByRole('button', { name: '공동인증서 로그인' }), null);
+
   setup('test-legacy-token', 'PENDING');
   button = await screen.findByRole('button', { name: '공동인증서 최초 등록' });
   await waitFor(() => assert.equal(button.disabled, false));
   await act(async () => fireEvent.click(button));
   await activeButton();
   assert.equal(calls.nav.length, 0);
+
+  setup('test-legacy-token', 'SUSPENDED');
+  await screen.findByRole('alert');
+  assert.equal(screen.queryByRole('button', { name: '공동인증서 로그인' }), null);
+  assert.equal(screen.getByRole('button', { name: '공동인증서 최초 등록' }).disabled, true);
 
   // Non-physician staff retain their original login flow.
   setup('test-legacy-token', 'NOT_REQUIRED');

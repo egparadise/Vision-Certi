@@ -78,7 +78,7 @@ export default function LoginForm() {
     }
   }, [userData, userToken]);
 
-  const { mutate: userLogin } = useUserLogin();
+  const { mutate: userLogin, isPending: pacsLoginPending } = useUserLogin();
 
   const [vcConfig, setVcConfig] = useState<VcConfig | null>(null);
   const [vcError, setVcError] = useState<string | null>(null);
@@ -99,8 +99,21 @@ export default function LoginForm() {
   }, []);
 
   const handleCertificateLogin = async () => {
-    if (!vcConfig || vcLoading) return;
+    if (!vcConfig || vcLoading || pacsLoginPending) return;
     setVcError(null);
+    const pacsUserId = getValues('user_id')?.trim();
+    const pacsPassword = getValues('user_passwd');
+    if (pacsUserId || pacsPassword) {
+      if (!pacsUserId || !pacsPassword) {
+        setVcError('처음 등록할 때는 PACS ID와 비밀번호를 모두 입력해 주세요.');
+        return;
+      }
+      // Only PACS can identify an unregistered doctor. Its authenticated session
+      // opens /certificate-enrollment, which checks the server-side status.
+      userLogin({ user_id: pacsUserId, user_passwd: pacsPassword, user_overwrite: true });
+      return;
+    }
+    // Returning doctors can prove the registered certificate without a PACS password.
     setVcLoading(true);
     try {
       const code = await requestCertificateHandoff(vcConfig);
@@ -182,7 +195,7 @@ export default function LoginForm() {
               className="btn_login"
               data-testid="pacs-certificate-login-btn"
               onClick={handleCertificateLogin}
-              disabled={vcLoading}
+              disabled={vcLoading || pacsLoginPending}
               style={{
                 backgroundColor: '#1e3a5f',
                 border: '1px solid #3b82f6',
@@ -195,8 +208,11 @@ export default function LoginForm() {
                 marginTop: 0,
               }}
             >
-              {vcLoading ? '인증 진행 중...' : '🛡️ 공동인증서 로그인 (Vision-Certi)'}
+              {vcLoading || pacsLoginPending ? '인증 진행 중...' : '공동인증서 등록 · 로그인 (Vision-Certi)'}
             </button>
+            <p style={{ color: '#93c5fd', fontSize: '12px', lineHeight: 1.5, marginTop: '8px' }}>
+              처음 등록: PACS ID와 비밀번호 입력 후 선택 · 등록 완료: 입력 없이 공동인증서로 로그인
+            </p>
             {vcError && (
               <div
                 data-testid="pacs-certificate-login-error"

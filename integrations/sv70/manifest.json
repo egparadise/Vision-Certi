@@ -210,7 +210,10 @@
       "path": "src/components/user/LoginForm.tsx",
       "originalSha256": "0a6d769b1b4e2b3b3aa5751d54d418bc8a6b342827986d8412120d625948efad",
       "originalNormalizedSha256": "810a3ceae512004a60069e045b0bf025c4edf48e16306d609a1cd88696499563",
-      "sha256": "c554ef163a6dfd4c171ca78712f6cb2dbbc7e36c112d350b6071acb6be5ef76c"
+      "sha256": "e055141fa37c03bb31dfc5d5e0eab139ef94b23ad5b91ea5716a78eb88eb61f2",
+      "upgradeFromSha256": [
+        "c554ef163a6dfd4c171ca78712f6cb2dbbc7e36c112d350b6071acb6be5ef76c"
+      ]
     },
     {
       "component": "client",
@@ -231,7 +234,10 @@
       "path": "src/pages/user/CertificateEnrollment.tsx",
       "originalSha256": null,
       "originalNormalizedSha256": null,
-      "sha256": "b175939da2050bdb51fa5227981fa7fcfd1a8752f85776c7fca5f3d5f44f499d"
+      "sha256": "6602d1ffff54c30346df7554676611dc31f79302b832fa28423848004e6313ad",
+      "upgradeFromSha256": [
+        "b175939da2050bdb51fa5227981fa7fcfd1a8752f85776c7fca5f3d5f44f499d"
+      ]
     },
     {
       "component": "client",

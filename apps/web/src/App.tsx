@@ -140,7 +140,7 @@ export const App: React.FC = () => {
         <Header />
         <Navigation />
         <main className="main-content" id="main-content">
-          <CertificateEnrollmentView initialMode="PC_LOGIN" />
+          <CertificateEnrollmentView initialMode="PC_LOGIN" proofMethod="external" />
         </main>
       </div>
     );

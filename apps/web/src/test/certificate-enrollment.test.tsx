@@ -351,6 +351,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
     let capturedConsentReq: any = null;
     let activated = false;
     let capturedMedical: any = null;
+    const onEnrollmentComplete = vi.fn();
     const medical = { ...mockCandidateGood, medicalCredentialsRequired: true, medicalLicenseNumber: '998811', specialist: true,
       specialistQualificationNumber: 'SP-9988', specialty: '영상의학과', medicalCredentialsSubmittedAt: new Date().toISOString() };
 
@@ -393,7 +394,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
     render(
       <AppProvider>
-        <CertificateEnrollmentView initialChallenge={mockChallenge} />
+        <CertificateEnrollmentView initialChallenge={mockChallenge} onEnrollmentComplete={onEnrollmentComplete} />
       </AppProvider>
     );
 
@@ -420,6 +421,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
     expect(chkSig.checked).toBe(false);
     expect(chkPriv.checked).toBe(false);
     expect(submitBtn.disabled).toBe(true);
+    expect(onEnrollmentComplete).not.toHaveBeenCalled();
 
     // Check only 2
     fireEvent.click(chkAuth);
@@ -450,6 +452,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
       privacy: true,
     });
     expect(activated).toBe(false);
+    expect(onEnrollmentComplete).toHaveBeenCalledTimes(1);
   });
 
   it('5. POST /v1/admin/doctors/{id}/certificate-reviews: requires exact fingerprintSha256, evidenceRef, and checkbox', async () => {

@@ -57,8 +57,18 @@ def http_json(url: str, token: str | None = None):
 
 def api_ready() -> bool:
     try:
-        return http_json('http://127.0.0.1:18082/v1/runtime/capabilities')['persistence']['state'] == 'READY'
-    except (OSError, ValueError, KeyError):
+        if http_json('http://127.0.0.1:18082/v1/runtime/capabilities')['persistence']['state'] != 'READY':
+            return False
+        # A live listener and GET can remain healthy while Tomcat stops processing JSON request bodies.
+        # Probe the same body-reading path used by certificate login without consuming a real challenge.
+        request = urllib.request.Request('http://127.0.0.1:18082/v1/certificate-enrollment/login',
+                                         data=b'{}', headers={'Content-Type': 'application/json'}, method='POST')
+        try:
+            _opener.open(request, timeout=3).close()
+            return False
+        except urllib.error.HTTPError as e:
+            return e.code == 404 and json.loads(e.read()).get('code') == 'CHALLENGE_NOT_FOUND'
+    except (OSError, ValueError, KeyError, TimeoutError):
         return False
 
 
@@ -149,6 +159,9 @@ def main() -> None:
     else:
         report['crl'] = 'fresh'
 
+    if listening('127.0.0.1', 18082) and not api_ready():
+        report['apiHealth'] = 'JSON POST failed; restarting API'
+        restart_api = True
     if restart_api and listening('127.0.0.1', 18082):
         stop_port(18082)
     if not listening('127.0.0.1', 18082):

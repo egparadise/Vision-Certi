@@ -5,10 +5,14 @@ import { PacsCertificateLogin } from '../components/PacsCertificateLogin';
 const mocks = vi.hoisted(() => ({ createPacsHandoff: vi.fn() }));
 vi.mock('../context/AppContext', () => ({ useApp: () => ({ client: { createPacsHandoff: mocks.createPacsHandoff } }) }));
 vi.mock('../components/CertificateEnrollmentView', () => ({
-  CertificateEnrollmentView: ({ onLoginComplete }: { onLoginComplete: (token: string) => Promise<void> }) =>
+  CertificateEnrollmentView: ({ onLoginComplete, onLoginFailed }: {
+    onLoginComplete: (token: string) => Promise<void>; onLoginFailed: (code: string) => void;
+  }) => <>
     <button onClick={() => void onLoginComplete('server-verified-certificate-session').catch(() => {})}>
       서버 인증 완료
-    </button>,
+    </button>
+    <button onClick={() => onLoginFailed('CERTIFICATE_NOT_ENROLLED')}>서버 인증 거부</button>
+  </>,
 }));
 
 describe('PACS certificate login handoff', () => {
@@ -33,7 +37,7 @@ describe('PACS certificate login handoff', () => {
     render(<PacsCertificateLogin />);
     fireEvent.click(screen.getByRole('button', { name: '서버 인증 완료' }));
     await waitFor(() => expect(opener.postMessage).toHaveBeenCalledWith({
-      type: 'VC_HANDOFF_CODE', nonce, audience: 'pacs-sv70', handoffCode: code,
+      type: 'VC_HANDOFF_CODE', nonce, audience: 'pacs-sv70', handoffCode: code, certificatePasswordVerified: true,
     }, 'https://pacs.internal'));
     expect(mocks.createPacsHandoff).toHaveBeenCalledWith('server-verified-certificate-session', 'pacs-sv70');
     expect(screen.getByRole('status')).toHaveTextContent('PACS');
@@ -49,6 +53,14 @@ describe('PACS certificate login handoff', () => {
     fireEvent.click(screen.getByRole('button', { name: '서버 인증 완료' }));
     await waitFor(() => expect(mocks.createPacsHandoff).toHaveBeenCalledTimes(2));
     expect(opener.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('returns a correlated failure to PACS without issuing a handoff code', () => {
+    render(<PacsCertificateLogin />);
+    fireEvent.click(screen.getByRole('button', { name: '서버 인증 거부' }));
+    expect(opener.postMessage).toHaveBeenCalledWith({ type: 'VC_HANDOFF_ERROR', nonce,
+      audience: 'pacs-sv70', code: 'CERTIFICATE_NOT_ENROLLED' }, 'https://pacs.internal');
+    expect(mocks.createPacsHandoff).not.toHaveBeenCalled();
   });
 
   it('rejects an untrusted PACS origin before certificate login begins', () => {

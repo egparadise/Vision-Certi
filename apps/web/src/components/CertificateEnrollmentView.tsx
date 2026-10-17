@@ -26,7 +26,9 @@ export const CertificateEnrollmentView: React.FC<{
   initialChallenge?: CertificateChallenge;
   onEnrollmentComplete?: () => void;
   onLoginComplete?: (activationToken: string) => Promise<void>;
-}> = ({ initialMode = 'PC_LOGIN', initialChallenge, onEnrollmentComplete, onLoginComplete, proofMethod = 'sdk' }) => {
+  onLoginFailed?: (code: string) => void;
+}> = ({ initialMode = 'PC_LOGIN', initialChallenge, onEnrollmentComplete, onLoginComplete,
+  onLoginFailed, proofMethod = 'sdk' }) => {
   const { client } = useApp();
 
   // Mode: PC_ENROLL (initial onboarding), PC_LOGIN (returning doctor), MOBILE, GOOGLE_AUX
@@ -284,6 +286,9 @@ export const CertificateEnrollmentView: React.FC<{
       if (version !== operationVersion.current) return;
       const msg = err instanceof Error ? err.message : '인증서 확인에 실패했습니다.';
       setError(msg);
+      if (authMode === 'PC_LOGIN' && onLoginComplete) {
+        onLoginFailed?.(err instanceof ApiClientError ? err.code : 'AUTHENTICATION_FAILED');
+      }
       throw err;
     } finally {
       if (version === operationVersion.current) setLoading(false);

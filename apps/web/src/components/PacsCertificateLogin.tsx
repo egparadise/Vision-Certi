@@ -38,11 +38,22 @@ export function PacsCertificateLogin() {
       nonce: context.nonce,
       audience: context.audience,
       handoffCode: handoff.handoffCode,
+      // Only reached after INVIZ verified a signature made with the private key that the certificate password
+      // unlocked. Informational for the PACS screen: the PACS server must still redeem the code (server-to-server),
+      // whose response carries the authoritative certificatePasswordVerified flag. The password never leaves the PC.
+      certificatePasswordVerified: true,
     }, context.origin);
     setDelivered(true);
   }, [client, context]);
+  const fail = useCallback((code: string) => {
+    if (!context || context.opener.closed) return;
+    context.opener.postMessage({ type: 'VC_HANDOFF_ERROR', nonce: context.nonce,
+      audience: context.audience, code: /^[A-Z_]{1,80}$/.test(code) ? code : 'AUTHENTICATION_FAILED' },
+      context.origin);
+  }, [context]);
 
   if (!context) return <section role="alert">PACS 로그인 요청이 유효하지 않습니다. PACS 로그인 화면에서 다시 시작해 주세요.</section>;
-  if (delivered) return <section role="status">인증서 확인을 완료했습니다. PACS에서 로그인 결과를 확인하고 있습니다.</section>;
-  return <CertificateEnrollmentView initialMode="PC_LOGIN" proofMethod="external" onLoginComplete={complete} />;
+  if (delivered) return <section role="status">인증서 비밀번호 확인을 완료했습니다. PACS에서 로그인 결과를 확인하고 있습니다.</section>;
+  return <CertificateEnrollmentView initialMode="PC_LOGIN" proofMethod="external"
+    onLoginComplete={complete} onLoginFailed={fail} />;
 }

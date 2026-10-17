@@ -15,6 +15,8 @@
 
 ## 보안프로그램 연결
 
+공급업체는 미정이다. [후보 비교·연동 계획](CERTIFICATE_VENDOR_SELECTION.md)과 [기술·견적 요청서](CERTIFICATE_VENDOR_RFI.md)를 작성했으며, 평가 SDK와 라이선스 확보 후 실제 API를 연결한다.
+
 현재 실제 공급업체 SDK와 설치파일은 제공되지 않았다. 따라서 실제 설치나 운영 공동인증서 선택이 완료된 상태가 아니다. 연결되지 않은 경우 설치 버튼을 비활성화하며 인증 성공을 생성하지 않는다.
 
 `apps/web/.env.certificate.example`의 다음 공개 값을 배포 환경에 설정한다.

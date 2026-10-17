@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^https://[^/]+$|^http://(127\.0\.0\.1|localhost)(:\d+)?$')]
     [string]$Origin

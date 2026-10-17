@@ -12,3 +12,22 @@
 .account-error, .account-proof [role=alert] { color:#a32222; background:#fff0f0; padding:12px; border-radius:6px; }
 .account-card button:disabled, .account-proof button:disabled { opacity:.5; cursor:not-allowed; }
 @media(max-width:600px) { .account-card, .account-proof { padding:16px; } .account-actions { align-items:stretch; flex-direction:column; } }
+.cert-media { display:flex; gap:12px; padding:12px; border:1px solid #d9e4ed; border-radius:8px 8px 0 0; background:#f7fafc; }
+.cert-media button { display:flex; align-items:center; gap:8px; border:1px solid transparent; border-radius:7px; padding:10px 14px; color:#284c65; background:transparent; cursor:pointer; font:inherit; }
+.cert-media button[aria-pressed=true] { border-color:#087db6; color:#075b8a; background:#e8f5fc; font-weight:700; }
+.cert-media button span { font-size:25px; line-height:1; }
+.cert-location-actions { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 4px; }
+.cert-location-actions button { padding:9px 14px; border:1px solid #087db6; border-radius:6px; color:#075b8a; background:#fff; cursor:pointer; font:inherit; }
+.account-proof .cert-location-help { margin:5px 0 14px; color:#536b7c; font-size:14px; }
+.cert-list-wrap { overflow-x:auto; min-height:160px; border:1px solid #d9e4ed; border-radius:6px; }
+.cert-list { width:100%; border-collapse:collapse; min-width:560px; font-size:14px; }
+.cert-list th, .cert-list td { padding:10px 12px; border-bottom:1px solid #e5edf3; text-align:left; vertical-align:middle; }
+.cert-list th { background:#eef5fa; color:#30546d; white-space:nowrap; }
+.cert-list tr.selected { background:#e7f4fd; }
+.cert-list td:first-child, .cert-list th:first-child { width:42px; text-align:center; }
+.account-proof .cert-list input[type=radio] { width:auto; margin:0; }
+.cert-list td small { display:block; color:#60798c; overflow:hidden; text-overflow:ellipsis; max-width:220px; white-space:nowrap; }
+.account-proof .cert-empty { padding:20px; margin:0; text-align:center; color:#60798c; }
+.cert-manual { margin:16px 0 18px; border:1px solid #d9e4ed; border-radius:6px; padding:10px 14px; }
+.cert-manual summary { cursor:pointer; color:#075b8a; font-weight:600; }
+.cert-manual[open] summary { margin-bottom:16px; }

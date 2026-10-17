@@ -2,6 +2,7 @@ import React from 'react';
 import { Award, Lock, ShieldAlert, KeyRound, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ExternalCaStatus } from '../types/certificate';
+import { InfoPopover } from './InfoPopover';
 
 export const CertificatesView: React.FC = () => {
   const { tenantId, mockStore } = useApp();
@@ -24,12 +25,25 @@ export const CertificatesView: React.FC = () => {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '8px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
-            의사 전자서명 및 신원 인증서 인프라 (CA / PKI / OpenBao)
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
+              의사 전자서명 및 신원 인증서 인프라 (CA / PKI / OpenBao)
+            </h2>
+            <InfoPopover
+              title="이원화 전자서명 아키텍처 (Two-Tier Architecture)"
+              buttonText="아키텍처 안내"
+              description="본 시스템은 의료법 및 전자서명법을 준수하기 위하여 의사 신원 확인(Doctor Authentication)과 판독문 전자서명(Medical Report Signing)을 엄격히 분리 운영합니다."
+              bullets={[
+                "의사 외부 신원 인증서: 표준 X.509 공동/금융인증서 기반 단방향 챌린지 서명 검증 (개인키·비밀번호 서버 미전송)",
+                "판독문 전자서명 키: OpenBao Transit에 보관되는 의사별 비대칭 키 (ECDSA P-256)",
+                "명시적 3대 동의 및 관리자 면허 대조 완료 시에만 활성화"
+              ]}
+              badge="특허 암호화 체계"
+            />
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)', marginTop: '2px' }}>
             외부 공인/공동/금융/모바일 신원인증서 체계 및 판독문 전용 OpenBao Transit 서명키 아키텍처
           </p>
         </div>

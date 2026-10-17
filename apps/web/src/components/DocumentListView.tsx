@@ -13,6 +13,7 @@ import { DocumentDetailView } from './DocumentDetailView';
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 import { EmptyState } from './EmptyState';
+import { InfoPopover } from './InfoPopover';
 
 export const DocumentListView: React.FC = () => {
   const {
@@ -83,12 +84,25 @@ export const DocumentListView: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
-            판독문 목록 및 원본 등록
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
+              판독문 목록 및 원본 등록
+            </h2>
+            <InfoPopover
+              title="의료영상 판독문 및 버전 관리 안내"
+              buttonText="판독문 관리 안내"
+              description="DICOM 영상에 대한 전문의 판독 소견서 원본을 등록하고, 정정(Amendment) 발생 시 이전 버전을 파기하지 않고 새 버전으로 누적 보존합니다."
+              bullets={[
+                "단일 진실 원천: 등록된 PDF 원본은 불변 SHA-256 해시로 봉인",
+                "정정본 관리: 오탈자 또는 소견 변경 시 정정 사유와 함께 v2, v3로 이력 관리",
+                "전자서명 연계: 최신 유효 버전에 대해서만 의사 전자서명 요청 발급 가능"
+              ]}
+              badge="버전 관리"
+            />
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)', marginTop: '2px' }}>
             기관 <strong>{tenantId}</strong> 에 등록된 의료영상 판독문 원본 및 정정 버전 내역
           </p>
         </div>

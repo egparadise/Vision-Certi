@@ -1,5 +1,7 @@
 package com.inviz.visioncerti.document;
 
+import com.inviz.visioncerti.admin.SettingKey;
+import com.inviz.visioncerti.admin.SystemSettings;
 import com.inviz.visioncerti.audit.AuditService;
 import com.inviz.visioncerti.common.ApiException;
 import com.inviz.visioncerti.common.Hashing;
@@ -59,6 +61,19 @@ public class DocumentService {
         this.audit = audit;
         this.clock = clock;
         this.maxBytes = maxBytes;
+    }
+
+    private volatile SystemSettings settings;
+
+    /** Administrator overrides ({@link SystemSettings}); absent in unit tests that construct the service directly. */
+    @Autowired(required = false)
+    public void useSettings(SystemSettings settings) {
+        this.settings = settings;
+    }
+
+    private long maxBytes() {
+        SystemSettings s = settings;
+        return s == null ? maxBytes : s.value(SettingKey.DOCUMENT_MAX_BYTES);
     }
 
     public Registration register(RequestActor actor, DocumentMetadata metadata, byte[] content) {
@@ -144,7 +159,7 @@ public class DocumentService {
             String externalDocumentId, String externalStudyId, String title, String signerId, String contentType,
             byte[] content, String amendmentReason) {
         validateMetadata(new DocumentMetadata(externalDocumentId, externalStudyId, title, signerId));
-        if (content == null || content.length == 0 || content.length > maxBytes) {
+        if (content == null || content.length == 0 || content.length > maxBytes()) {
             throw ApiException.unprocessable("VALIDATION_FAILED", "content is empty or too large");
         }
         if (!registeredSigners.isActiveSigner(tenantId, signerId)) {
@@ -230,9 +245,9 @@ public class DocumentService {
         if (content == null || content.length == 0) {
             throw ApiException.unprocessable("INVALID_PDF", "file is empty");
         }
-        if (content.length > maxBytes) {
+        if (content.length > maxBytes()) {
             throw new ApiException(HttpStatus.CONTENT_TOO_LARGE, "DOCUMENT_TOO_LARGE",
-                    "file exceeds " + maxBytes + " bytes");
+                    "file exceeds " + maxBytes() + " bytes");
         }
         if (content.length < PDF_MAGIC.length
                 || !Arrays.equals(Arrays.copyOf(content, PDF_MAGIC.length), PDF_MAGIC)) {

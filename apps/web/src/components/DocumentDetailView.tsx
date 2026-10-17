@@ -18,6 +18,7 @@ import { Document, DocumentVersion, SignRequest } from '../types/api';
 import { DocumentAmendModal } from './DocumentAmendModal';
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
+import { InfoPopover } from './InfoPopover';
 
 interface DocumentDetailViewProps {
   documentId: string;
@@ -464,10 +465,24 @@ export const DocumentDetailView: React.FC<DocumentDetailViewProps> = ({
       {/* Document Overview Header */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div className="card-header">
-          <span className="card-title">
-            <FileText size={20} style={{ color: 'var(--teal-700)' }} />
-            {document.title}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="card-title">
+              <FileText size={20} style={{ color: 'var(--teal-700)' }} />
+              {document.title}
+            </span>
+            <InfoPopover
+              title="판독 소견서 정보 및 라이프사이클"
+              buttonText="소견서 정보 안내"
+              description="PACS 의료영상에 배정된 판독 소견서의 버전, 지정 전문의, 검사 식별자 정보입니다."
+              bullets={[
+                "외부 문서 ID: 연계 의료기관 EMR 시스템의 원본 문서 번호",
+                "검사 번호 (Study ID): DICOM Study Instance UID 또는 접수 번호",
+                "판독 지정의: 해당 영상의 판독 및 서명을 위임받은 영상의학과 전문의",
+                "정정 관리: 수정 필요 시 '정정본 등록'을 통해 신규 버전으로 안전하게 생성"
+              ]}
+              badge="문서 무결성"
+            />
+          </div>
           <span className="badge badge-planned">
             최신: v{document.latestVersion.versionNumber}
           </span>
@@ -499,9 +514,22 @@ export const DocumentDetailView: React.FC<DocumentDetailViewProps> = ({
           {/* PDF Viewer Card */}
           <div className="card">
             <div className="card-header">
-              <span className="card-title">
-                판독문 PDF 미리보기 (브라우저 PDF 뷰어)
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="card-title">
+                  판독문 PDF 미리보기 (브라우저 PDF 뷰어)
+                </span>
+                <InfoPopover
+                  title="PDF 뷰어 및 무결성 확인 규약"
+                  buttonText="뷰어 규약"
+                  description="의료진이 원본 문서를 직접 열람하였음을 보증하기 위해 화면 내 뷰어 로드 및 명시적 확인 체크박스가 필수입니다."
+                  bullets={[
+                    "렌더링 검증: 브라우저 내장 PDF 엔진으로 원본 문서 렌더링",
+                    "해시 일치 확인: 수신된 문서 바이트의 SHA-256 해시가 서버 등록값과 일치해야 승인 활성화",
+                    "의사 본인 확인 체크: 하단의 확인 체크박스를 체크해야 최종 승인 버튼이 활성화됨"
+                  ]}
+                  badge="의료진 직접 확인"
+                />
+              </div>
               {selectedVersion && (
                 <span style={{ fontSize: '0.8rem', color: 'var(--navy-600)' }}>
                   열람 버전: <strong>v{selectedVersion.versionNumber}</strong> ({selectedVersion.sizeBytes} bytes)
@@ -604,10 +632,23 @@ export const DocumentDetailView: React.FC<DocumentDetailViewProps> = ({
           {/* Doctor Electronic Signature Approval Card */}
           <div className="card" style={{ border: '2px solid var(--teal-700)' }}>
             <div className="card-header" style={{ backgroundColor: 'var(--teal-50)' }}>
-              <span className="card-title" style={{ color: 'var(--teal-900)' }}>
-                <Key size={18} style={{ color: 'var(--teal-700)' }} />
-                의사 전자서명 승인
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="card-title" style={{ color: 'var(--teal-900)' }}>
+                  <Key size={18} style={{ color: 'var(--teal-700)' }} />
+                  의사 전자서명 승인
+                </span>
+                <InfoPopover
+                  title="전자서명 1회용 토큰 및 멱등성 보장 규약"
+                  buttonText="서명 규약"
+                  description="발급된 서명 요청(Sign Request)은 10분의 유효기간 동안만 유효하며 일회용 넌스(Nonce) 및 고유 멱등키가 유지됩니다."
+                  bullets={[
+                    "1회성 원칙: 승인 완료 시 서명 토큰은 즉시 소진되어 재사용 불가",
+                    "멱등성 보장: 네트워크 오류로 재시도하더라도 동일 서명키를 보존하여 중복 결제/서명 방지",
+                    "불일치 방지: 열람 중인 버전 해시와 요청 해시가 다를 경우 Fail-closed 차단"
+                  ]}
+                  badge="전자서명 보안"
+                />
+              </div>
               <span className="dev-mock-badge" style={{ backgroundColor: 'var(--teal-700)', color: 'white' }}>
                 DEV MOCK SIGN
               </span>

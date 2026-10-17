@@ -5,3 +5,5 @@ visioncerti:
     tenant-id: ${VISIONCERTI_PHYSICIAN_ACCOUNT_TENANT_ID:demo-hospital-a}
   dev:
     synthetic-identities-enabled: true
+  admin:
+    settings-tenant-ids: ${VISIONCERTI_ADMIN_SETTINGS_TENANT_IDS:demo-hospital-a}

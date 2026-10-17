@@ -6,6 +6,8 @@ export type CertificateFiles =
   | { kind: 'NPKI'; certificate: File; privateKey: File; chain?: File };
 
 const MAX_BUNDLE = 2 * 1024 * 1024;
+/** The private key opens only with the certificate's own password; any other password is reported this way. */
+export const PASSWORD_MISMATCH = '인증서 비밀번호가 일치하지 않습니다. 선택한 인증서의 비밀번호를 다시 입력해 주세요.';
 const MAX_CERTIFICATE = 128 * 1024;
 
 function binary(bytes: Uint8Array): string {
@@ -63,6 +65,9 @@ async function open(files: CertificateFiles, password: string): Promise<{ key: f
       return { key: keys[0], leaf: certificateDer(leaf), chain: certs.filter(cert => cert !== leaf).map(certificateDer) };
     } catch (error) {
       if (error instanceof Error && /정확히|지원되지|찾지 못했습니다/.test(error.message)) throw error;
+      if (error instanceof Error && /MAC could not be verified|Invalid password|decrypt/i.test(error.message)) {
+        throw new Error(PASSWORD_MISMATCH);
+      }
       throw new Error('PFX/P12를 열 수 없습니다. 파일 형식과 비밀번호를 확인해 주세요.');
     } finally { input.fill(0); }
   }
@@ -74,15 +79,22 @@ async function open(files: CertificateFiles, password: string): Promise<{ key: f
   ]);
   try {
     const encrypted = forge.asn1.fromDer(binary(encryptedKey));
-    const decrypted = forge.pki.decryptPrivateKeyInfo(encrypted, password);
-    if (!decrypted) throw new Error('인증서 비밀번호가 틀렸거나 지원하지 않는 암호화 형식입니다.');
-    const key = rsaKey(forge.pki.privateKeyFromAsn1(decrypted));
+    // A wrong password either fails the padding check or (rarely) decrypts to bytes that are not a private key.
+    let key: forge.pki.rsa.PrivateKey;
+    try {
+      const decrypted = forge.pki.decryptPrivateKeyInfo(encrypted, password);
+      if (!decrypted) throw new Error(PASSWORD_MISMATCH);
+      key = rsaKey(forge.pki.privateKeyFromAsn1(decrypted));
+    } catch (error) {
+      if (error instanceof Error && /지원되지/.test(error.message)) throw error;
+      throw new Error(PASSWORD_MISMATCH);
+    }
     const leaf = forge.pki.certificateFromAsn1(forge.asn1.fromDer(binary(certificate)));
     matchingCertificate(key, [leaf]);
     const chain = chainInput ? [chainInput] : [];
     return { key, leaf: certificate, chain };
   } catch (error) {
-    if (error instanceof Error && /비밀번호|지원되지|찾지 못했습니다/.test(error.message)) throw error;
+    if (error instanceof Error && (error.message === PASSWORD_MISMATCH || /지원되지|찾지 못했습니다/.test(error.message))) throw error;
     throw new Error('NPKI 인증서 또는 개인키를 열 수 없습니다. 파일과 비밀번호를 확인해 주세요.');
   } finally { encryptedKey.fill(0); }
 }

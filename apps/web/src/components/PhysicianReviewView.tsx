@@ -2,16 +2,18 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   ClipboardCheck,
   Clock,
-  CheckCircle,
+  CheckCircle2,
   RefreshCw,
   ExternalLink,
   ShieldX,
+  ListFilter,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SignRequest } from '../types/api';
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 import { EmptyState } from './EmptyState';
+import { InfoPopover } from './InfoPopover';
 
 export const PhysicianReviewView: React.FC = () => {
   const {
@@ -74,12 +76,26 @@ export const PhysicianReviewView: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
-            의사 판독 승인 대기 목록
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
+              의사 판독 승인 대기 목록
+            </h2>
+            <InfoPopover
+              title="의사 판독 승인 및 전자서명 규약"
+              buttonText="서명 규약 안내"
+              description="판독 전문의가 원격 의료영상의 판독 소견을 최종 검토하고 1회용 보안 토큰을 결속하여 전자서명을 체결하는 업무 포털입니다."
+              bullets={[
+                "원격 판독문 전문 검토: PDF 원본 또는 PACS 정형 리포트 전문 확인 필수",
+                "1회 승인 원칙: 건당 고유 Idempotency-Key로 중복 승인 방지",
+                "관리자 서명 제한: 의료법에 따라 관리자(ADMIN)는 서명 승인 권한이 엄격히 제한됨",
+                "서명 즉시 해시 체인 결속 및 병원 EMR/PACS 전송 큐 자동 인계"
+              ]}
+              badge="전문의 전용"
+            />
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)', marginTop: '2px' }}>
             접속자: <strong>{actorId}</strong> ({role === 'DOCTOR' ? '판독 전문의' : '원무 관리자'}) | 소속:{' '}
             <strong>{tenantId}</strong>
           </p>
@@ -100,21 +116,48 @@ export const PhysicianReviewView: React.FC = () => {
 
       {/* Role Notice */}
       {role === 'ADMIN' ? (
-        <div className="alert alert-warning" role="alert">
-          <ShieldX size={20} style={{ flexShrink: 0 }} />
-          <div>
-            <strong>관리자 권한 안내:</strong> 현재 관리자(ADMIN) 계정으로 접속 중입니다.
-            의료법 및 전자서명 보안 원칙에 따라 <u>관리자는 의사 전자서명 승인 버튼을 사용할 수 없습니다.</u>
-            (서명 승인 테스트는 상단 역할 선택기에서 <code>doctor-demo</code> 로 전환하십시오.)
+        <div className="alert alert-warning" role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <ShieldX size={20} style={{ flexShrink: 0, color: 'var(--amber-700)' }} />
+            <div>
+              <strong>관리자 권한 안내:</strong> 현재 관리자(ADMIN) 계정으로 접속 중입니다.
+              의료법 및 전자서명 보안 원칙에 따라 <u>관리자는 의사 전자서명 승인 버튼을 사용할 수 없습니다.</u>
+              (서명 승인 테스트는 상단 역할 선택기에서 <code>doctor-demo</code> 로 전환하십시오.)
+            </div>
           </div>
+          <InfoPopover
+            title="관리자 전자서명 제한 법적 근거"
+            buttonText="권한 규정"
+            description="의료법 제23조(전자의무기록) 및 전자서명법에 따라 의료영상 판독 전자서명은 면허를 보유한 의사 본인만 행사할 수 있습니다."
+            bullets={[
+              "원무 행정직/시스템 관리자는 대리 서명 불가",
+              "관리자 계정은 의사 계정 연동 및 등록 심사만 수행 가능",
+              "비인가 서명 시도시 시스템이 Fail-closed 원칙으로 원천 차단"
+            ]}
+            badge="의료법 규정"
+          />
         </div>
       ) : (
-        <div className="alert alert-info">
-          <ClipboardCheck size={20} style={{ flexShrink: 0 }} />
-          <div>
-            <strong>의사 전자서명 안내:</strong> 판독문을 열람하고 내용을 최종 확인한 후,
-            건별 1회 승인 버튼을 통해 모의 전자서명을 수행합니다.
+        <div className="alert alert-info" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <ClipboardCheck size={20} style={{ flexShrink: 0, color: 'var(--teal-700)' }} />
+            <div>
+              <strong>의사 전자서명 안내:</strong> 판독문을 열람하고 내용을 최종 확인한 후,
+              건별 1회 승인 버튼을 통해 모의 전자서명을 수행합니다.
+            </div>
           </div>
+          <InfoPopover
+            title="전문의 판독 서명 절차 안내"
+            buttonText="절차 안내"
+            description="판독문 승인 시 다음의 필수 무결성 절차가 순차적으로 진행됩니다."
+            bullets={[
+              "1. 판독문 PDF 또는 정형 보고서 원본 열람",
+              "2. 전문의 본인의 내용 확인 체크박스 동의",
+              "3. SHA-256 해시 검증 및 서명키 결속 완료",
+              "4. 병원 EMR/PACS 수신 큐 자동 전달"
+            ]}
+            badge="절차 가이드"
+          />
         </div>
       )}
 
@@ -137,7 +180,7 @@ export const PhysicianReviewView: React.FC = () => {
           onClick={() => setFilter('COMPLETED')}
           style={{ padding: '6px 14px', fontSize: '0.8rem' }}
         >
-          <CheckCircle size={14} />
+          <CheckCircle2 size={14} />
           서명 완료 ({requests.filter((r) => r.status === 'COMPLETED').length})
         </button>
         <button
@@ -146,6 +189,7 @@ export const PhysicianReviewView: React.FC = () => {
           onClick={() => setFilter('ALL')}
           style={{ padding: '6px 14px', fontSize: '0.8rem' }}
         >
+          <ListFilter size={14} />
           전체 보기 ({requests.length})
         </button>
       </div>

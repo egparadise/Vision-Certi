@@ -1,5 +1,6 @@
 package com.inviz.visioncerti.doctor;
 
+import com.inviz.visioncerti.admin.SystemSettings;
 import com.inviz.visioncerti.audit.AuditService;
 import com.inviz.visioncerti.common.ApiException;
 import com.inviz.visioncerti.common.Hashing;
@@ -162,7 +163,7 @@ public class DoctorService implements RegisteredSigners {
     private final DoctorCredentialProvider credentials;
     private final GoogleIdTokenVerifier google;
     private final Clock clock;
-    private final DoctorPolicy policy;
+    private final DoctorPolicy basePolicy;
     private final boolean devIdentityEnabled;
     private final boolean adminInvitationsEnabled;
     private final SecureRandom random = new SecureRandom();
@@ -214,10 +215,24 @@ public class DoctorService implements RegisteredSigners {
         this.credentials = credentials;
         this.google = google;
         this.clock = clock;
-        this.policy = policy;
+        this.basePolicy = policy;
         this.devIdentityEnabled = devIdentityEnabled;
         this.certificateRequired = certificateRequired;
         this.adminInvitationsEnabled = adminInvitationsEnabled;
+    }
+
+    private volatile SystemSettings settings;
+
+    /** Administrator overrides ({@link SystemSettings}); absent in unit tests that construct the service directly. */
+    @Autowired(required = false)
+    public void useSettings(SystemSettings settings) {
+        this.settings = settings;
+    }
+
+    /** The deployment policy with administrator overrides applied, read fresh for each decision. */
+    private DoctorPolicy policy() {
+        SystemSettings s = settings;
+        return s == null ? basePolicy : s.doctorPolicy(basePolicy);
     }
 
     static boolean certificateRequired(String activationPolicy, boolean devProfile) {
@@ -320,7 +335,7 @@ public class DoctorService implements RegisteredSigners {
             if (tx.findOne(DOCTORS, "email_key", Hashing.sha256Hex(email)).isPresent()) {
                 throw ApiException.conflict("GOOGLE_EMAIL_ALREADY_REGISTERED", "이미 다른 의사에게 등록된 Google 이메일입니다.");
             }
-            if (tx.countAll(DOCTORS) >= policy.maxDoctors()) {
+            if (tx.countAll(DOCTORS) >= policy().maxDoctors()) {
                 throw capacity();
             }
             Instant now = clock.instant();
@@ -442,14 +457,14 @@ public class DoctorService implements RegisteredSigners {
             Instant now = clock.instant();
             prune(tx, now);
             String sourceKey = sourceKey(source);
-            if (rateCount(tx, "failure", sourceKey, now) >= policy.sourceFailureHourlyLimit()) {
+            if (rateCount(tx, "failure", sourceKey, now) >= policy().sourceFailureHourlyLimit()) {
                 throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "INVITATION_ATTEMPTS_EXCEEDED",
                         "초대 코드 입력 실패가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
             }
             requireChallengeQuota(tx, sourceKey, now);
             Doctor doctor = doctorByInvitation(tx, invitationCode);
             boolean usable = doctor != null && invitationUsable(tx, doctor, now)
-                    && doctor.invitationChallenges < policy.maxChallengesPerInvitation();
+                    && doctor.invitationChallenges < policy().maxChallengesPerInvitation();
             if (!usable) {
                 rateEvent(tx, "failure", sourceKey, now);
                 throw ApiException.unprocessable("INVITATION_INVALID",
@@ -615,7 +630,7 @@ public class DoctorService implements RegisteredSigners {
         audit.record(doctor.tenantId, "anonymous", action, "DOCTOR", doctor.id.toString(),
                 AuditService.DENIED, Map.of("reason", reason, "failures", Integer.toString(doctor.invitationFailures)));
         ApiException result = null;
-        if (doctor.invitationFailures >= policy.maxIdentityFailuresPerInvitation()
+        if (doctor.invitationFailures >= policy().maxIdentityFailuresPerInvitation()
                 && doctor.invitationState == InvitationState.ISSUED) {
             doctor.invitationState = InvitationState.LOCKED;
             result = invitationLocked();
@@ -1027,7 +1042,7 @@ public class DoctorService implements RegisteredSigners {
             if (tx.find(DOCTORS, "tenant_id", tenantId).stream().anyMatch(d -> d.licenseNumber.equals(license))) {
                 throw ApiException.conflict("DOCTOR_LICENSE_ALREADY_REGISTERED", "이미 등록된 면허번호입니다. 계정 연결을 확인해 주세요.");
             }
-            if (tx.countAll(DOCTORS) >= policy.maxDoctors()) throw capacity();
+            if (tx.countAll(DOCTORS) >= policy().maxDoctors()) throw capacity();
             Doctor doctor = new Doctor(UUID.randomUUID(), tenantId, normalizedName, license, center, null,
                     null, null, clock.instant(), actorId);
             doctor.pacsAccountKey = accountKey;
@@ -1058,7 +1073,7 @@ public class DoctorService implements RegisteredSigners {
             tx.lock("doctor-license|" + tenant + "|" + license);
             if (tx.find(DOCTORS, "tenant_id", tenant).stream().anyMatch(d -> d.licenseNumber.equals(license)))
                 throw ApiException.conflict("DOCTOR_LICENSE_ALREADY_REGISTERED", "이미 등록된 면허번호입니다. 기존 계정을 확인해 주세요.");
-            if (tx.countAll(DOCTORS) >= policy.maxDoctors()) throw capacity();
+            if (tx.countAll(DOCTORS) >= policy().maxDoctors()) throw capacity();
             Doctor d = new Doctor(UUID.randomUUID(), tenant, name, license, center, null, null, null,
                     clock.instant(), "SELF_REGISTRATION");
             d.selfRegisteredAccount = true;
@@ -1075,14 +1090,14 @@ public class DoctorService implements RegisteredSigners {
             Instant now = clock.instant();
             prune(tx, now);
             String sourceKey = sourceKey(source);
-            if (rateCount(tx, "failure", sourceKey, now) >= policy.sourceFailureHourlyLimit()) {
+            if (rateCount(tx, "failure", sourceKey, now) >= policy().sourceFailureHourlyLimit()) {
                 throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "INVITATION_ATTEMPTS_EXCEEDED",
                         "초대 코드 입력 실패가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
             }
             requireChallengeQuota(tx, sourceKey, now);
             Doctor doctor = doctorByInvitation(tx, invitationCode);
             boolean usable = doctor != null && invitationUsableForCertificate(tx, doctor, now)
-                    && doctor.invitationChallenges < policy.maxChallengesPerInvitation();
+                    && doctor.invitationChallenges < policy().maxChallengesPerInvitation();
             if (!usable) {
                 rateEvent(tx, "failure", sourceKey, now);
                 throw invitationInvalid();
@@ -1242,7 +1257,7 @@ public class DoctorService implements RegisteredSigners {
         }
         String normalized = raw.toString();
         doctor.invitationHash = Hashing.sha256Hex(normalized);
-        doctor.invitationExpiresAt = now.plus(policy.invitationTtl());
+        doctor.invitationExpiresAt = now.plus(policy().invitationTtl());
         doctor.invitationState = InvitationState.ISSUED;
         doctor.invitationFailures = 0;
         doctor.invitationChallenges = 0;
@@ -1273,9 +1288,9 @@ public class DoctorService implements RegisteredSigners {
         byte[] nonceBytes = new byte[32];
         random.nextBytes(nonceBytes);
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(nonceBytes);
-        Instant expiresAt = now.plus(policy.challengeTtl());
+        Instant expiresAt = now.plus(policy().challengeTtl());
         Challenge challenge = new Challenge(UUID.randomUUID(), purpose, nonce, doctorId, invitationHash, expiresAt,
-                false, expiresAt.plus(policy.challengeTtl()));
+                false, expiresAt.plus(policy().challengeTtl()));
         tx.insert(CHALLENGES, challenge);
         rateEvent(tx, "challenge", sourceKey, now);
         return new ChallengeResponse(challenge.id().toString(), nonce, challenge.expiresAt(), purpose.name());
@@ -1287,14 +1302,14 @@ public class DoctorService implements RegisteredSigners {
         byte[] tokenBytes = new byte[32];
         random.nextBytes(tokenBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
-        Instant expiresAt = now.plus(policy.sessionTtl());
+        Instant expiresAt = now.plus(policy().sessionTtl());
         tx.insert(SESSIONS, new Session(UUID.randomUUID(), Hashing.sha256Hex(token), doctor.id, doctor.tenantId,
                 identityMode, expiresAt, certificateFingerprint, now));
         return new SessionResponse(token, expiresAt, identityMode, toResponse(doctor));
     }
 
     private void requireChallengeQuota(Tx tx, String sourceKey, Instant now) {
-        if (rateCount(tx, "challenge", sourceKey, now) >= policy.sourceChallengeHourlyLimit()) {
+        if (rateCount(tx, "challenge", sourceKey, now) >= policy().sourceChallengeHourlyLimit()) {
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "CHALLENGE_RATE_LIMITED",
                     "인증 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
         }
@@ -1302,7 +1317,7 @@ public class DoctorService implements RegisteredSigners {
 
     /** Bounds live challenges + sessions (storage abuse guard shared by all instances). */
     private void requireCapacity(Tx tx, Instant now) {
-        if (tx.countLive(CHALLENGES, now) + tx.countLive(SESSIONS, now) >= policy.maxTrackedEntries()) {
+        if (tx.countLive(CHALLENGES, now) + tx.countLive(SESSIONS, now) >= policy().maxTrackedEntries()) {
             throw capacity();
         }
     }

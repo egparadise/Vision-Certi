@@ -19,6 +19,7 @@ import { CertificateLoginView } from './components/CertificateLoginView';
 import { PersonalCertificateRegistration } from './components/PersonalCertificateRegistration';
 import { PacsCertificateEnrollment } from './components/PacsCertificateEnrollment';
 import { PacsCertificateLogin } from './components/PacsCertificateLogin';
+import { AdminConsole, adminSectionFromHash } from './components/admin/AdminConsole';
 
 export const AppContent: React.FC = () => {
   const { activeTab, tenantId, actorId, isMockMode, runtimeCapabilities } = useApp();
@@ -75,6 +76,23 @@ export const AppContent: React.FC = () => {
   );
 };
 
+/** Admin mode (관리자 모드): same production gate as the main console; the console itself requires role ADMIN. */
+const AdminRoute: React.FC<{ section: ReturnType<typeof adminSectionFromHash> }> = ({ section }) => {
+  const { isMockMode, runtimeCapabilities } = useApp();
+  if (!isDemoEnabled() && (!runtimeCapabilities || isMockMode)) {
+    return <ProductionDisabledScreen />;
+  }
+  return (
+    <div className="app-container">
+      <Header />
+      <Navigation />
+      <main className="main-content" id="main-content">
+        <AdminConsole section={section} />
+      </main>
+    </div>
+  );
+};
+
 export const App: React.FC = () => {
   const [hash, setHash] = React.useState(window.location.hash);
   const { runtimeCapabilities } = useApp();
@@ -109,6 +127,10 @@ export const App: React.FC = () => {
   if (hash.startsWith('#/signup')) {
     const allowSignup = isDemoEnabled() || Boolean(runtimeCapabilities?.personalSignup?.available);
     return allowSignup ? <RegistrationView /> : <ProductionDisabledScreen />;
+  }
+
+  if (hash === '#/admin' || hash.startsWith('#/admin/')) {
+    return <AdminRoute section={adminSectionFromHash(hash)} />;
   }
 
   if (hash.startsWith('#/doctors')) {

@@ -136,6 +136,7 @@ public final class PostgresTestDatabase {
         Path file = Path.of("..", "..", "database", "migrations", "V005__production_runtime.sql");
         return Files.readString(file, StandardCharsets.UTF_8) + "\n"
                 + Files.readString(file.resolveSibling("V006__pacs_self_enrollment.sql"), StandardCharsets.UTF_8) + "\n"
-                + Files.readString(file.resolveSibling("V007__physician_accounts.sql"), StandardCharsets.UTF_8);
+                + Files.readString(file.resolveSibling("V007__physician_accounts.sql"), StandardCharsets.UTF_8) + "\n"
+                + Files.readString(file.resolveSibling("V008__admin_system_settings.sql"), StandardCharsets.UTF_8);
     }
 }

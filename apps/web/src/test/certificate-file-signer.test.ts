@@ -1,7 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 import { generateKeyPairSync, createVerify, webcrypto } from 'node:crypto';
 import forge from 'korea-forge';
-import { signWithCertificateFiles } from '../services/certificateFileSigner';
+import { PASSWORD_MISMATCH, signWithCertificateFiles } from '../services/certificateFileSigner';
 
 function file(name: string, bytes: Uint8Array): File {
   const result = new File([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], name);
@@ -48,7 +48,7 @@ describe('doctor PC certificate file signing', () => {
     expect(proof.signatureAlgorithm).toBe('SHA256withRSA');
     check(proof.signatureBase64);
     await expect(signWithCertificateFiles({ kind: 'PFX', bundle: file('doctor.p12', pfx) }, 'wrong-password',
-      Buffer.from(payload).toString('base64'))).rejects.toThrow();
+      Buffer.from(payload).toString('base64'))).rejects.toThrow(PASSWORD_MISMATCH);
   });
 
   it('opens an encrypted PKCS#8 NPKI key and rejects a mismatched certificate', async () => {
@@ -59,6 +59,10 @@ describe('doctor PC certificate file signing', () => {
     const files = { kind: 'NPKI' as const, certificate: file('signCert.der', certDer), privateKey: file('signPri.key', encrypted) };
     const proof = await signWithCertificateFiles(files, password, Buffer.from(payload).toString('base64'));
     check(proof.signatureBase64);
+    for (const wrong of ['wrong-password', password.toUpperCase(), password + ' ']) {
+      await expect(signWithCertificateFiles(files, wrong, Buffer.from(payload).toString('base64')))
+        .rejects.toThrow(PASSWORD_MISMATCH);
+    }
     await expect(signWithCertificateFiles({ ...files, certificate: file('signCert.der', new Uint8Array([1, 2, 3])) },
       password, Buffer.from(payload).toString('base64'))).rejects.toThrow();
   });
@@ -97,5 +101,8 @@ describe('doctor PC certificate file signing', () => {
     const proof = await signWithCertificateFiles({ kind: 'NPKI', certificate: file('signCert.der', certDer),
       privateKey: file('signPri.key', encrypted) }, password, Buffer.from(payload).toString('base64'));
     check(proof.signatureBase64);
+    await expect(signWithCertificateFiles({ kind: 'NPKI', certificate: file('signCert.der', certDer),
+      privateKey: file('signPri.key', encrypted) }, 'not-the-password', Buffer.from(payload).toString('base64')))
+      .rejects.toThrow(PASSWORD_MISMATCH);
   });
 });

@@ -104,6 +104,9 @@ function matchedCertificate(key, cert) {
   if (!('n' in cert.publicKey) || cert.publicKey.n.compareTo(key.n) !== 0 ||
     cert.publicKey.e.compareTo(key.e) !== 0) throw new Error('인증서와 개인키가 일치하지 않습니다.');
 }
+/** The private key opens only with the certificate's own password; any other password is reported this way. */
+const PASSWORD_MISMATCH = '인증서 비밀번호가 일치하지 않습니다. 선택한 인증서의 비밀번호를 다시 입력해 주세요.';
+
 async function openCertificate(location, password) {
   if (location.kind === 'NPKI') {
     const [certificateDer, encryptedKey] = await Promise.all([
@@ -111,9 +114,16 @@ async function openCertificate(location, password) {
     ]);
     try {
       const encrypted = forge.asn1.fromDer(binary(encryptedKey));
-      const decrypted = forge.pki.decryptPrivateKeyInfo(encrypted, password);
-      if (!decrypted) throw new Error('인증서 암호가 틀렸거나 지원하지 않는 형식입니다.');
-      const key = rsaKey(forge.pki.privateKeyFromAsn1(decrypted));
+      // A wrong password either fails the padding check or (rarely) decrypts to bytes that are not a private key.
+      let key;
+      try {
+        const decrypted = forge.pki.decryptPrivateKeyInfo(encrypted, password);
+        if (!decrypted) throw new Error(PASSWORD_MISMATCH);
+        key = rsaKey(forge.pki.privateKeyFromAsn1(decrypted));
+      } catch (error) {
+        if (error instanceof Error && error.message !== PASSWORD_MISMATCH && /RSA|지원/.test(error.message)) throw error;
+        throw new Error(PASSWORD_MISMATCH);
+      }
       const cert = parseCertificate(certificateDer);
       matchedCertificate(key, cert);
       const chain = location.chainPath ? [await boundedRead(location.chainPath, MAX_CERT_BYTES)] : [];
@@ -122,7 +132,15 @@ async function openCertificate(location, password) {
   }
   const input = await boundedRead(location.bundlePath, MAX_KEY_BYTES);
   try {
-    const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(binary(input)), true, password);
+    let p12;
+    try {
+      p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(binary(input)), true, password);
+    } catch (error) {
+      if (error instanceof Error && /MAC could not be verified|Invalid password|decrypt/i.test(error.message)) {
+        throw new Error(PASSWORD_MISMATCH);
+      }
+      throw new Error('PFX/P12 인증서 파일을 열 수 없습니다.');
+    }
     const bags = p12.safeContents.flatMap(item => item.safeBags);
     const keys = bags.filter(item => item.key).map(item => rsaKey(item.key));
     if (keys.length !== 1) throw new Error('PFX/P12에 서명용 개인키가 정확히 하나 있어야 합니다.');

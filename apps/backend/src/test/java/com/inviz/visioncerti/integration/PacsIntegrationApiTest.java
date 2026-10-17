@@ -354,7 +354,10 @@ class PacsIntegrationApiTest {
                 .andExpect(jsonPath("$.activeSigner").value(true))
                 // The admin-registered license, for PACS to cross-check its local account (never an authenticator).
                 .andExpect(jsonPath("$.doctorLicenseNumber").value(org.hamcrest.Matchers.matchesPattern("[0-9]{1,20}")))
-                .andExpect(jsonPath("$.handoffCode").doesNotExist());
+                // PC certificate login proved the password-protected private key with a verified signature.
+                .andExpect(jsonPath("$.certificatePasswordVerified").value(true))
+                .andExpect(jsonPath("$.handoffCode").doesNotExist())
+                .andExpect(jsonPath("$.password").doesNotExist());
         // Single use.
         servicePost(redeem, "{\"handoffCode\":\"" + code + "\"}")
                 .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("HANDOFF_INVALID"));

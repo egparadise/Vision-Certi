@@ -14,6 +14,7 @@ import { createMockVerification } from '../mock/mockData';
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 import { EmptyState } from './EmptyState';
+import { InfoPopover } from './InfoPopover';
 
 export const SignatureVerificationView: React.FC = () => {
   const { tenantId, client, isMockMode, mockStore } = useApp();
@@ -102,12 +103,26 @@ export const SignatureVerificationView: React.FC = () => {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
-            서명 내역 및 유효성 검증 포털
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
+              서명 내역 및 유효성 검증 포털
+            </h2>
+            <InfoPopover
+              title="전자서명 유효성 검증 체계 (RFC 3161 / PKI)"
+              buttonText="검증 원칙 안내"
+              description="판독문 전자서명의 3대 무결성(작성자 신원, 문서 변경 여부, 시점확인)을 독립적으로 검증하는 포털입니다."
+              bullets={[
+                "원본 무결성: 원본 PDF 바이트의 SHA-256 해시와 서명에 결속된 해시의 일치 여부",
+                "전자서명 유효성: 의사 개인키로 생성된 암호 서명의 공개키 수학적 검증",
+                "시점확인 (TSA): RFC 3161 공인 시점확인 토큰의 위변조 검증",
+                "임시 모의 환경: 개발 슬라이스에서는 INDETERMINATE로 판정됨"
+              ]}
+              badge="3대 무결성 검증"
+            />
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)', marginTop: '2px' }}>
             생성된 판독문 전자서명 원본 및 RFC 3161 시점확인·인증체인·원본 무결성 검증
           </p>
         </div>
@@ -127,12 +142,14 @@ export const SignatureVerificationView: React.FC = () => {
       <ErrorBanner error={verifyError as Error} />
 
       {/* Verification Notice */}
-      <div className="alert alert-warning">
-        <AlertTriangle size={20} style={{ flexShrink: 0 }} />
-        <div>
-          <strong>개발 슬라이스 검증 안내:</strong> 현재 모의 서명 슬라이스에서 전체 상태는 결코 <code>VALID</code>가
-          될 수 없습니다 (정상 시 <code>INDETERMINATE</code> 판정). 원본 무결성 해시가 일치하더라도 실제 인증체인과
-          TSA 시점확인은 구현되지 않았습니다. 임상 사용이나 법적 적합성은 검증하지 않습니다.
+      <div className="alert alert-warning" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <AlertTriangle size={20} style={{ flexShrink: 0, color: 'var(--amber-700)' }} />
+          <div>
+            <strong>개발 슬라이스 검증 안내:</strong> 현재 모의 서명 슬라이스에서 전체 상태는 결코 <code>VALID</code>가
+            될 수 없습니다 (정상 시 <code>INDETERMINATE</code> 판정). 원본 무결성 해시가 일치하더라도 실제 인증체인과
+            TSA 시점확인은 구현되지 않았습니다. 임상 사용이나 법적 적합성은 검증하지 않습니다.
+          </div>
         </div>
       </div>
 

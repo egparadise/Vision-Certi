@@ -7,6 +7,7 @@ import {
   Send,
   History,
   Award,
+  Settings,
 } from 'lucide-react';
 import { NavTab, useApp } from '../context/AppContext';
 
@@ -19,6 +20,7 @@ interface TabItem {
 
 export const Navigation: React.FC = () => {
   const { activeTab, setActiveTab, role } = useApp();
+  const isAdminRoute = typeof window !== 'undefined' && window.location.hash.startsWith('#/admin');
 
   const tabs: TabItem[] = [
     {
@@ -64,7 +66,7 @@ export const Navigation: React.FC = () => {
     <nav className="nav-bar" aria-label="메인 네비게이션">
       <div className="nav-inner">
         {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
+          const isActive = !isAdminRoute && activeTab === tab.id;
           return (
             <button
               key={tab.id}
@@ -106,6 +108,20 @@ export const Navigation: React.FC = () => {
             </button>
           );
         })}
+        {role === 'ADMIN' && (
+          <button
+            type="button"
+            className={`nav-tab ${isAdminRoute ? 'active' : ''}`}
+            onClick={() => {
+              window.location.hash = '#/admin';
+            }}
+            aria-current={isAdminRoute ? 'page' : undefined}
+            data-testid="nav-admin-mode"
+          >
+            <Settings size={16} />
+            <span>관리자 모드</span>
+          </button>
+        )}
       </div>
     </nav>
   );

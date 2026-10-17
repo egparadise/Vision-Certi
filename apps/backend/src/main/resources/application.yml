@@ -39,6 +39,10 @@ visioncerti:
       audience: ${VISIONCERTI_STAFF_OIDC_AUDIENCE:}
       jwks-uri: ${VISIONCERTI_STAFF_OIDC_JWKS_URI:}
       client-id: ${VISIONCERTI_STAFF_OIDC_CLIENT_ID:}
+  # Tenants whose administrators may change the system-wide operational policies in admin mode (comma-separated).
+  # Empty = every administrator sees the policies read-only.
+  admin:
+    settings-tenant-ids: ${VISIONCERTI_ADMIN_SETTINGS_TENANT_IDS:}
   documents:
     max-bytes: 20971520
   sign-requests:

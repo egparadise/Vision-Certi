@@ -1,5 +1,7 @@
 package com.inviz.visioncerti.signing;
 
+import com.inviz.visioncerti.admin.SettingKey;
+import com.inviz.visioncerti.admin.SystemSettings;
 import com.inviz.visioncerti.audit.AuditEvent;
 import com.inviz.visioncerti.audit.AuditService;
 import com.inviz.visioncerti.common.ApiException;
@@ -90,6 +92,19 @@ public class SignRequestService {
         this.requestTtl = requestTtl;
     }
 
+    private volatile SystemSettings settings;
+
+    /** Administrator overrides ({@link SystemSettings}); absent in unit tests that construct the service directly. */
+    @Autowired(required = false)
+    public void useSettings(SystemSettings settings) {
+        this.settings = settings;
+    }
+
+    private Duration requestTtl() {
+        SystemSettings s = settings;
+        return s == null ? requestTtl : s.duration(SettingKey.SIGN_REQUEST_TTL);
+    }
+
     public SignRequestResponse create(RequestActor actor, CreateSignRequest body) {
         return store.tx(tx -> {
             if (body.documentVersionId() != null && body.signerId() != null) {
@@ -126,7 +141,7 @@ public class SignRequestService {
         }
         Instant now = clock.instant();
         SignRequest request = new SignRequest(UUID.randomUUID(), actor.tenantId(), document.id(), version.id(),
-                version.sha256(), body.signerId(), newNonce(), now, actor.actorId(), now.plus(requestTtl),
+                version.sha256(), body.signerId(), newNonce(), now, actor.actorId(), now.plus(requestTtl()),
                 registeredDoctor);
         repository.insertRequest(request);
         audit.record(actor.tenantId(), actor.actorId(), "SIGN_REQUEST_CREATED", "SIGN_REQUEST",
@@ -443,7 +458,7 @@ public class SignRequestService {
         }
         Instant now = clock.instant();
         SignRequest request = new SignRequest(UUID.randomUUID(), tenantId, document.id(), version.id(),
-                version.sha256(), signerId, newNonce(), now, actorId, now.plus(requestTtl), true);
+                version.sha256(), signerId, newNonce(), now, actorId, now.plus(requestTtl()), true);
         repository.insertRequest(request);
         audit.record(tenantId, actorId, "SIGN_REQUEST_CREATED", "SIGN_REQUEST", request.id().toString(),
                 AuditService.SUCCESS, Map.of(

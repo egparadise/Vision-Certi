@@ -47,6 +47,9 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   const selected = entries.find(entry => entry.id === selectedId);
   const selectedExpired = Boolean(selected?.expiresAt && selected.expiresAt.getTime() <= now);
   const manualComplete = kind === 'PFX' ? Boolean(bundle) : Boolean(certificate && privateKey);
+  /** The password belongs to one certificate: it can be typed only after a usable certificate is chosen. */
+  const certificateChosen = selected ? !selectedExpired : manualMode && manualComplete;
+  const chosenKey = selected ? selected.id : manualMode && manualComplete ? `manual:${kind}:${bundle?.name ?? ''}:${certificate?.name ?? ''}:${privateKey?.name ?? ''}` : '';
   const expires = Date.parse(challenge?.expiresAt ?? expiresAt ?? '');
   const expired = !Number.isFinite(expires) || now >= expires;
 
@@ -77,6 +80,8 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   }
 
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  // A password typed for one certificate is never reused for another.
+  useEffect(() => { setPassword(''); virtualCaret.current = null; if (!chosenKey) setKeyboardOpen(false); }, [chosenKey]);
   useEffect(() => {
     let cancelled = false;
     const generation = ++scanGeneration.current;
@@ -172,6 +177,7 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     if (busy || signing || expired) return;
     try {
       if (selectedExpired) throw new Error('선택한 인증서가 만료되었습니다. 다른 인증서를 선택해 주세요.');
+      if (!certificateChosen) throw new Error('먼저 인증서를 선택해 주세요.');
       setSigning(true);
       const toSign = challenge?.signedPayloadBase64 ?? payloadBase64;
       if (!toSign) throw new Error('서명할 인증 요청이 없습니다. 다시 시도해 주세요.');
@@ -266,15 +272,16 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
           </>}
         </details>
         <label className="cert-password-label">현재 인증서 암호를 입력해 주세요.<span className="cert-password-input"><input ref={passwordInput} type="password" aria-label="인증서 비밀번호" autoComplete="off" value={password}
-          onChange={event => { virtualCaret.current = null; setPassword(event.target.value); }} placeholder="인증서 비밀번호" required />
-          <button type="button" className="cert-keyboard-toggle" aria-label={keyboardOpen ? '가상키보드 닫기' : '가상키보드 열기'}
+          onChange={event => { virtualCaret.current = null; setPassword(event.target.value); }}
+          placeholder={certificateChosen ? '인증서 비밀번호' : '먼저 위에서 인증서를 선택해 주세요'} disabled={!certificateChosen} required />
+          <button type="button" className="cert-keyboard-toggle" disabled={!certificateChosen} aria-label={keyboardOpen ? '가상키보드 닫기' : '가상키보드 열기'}
             aria-expanded={keyboardOpen} aria-controls="cert-virtual-keyboard" onClick={() => setKeyboardOpen(!keyboardOpen)}>
             <Keyboard aria-hidden="true" size={21} />
           </button></span></label>
-        {keyboardOpen && <CertificateVirtualKeyboard onInsert={insertPassword} onBackspace={deletePasswordCharacter}
+        {keyboardOpen && certificateChosen && <CertificateVirtualKeyboard onInsert={insertPassword} onBackspace={deletePasswordCharacter}
           onClose={() => setKeyboardOpen(false)} />}
         <div className="cert-dialog-buttons">
-          <button className="enroll-primary" disabled={!password || selectedExpired || (!selected && !(manualMode && manualComplete)) || signing}>
+          <button className="enroll-primary" disabled={!password || !certificateChosen || signing}>
             {signing ? '인증서 확인 중…' : actionLabel ?? '확인'}
           </button>
           <button type="button" className="cert-dialog-cancel" onClick={cancel}>취소</button>

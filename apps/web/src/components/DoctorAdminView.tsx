@@ -27,6 +27,7 @@ import {
 } from '../types/api';
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
+import { InfoPopover } from './InfoPopover';
 
 // Administrator invitation issuance is temporarily disabled; review and suspension remain available.
 const adminInvitationsEnabled = false;
@@ -895,10 +896,21 @@ export const DoctorAdminView: React.FC = () => {
 
       {/* Doctor List Section */}
       <div className="card">
-        <div className="card-header">
-          <span className="card-title">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Users size={18} />
             등록 의사 목록 (Doctor Directory)
+            <InfoPopover
+              title="의사 계정 및 인증서 관리 규정"
+              badge="관리자 심사 안내"
+              description="판독의사의 본인 확인 서류 및 공동인증서 지문을 대조 심사하고 서명 권한 상태를 관리합니다."
+              bulletPoints={[
+                '후보 검토 대기(PENDING): 의사가 제출한 인증서 지문과 면허 정보를 대조 심사합니다.',
+                '서명 활성(ACTIVE): 관리자 심사 승인 및 의사 3대 동의가 완료되어 원격 판독 서명이 가능합니다.',
+                '이용 정지(SUSPENDED): 자격 정지 또는 보안 이슈 발생 시 즉시 서명 권한을 일시 중단합니다.',
+                '권한 파기(REVOKED): 퇴사 또는 면허 취소 시 영구 폐기하며 복구가 불가합니다.',
+              ]}
+            />
           </span>
           <span className="badge badge-planned">
             기관: {tenantId}

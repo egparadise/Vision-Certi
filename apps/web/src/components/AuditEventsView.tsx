@@ -5,6 +5,7 @@ import { AuditEvent } from '../types/api';
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 import { EmptyState } from './EmptyState';
+import { InfoPopover } from './InfoPopover';
 import { CertificateLoginHistory } from './CertificateLoginHistory';
 
 export const AuditEventsView: React.FC = () => {
@@ -48,12 +49,25 @@ export const AuditEventsView: React.FC = () => {
   return (
     <div>
       {role === 'ADMIN' && !isMockMode && <CertificateLoginHistory />}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
-            감사 이벤트 추적 (Audit Trail)
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
+              감사 이벤트 추적 (Audit Trail)
+            </h2>
+            <InfoPopover
+              title="감사 체인 보안 원칙 및 불변성 규약"
+              buttonText="감사 원칙 안내"
+              description="모든 판독문 등록, 의사 전자서명 승인, 거절 등 전 행위 로그가 이전 블록의 SHA-256 해시와 순차적으로 결속되어 기록됩니다."
+              bullets={[
+                "불변 해시 체인: 중간 로그 위조, 변조 또는 삭제 시 해시 불일치로 즉시 탐지",
+                "개인정보보호: 일회용 Nonce 및 환자 민감정보는 감사 트레일에 일절 미기록",
+                "추적성 보장: 고유 Correlation-Id를 통해 분산 시스템 간 원인 추적 가능"
+              ]}
+              badge="위변조 방지"
+            />
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)', marginTop: '2px' }}>
             위변조 방지 SHA-256 해시 체인으로 기록된 기관 <strong>{tenantId}</strong> 의 전 행위 감사 로그
           </p>
         </div>
@@ -71,11 +85,13 @@ export const AuditEventsView: React.FC = () => {
 
       <ErrorBanner error={error as Error} onRetry={loadAuditEvents} />
 
-      <div className="alert alert-info">
-        <ShieldCheck size={20} style={{ flexShrink: 0 }} />
-        <div>
-          <strong>감사 체인 보안 원칙:</strong> 모든 승인·거절·문서 등록은 이전 블록의 SHA-256 해시와 순차 결속되어
-          중간 로그 삭제나 순서 변경이 즉시 탐지됩니다. (개인정보보호 원칙에 따라 Nonce 및 민감 환자정보는 로그에 일절 기록되지 않습니다.)
+      <div className="alert alert-info" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <ShieldCheck size={20} style={{ flexShrink: 0, color: 'var(--teal-700)' }} />
+          <div>
+            <strong>감사 체인 보안 원칙:</strong> 모든 승인·거절·문서 등록은 이전 블록의 SHA-256 해시와 순차 결속되어
+            중간 로그 삭제나 순서 변경이 즉시 탐지됩니다. (개인정보보호 원칙에 따라 Nonce 및 민감 환자정보는 로그에 일절 기록되지 않습니다.)
+          </div>
         </div>
       </div>
 

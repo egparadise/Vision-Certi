@@ -1,9 +1,10 @@
 import React from 'react';
-import { ShieldAlert, Building2, UserCircle, Database, Server } from 'lucide-react';
+import { ShieldAlert, Building2, UserCircle, Database, Server, LogIn, UserPlus, KeyRound, UserCheck, Users, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DevActorId, DevTenantId } from '../types/api';
 import { isDemoEnabled } from '../utils/env';
 import { discoverOidc } from '../services/oidcDiscovery';
+import { InfoPopover } from './InfoPopover';
 
 function generateRandomString(length: number): string {
   const array = new Uint8Array(length);
@@ -253,7 +254,20 @@ export const Header: React.FC = () => {
           <div className="logo-section">
             <span className="logo-badge">Vision-Certi</span>
             <div>
-              <h1 className="logo-title">원격판독 전자서명 플랫폼</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h1 className="logo-title">원격판독 전자서명 플랫폼</h1>
+                <InfoPopover
+                  title="Vision-Certi 원격판독 전자서명 플랫폼"
+                  buttonText="플랫폼 안내"
+                  description="의료법 및 전자서명법을 준수하는 의료영상(DICOM/PACS) 판독문 전자서명, 위변조 방지 SHA-256 감사 체인 및 OpenBao 기반 키 관리 시스템입니다."
+                  bullets={[
+                    "의사 신원 확인과 판독문 서명키의 엄격한 분리 (이원화 아키텍처)",
+                    "개인키/비밀번호 서버 미전송 원칙 준수 (클라이언트 사이드 검증)",
+                    "불변 해시 체인 기반 실시간 전 행위 감사 로그 추적"
+                  ]}
+                  badge="의료영상 보안"
+                />
+              </div>
               <div className="logo-subtitle">
                 의료영상 판독문 전자서명 및 감사 검증 콘솔 (v0.1.0-dev)
               </div>
@@ -261,11 +275,26 @@ export const Header: React.FC = () => {
           </div>
 
           <div className="header-controls">
-            <a href="#/login" className="btn btn-outline" style={{ color: '#7dd3fc', whiteSpace: 'nowrap' }}>개인 인증 로그인</a>
-            <a href="#/signup" className="btn btn-outline" style={{ color: '#5eead4', whiteSpace: 'nowrap' }}>개인·의료인 가입</a>
-            <a href="#/certificates/enroll" className="btn btn-outline" style={{ color: '#34d399', whiteSpace: 'nowrap' }} data-testid="nav-certificate-enroll-btn">공동/금융/모바일 인증</a>
-            <a href="#/activate" className="btn btn-outline" style={{ color: '#38bdf8', whiteSpace: 'nowrap' }} data-testid="nav-activate-btn">의사 계정 활성화</a>
-            <a href="#/doctors" className="btn btn-outline" style={{ color: '#f59e0b', whiteSpace: 'nowrap' }} data-testid="nav-doctors-btn">의사 관리 (Admin)</a>
+            <a href="#/login" className="header-pill-link" style={{ color: '#7dd3fc' }}>
+              <LogIn size={13} />
+              <span>개인 인증 로그인</span>
+            </a>
+            <a href="#/signup" className="header-pill-link" style={{ color: '#5eead4' }}>
+              <UserPlus size={13} />
+              <span>개인·의료인 가입</span>
+            </a>
+            <a href="#/certificates/enroll" className="header-pill-link" style={{ color: '#34d399' }} data-testid="nav-certificate-enroll-btn">
+              <KeyRound size={13} />
+              <span>공동/금융/모바일 인증</span>
+            </a>
+            <a href="#/activate" className="header-pill-link" style={{ color: '#38bdf8' }} data-testid="nav-activate-btn">
+              <UserCheck size={13} />
+              <span>의사 계정 활성화</span>
+            </a>
+            <a href="#/doctors" className="header-pill-link" style={{ color: '#f59e0b' }} data-testid="nav-doctors-btn">
+              <Users size={13} />
+              <span>의사 관리 (Admin)</span>
+            </a>
 
             {/* Staff OIDC Login Trigger / Status */}
             {staffProfile ? (
@@ -277,16 +306,16 @@ export const Header: React.FC = () => {
                   type="button"
                   data-testid="staff-logout-btn"
                   onClick={handleStaffLogout}
+                  className="btn btn-secondary"
                   style={{
-                    padding: '2px 6px',
+                    padding: '2px 8px',
                     fontSize: '0.7rem',
-                    background: '#334155',
-                    border: '1px solid #475569',
-                    color: '#e2e8f0',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
                   }}
                 >
+                  <LogOut size={12} />
                   로그아웃
                 </button>
               </div>
@@ -295,18 +324,16 @@ export const Header: React.FC = () => {
                 type="button"
                 data-testid="staff-oidc-login-btn"
                 onClick={() => setShowStaffModal(true)}
+                className="header-pill-link"
                 style={{
-                  padding: '4px 8px',
-                  fontSize: '0.75rem',
                   background: 'transparent',
-                  border: '1px solid #38bdf8',
+                  borderColor: '#0284c7',
                   color: '#38bdf8',
-                  borderRadius: '4px',
                   cursor: 'pointer',
-                  whiteSpace: 'nowrap',
                 }}
               >
-                Staff OIDC 로그인
+                <LogIn size={13} />
+                <span>Staff OIDC 로그인</span>
               </button>
             )}
             {/* Dev-only Institution, Actor, and Mode Switchers (Hidden in production without demo flag) */}

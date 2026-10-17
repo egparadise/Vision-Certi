@@ -37,6 +37,15 @@ import {
   RuntimeCapabilities,
   StaffMeResponse,
 } from '../types/api';
+import type {
+  CreateStaffPrincipalRequest,
+  ResetSystemSettingRequest,
+  StaffPrincipal,
+  SystemConfigurationResponse,
+  SystemSettingsResponse,
+  SystemSettingView,
+  UpdateSystemSettingRequest,
+} from '../types/admin';
 import { isDemoEnabled } from '../utils/env';
 
 export class ApiClientError extends Error {
@@ -346,6 +355,45 @@ export class ApiClient {
       headers: this.getHeaders(),
     });
     return this.handleResponse<ListResponse<AuditEvent>>(res);
+  }
+
+  // --- Admin mode (관리자 모드): operational settings, deployment configuration, staff accounts ---
+
+  private async adminJson<T>(path: string, method: string, body?: unknown): Promise<T> {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: this.getHeaders(body === undefined ? undefined : { 'Content-Type': 'application/json' }),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return this.handleResponse<T>(res);
+  }
+
+  async getSystemSettings(): Promise<SystemSettingsResponse> {
+    return this.adminJson<SystemSettingsResponse>('/admin/settings', 'GET');
+  }
+
+  async updateSystemSetting(key: string, data: UpdateSystemSettingRequest): Promise<SystemSettingView> {
+    return this.adminJson<SystemSettingView>(`/admin/settings/${encodeURIComponent(key)}`, 'PUT', data);
+  }
+
+  async resetSystemSetting(key: string, data: ResetSystemSettingRequest): Promise<SystemSettingView> {
+    return this.adminJson<SystemSettingView>(`/admin/settings/${encodeURIComponent(key)}/reset`, 'POST', data);
+  }
+
+  async getSystemConfiguration(): Promise<SystemConfigurationResponse> {
+    return this.adminJson<SystemConfigurationResponse>('/admin/system/configuration', 'GET');
+  }
+
+  async getStaffPrincipals(): Promise<ListResponse<StaffPrincipal>> {
+    return this.adminJson<ListResponse<StaffPrincipal>>('/admin/staff', 'GET');
+  }
+
+  async createStaffPrincipal(data: CreateStaffPrincipalRequest): Promise<StaffPrincipal> {
+    return this.adminJson<StaffPrincipal>('/admin/staff', 'POST', data);
+  }
+
+  async disableStaffPrincipal(principalId: string, reason: string): Promise<StaffPrincipal> {
+    return this.adminJson<StaffPrincipal>(`/admin/staff/${encodeURIComponent(principalId)}/disable`, 'POST', { reason });
   }
 
   // --- Doctor Activation & Admin Preregistration Routes ---

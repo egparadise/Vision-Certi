@@ -48,9 +48,15 @@ public final class PacsIntegrationDtos {
 
     public record CertificateLoginConfirmationResponse(boolean recorded, Instant recordedAt) { }
 
+    /**
+     * {@code certificatePasswordVerified} is true only for a PC certificate login: INVIZ verified a signature over its
+     * own challenge made with the certificate's private key, which opens only with the certificate password. The
+     * password itself never reaches INVIZ or PACS.
+     */
     public record VerifiedIdentityResponse(String tenantId, UUID doctorId, String doctorStatus, String identityMode,
             UUID certificateEnrollmentId, String certificateFingerprintSha256, Instant authenticatedAt,
-            Instant sessionExpiresAt, Instant verifiedAt, boolean activeSigner, String doctorLicenseNumber) {
+            Instant sessionExpiresAt, Instant verifiedAt, boolean activeSigner, String doctorLicenseNumber,
+            boolean certificatePasswordVerified) {
     }
 
     public record ReportSignRequestCreate(String tenantId, String doctorId, String externalReportId,

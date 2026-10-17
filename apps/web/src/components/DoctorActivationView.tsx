@@ -7,6 +7,7 @@ import {
   DoctorCertificate,
   SignRequest
 } from '../types/api';
+import { InfoPopover } from './InfoPopover';
 
 export const DoctorActivationView: React.FC = () => {
   const { client } = useApp();
@@ -301,8 +302,19 @@ export const DoctorActivationView: React.FC = () => {
   return (
     <div className="doctor-activation-view" style={{ maxWidth: '820px', margin: '0 auto', padding: '1.5rem' }}>
       <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-main, #0f172a)' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-main, #0f172a)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
           {authMode === 'INVITATION' ? '의사 계정 활성화 (Doctor Activation)' : '기존 등록 의사 로그인 및 서명 포털'}
+          <InfoPopover
+            title="의사 활성화 및 전자서명 절차"
+            badge="절차 안내"
+            description="전자서명법 및 보건의료 규정에 따른 안전한 의사 신원 확인 절차입니다."
+            bulletPoints={[
+              '1단계: 관리자 발급 초대 코드 또는 서명 챌린지 검증',
+              '2단계: Google / OpenID Connect 신원 일치 확인',
+              '3단계: 전자서명 생성키 단독 관리 및 위임 서명 금지 동의',
+              '4단계: 판독의사 전용 서명키 활성화 및 대기 문서 서명',
+            ]}
+          />
         </h2>
         <p style={{ color: 'var(--text-muted, #64748b)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
           {authMode === 'INVITATION'

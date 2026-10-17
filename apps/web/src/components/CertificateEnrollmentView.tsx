@@ -1,4 +1,5 @@
 import { ExternalCertificateProof } from './ExternalCertificateProof';
+import { InfoPopover } from './InfoPopover';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { ApiClientError } from '../api/client';
@@ -479,8 +480,19 @@ export const CertificateEnrollmentView: React.FC<{
         }}
         data-testid="cert-architecture-banner"
       >
-        <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', color: 'var(--primary-color, #0284c7)' }}>
+        <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', color: 'var(--primary-color, #0284c7)', display: 'flex', alignItems: 'center', gap: '8px' }}>
           {authMode === 'PC_LOGIN' ? '의료인 공동인증서 로그인' : '의료인 공동인증서 등록'}
+          <InfoPopover
+            title="의료인 공동인증서 등록/로그인 규약"
+            badge="X.509 보안 안내"
+            description="전자의무기록 및 판독문 원격 전자서명을 위한 2-Tier 암호화 인증 구조입니다."
+            bulletPoints={[
+              '1단계 인증서 검증: 브라우저/로컬 SDK에서 개인키를 유출하지 않고 난수(Challenge)에 서명하여 소유 증명을 생성합니다.',
+              '2단계 인증기관 검증: 서버에 설정된 신뢰 인증기관과 CRL로 인증서 경로·폐지 상태를 확인합니다. OCSP는 현재 지원하지 않습니다.',
+              '3단계 자격 대조: PACS에 등록된 의사면허번호와 제출한 전문의 자격 증빙을 담당자가 검토합니다.',
+              '보안 원칙: 서명 개인키와 인증서 비밀번호는 서버나 외부로 절대 전송되지 않습니다.',
+            ]}
+          />
         </h2>
         <p style={{ margin: 0, fontSize: '0.875rem', lineHeight: '1.5', color: 'var(--text-muted, #64748b)' }}>
           공동인증서로 본인임을 확인하고 의사면허 및 전문의 자격 정보를 등록합니다. 등록 이후에는 공동인증서로 로그인해주세요.

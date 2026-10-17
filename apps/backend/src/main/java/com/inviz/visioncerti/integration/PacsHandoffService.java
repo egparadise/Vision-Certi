@@ -1,5 +1,8 @@
 package com.inviz.visioncerti.integration;
 
+import com.inviz.visioncerti.admin.SettingKey;
+import com.inviz.visioncerti.admin.SystemSettings;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.inviz.visioncerti.audit.AuditService;
 import com.inviz.visioncerti.common.ApiException;
 import com.inviz.visioncerti.common.Hashing;
@@ -68,6 +71,24 @@ public class PacsHandoffService {
         this.maxLoginAge = maxLoginAge;
     }
 
+    private volatile SystemSettings settings;
+
+    /** Administrator overrides ({@link SystemSettings}); absent in unit tests that construct the service directly. */
+    @Autowired(required = false)
+    public void useSettings(SystemSettings settings) {
+        this.settings = settings;
+    }
+
+    private Duration ttl() {
+        SystemSettings s = settings;
+        return s == null ? ttl : s.duration(SettingKey.PACS_HANDOFF_TTL);
+    }
+
+    private Duration maxLoginAge() {
+        SystemSettings s = settings;
+        return s == null ? maxLoginAge : s.duration(SettingKey.PACS_MAX_CERTIFICATE_LOGIN_AGE);
+    }
+
     public HandoffResponse issue(DoctorPrincipal principal, String audience) {
         IntegrationClient client = clients.require();
         if (audience == null || !audience.equals(client.clientId())) {
@@ -76,12 +97,12 @@ public class PacsHandoffService {
         if (!client.allowsTenant(principal.tenantId())) {
             throw ApiException.forbidden("INTEGRATION_TENANT_FORBIDDEN", "이 기관은 PACS 연동 대상이 아닙니다.");
         }
-        IntegrationIdentity identity = doctors.requireFreshCertificateSession(principal, maxLoginAge);
+        IntegrationIdentity identity = doctors.requireFreshCertificateSession(principal, maxLoginAge());
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         String code = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         Instant now = clock.instant();
-        Instant expiresAt = now.plus(ttl);
+        Instant expiresAt = now.plus(ttl());
         store.run(tx -> {
             tx.deleteExpired(HANDOFFS, now);
             if (tx.count(HANDOFFS, "client_id", client.clientId(), now) >= MAX_PENDING) {
@@ -134,7 +155,8 @@ public class PacsHandoffService {
         return new VerifiedIdentityResponse(current.tenantId(), current.doctorId(), "ACTIVE", current.identityMode(),
                 current.certificateEnrollmentId(), current.certificateFingerprint(), current.authenticatedAt(),
                 current.sessionExpiresAt(), now, true,
-                doctors.registeredLicenseNumber(current.doctorId()).orElse(null));
+                doctors.registeredLicenseNumber(current.doctorId()).orElse(null),
+                "PC_CERTIFICATE".equals(current.identityMode()));
     }
 
     /** Correlates the PACS account actually logged in with the already redeemed certificate proof. */

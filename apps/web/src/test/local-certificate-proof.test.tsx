@@ -119,3 +119,45 @@ it('does not auto-select or sign an expired PC certificate', async () => {
   expect(screen.getByRole('button', { name: '확인' })).toBeDisabled();
   expect(sign).not.toHaveBeenCalled();
 });
+
+it('locks the password until a certificate is selected and clears it when the selection changes', async () => {
+  const signA = vi.fn();
+  const signB = vi.fn();
+  mocks.discoverBridgeCertificates.mockImplementation(async (medium: string) => medium === 'hard-disk' ? [
+    { id: 'bridge:a', kind: 'NPKI', name: '인증서 A', issuer: 'yessign', path: '이 PC의 NPKI', source: 'LOCAL_BRIDGE', sign: signA },
+    { id: 'bridge:b', kind: 'NPKI', name: '인증서 B', issuer: 'yessign', path: '이 PC의 NPKI', source: 'LOCAL_BRIDGE', sign: signB },
+  ] : []);
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  render(<ExternalCertificateProof challenge={{ challengeId: 'lock', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() + 600000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
+  await screen.findByRole('radio', { name: '인증서 A 인증서 선택' });
+  const password = screen.getByLabelText('인증서 비밀번호');
+  expect(password).toBeDisabled();
+  expect(password).toHaveAttribute('placeholder', '먼저 위에서 인증서를 선택해 주세요');
+  expect(screen.getByRole('button', { name: '가상키보드 열기' })).toBeDisabled();
+
+  fireEvent.click(screen.getByRole('radio', { name: '인증서 A 인증서 선택' }));
+  expect(password).toBeEnabled();
+  fireEvent.change(password, { target: { value: 'for-a' } });
+  fireEvent.click(screen.getByRole('radio', { name: '인증서 B 인증서 선택' }));
+  await waitFor(() => expect(password).toHaveValue(''));
+  expect(signA).not.toHaveBeenCalled();
+  expect(signB).not.toHaveBeenCalled();
+});
+
+it('reports a password that does not open the selected certificate and sends nothing to INVIZ', async () => {
+  const sign = vi.fn(async () => { throw new Error('인증서 비밀번호가 일치하지 않습니다. 선택한 인증서의 비밀번호를 다시 입력해 주세요.'); });
+  mocks.discoverBridgeCertificates.mockImplementation(async (medium: string) => medium === 'hard-disk' ? [{
+    id: 'bridge:only', kind: 'NPKI', name: '박판독', issuer: 'yessign', path: '이 PC의 NPKI', source: 'LOCAL_BRIDGE', sign,
+  }] : []);
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  const onProof = vi.fn(async () => {});
+  render(<ExternalCertificateProof challenge={{ challengeId: 'wrong', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() + 600000).toISOString() } as CertificateChallenge} busy={false} onProof={onProof} />);
+  expect(await screen.findByRole('radio', { name: '박판독 인증서 선택' })).toBeChecked();
+  fireEvent.change(screen.getByLabelText('인증서 비밀번호'), { target: { value: 'wrong' } });
+  fireEvent.submit(screen.getByRole('button', { name: '확인' }).closest('form')!);
+  expect(await screen.findByRole('alert')).toHaveTextContent('인증서 비밀번호가 일치하지 않습니다');
+  expect(onProof).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('인증서 비밀번호')).toHaveValue('');
+});

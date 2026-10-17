@@ -1,5 +1,7 @@
 package com.inviz.visioncerti.enrollment;
 
+import com.inviz.visioncerti.admin.SystemSettings;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.inviz.visioncerti.common.ApiException;
 import com.inviz.visioncerti.common.Hashing;
 import com.inviz.visioncerti.enrollment.Account.AccountType;
@@ -56,7 +58,7 @@ public class EnrollmentService {
     private final SmsSender sms;
     private final PasswordHasher hasher;
     private final Clock clock;
-    private final EnrollmentPolicy policy;
+    private final EnrollmentPolicy basePolicy;
     private final SecureRandom random = new SecureRandom();
     private final byte[] codeKey = new byte[32];
 
@@ -72,8 +74,22 @@ public class EnrollmentService {
         this.sms = sms;
         this.hasher = hasher;
         this.clock = clock;
-        this.policy = policy;
+        this.basePolicy = policy;
         random.nextBytes(codeKey);
+    }
+
+    private volatile SystemSettings settings;
+
+    /** Administrator overrides ({@link SystemSettings}); absent in unit tests that construct the service directly. */
+    @Autowired(required = false)
+    public void useSettings(SystemSettings settings) {
+        this.settings = settings;
+    }
+
+    /** The deployment policy with administrator overrides applied, read fresh for each decision. */
+    private EnrollmentPolicy policy() {
+        SystemSettings s = settings;
+        return s == null ? basePolicy : s.enrollmentPolicy(basePolicy);
     }
 
     // ---------------------------------------------------------------- phone challenge
@@ -92,7 +108,7 @@ public class EnrollmentService {
             prune(now);
             Deque<Instant> phoneSends = sendsByPhone.get(phone);
             if (phoneSends != null && !phoneSends.isEmpty()) {
-                Instant resendAt = phoneSends.peekLast().plus(policy.resendCooldown());
+                Instant resendAt = phoneSends.peekLast().plus(policy().resendCooldown());
                 if (now.isBefore(resendAt)) {
                     long seconds = Math.max(1, Duration.between(now, resendAt).toSeconds());
                     throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "PHONE_CHALLENGE_COOLDOWN",
@@ -100,7 +116,7 @@ public class EnrollmentService {
                 }
             }
             Deque<Instant> sourceSends = sendsBySource.get(sourceKey);
-            if (size(phoneSends) >= policy.phoneHourlyLimit() || size(sourceSends) >= policy.sourceHourlyLimit()) {
+            if (size(phoneSends) >= policy().phoneHourlyLimit() || size(sourceSends) >= policy().sourceHourlyLimit()) {
                 throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "PHONE_CHALLENGE_RATE_LIMITED",
                         "인증번호 요청 횟수를 초과했습니다. 잠시 후 다시 시도해 주세요.", true);
             }
@@ -115,7 +131,7 @@ public class EnrollmentService {
             grants.values().removeIf(g -> g.phone.equals(phone));
 
             UUID id = UUID.randomUUID();
-            challenge = new Challenge(id, phone, codeDigest(id, code), now, now.plus(policy.challengeTtl()));
+            challenge = new Challenge(id, phone, codeDigest(id, code), now, now.plus(policy().challengeTtl()));
             challenges.put(id, challenge);
             sendsByPhone.computeIfAbsent(phone, k -> new ArrayDeque<>()).addLast(now);
             sendsBySource.computeIfAbsent(sourceKey, k -> new ArrayDeque<>()).addLast(now);
@@ -130,7 +146,7 @@ public class EnrollmentService {
                     "인증번호를 발송하지 못했습니다. 잠시 후 다시 시도해 주세요.", true);
         }
         return new PhoneChallengeResponse(challenge.id.toString(), challenge.expiresAt,
-                challenge.createdAt.plus(policy.resendCooldown()), sms.mode(),
+                challenge.createdAt.plus(policy().resendCooldown()), sms.mode(),
                 sms.revealsCodeToClient() ? code : null);
     }
 
@@ -163,19 +179,19 @@ public class EnrollmentService {
             }
             if (!MessageDigest.isEqual(codeDigest(c.id, code), c.codeDigest)) {
                 c.attempts++;
-                if (c.attempts >= policy.maxVerifyAttempts()) {
+                if (c.attempts >= policy().maxVerifyAttempts()) {
                     c.state = ChallengeState.LOCKED;
                     throw locked();
                 }
                 throw ApiException.unprocessable("PHONE_CODE_MISMATCH",
-                        "인증번호가 일치하지 않습니다. 남은 시도 횟수: " + (policy.maxVerifyAttempts() - c.attempts) + "회");
+                        "인증번호가 일치하지 않습니다. 남은 시도 횟수: " + (policy().maxVerifyAttempts() - c.attempts) + "회");
             }
             requireCapacity(grants.size());
             c.state = ChallengeState.VERIFIED;
             byte[] tokenBytes = new byte[32];
             random.nextBytes(tokenBytes);
             String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
-            Instant expiresAt = now.plus(policy.verificationTokenTtl());
+            Instant expiresAt = now.plus(policy().verificationTokenTtl());
             grants.put(Hashing.sha256Hex(token), new Grant(c.phone, c.id, now, expiresAt));
             return new PhoneVerificationResponse(token, expiresAt, sms.mode());
         }
@@ -192,7 +208,7 @@ public class EnrollmentService {
             prune(now);
             requireGrant(tokenKey, v.phone, now);
             requireUsernameAvailable(v.usernameKey);
-            if (accounts.size() >= policy.maxAccounts()) {
+            if (accounts.size() >= policy().maxAccounts()) {
                 throw capacityExceeded();
             }
         }
@@ -364,7 +380,7 @@ public class EnrollmentService {
     }
 
     private void requireCapacity(int tracked) {
-        if (tracked >= policy.maxTrackedEntries()) {
+        if (tracked >= policy().maxTrackedEntries()) {
             throw capacityExceeded();
         }
     }
@@ -402,7 +418,7 @@ public class EnrollmentService {
 
     private ApiException locked() {
         return new ApiException(HttpStatus.TOO_MANY_REQUESTS, "PHONE_CHALLENGE_LOCKED",
-                "인증번호를 " + policy.maxVerifyAttempts() + "회 잘못 입력했습니다. 인증번호를 다시 요청해 주세요.", false);
+                "인증번호를 " + policy().maxVerifyAttempts() + "회 잘못 입력했습니다. 인증번호를 다시 요청해 주세요.", false);
     }
 
     private enum ChallengeState { PENDING, VERIFIED, SUPERSEDED, LOCKED }

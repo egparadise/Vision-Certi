@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FolderSearch, HardDrive, Keyboard, Usb, X } from 'lucide-react';
+import appPackage from '../../package.json';
+import { CertificateVirtualKeyboard } from './CertificateVirtualKeyboard';
 import type { CertificateChallenge } from '../types/api';
 import type { LocalSignResult } from '../services/localCertSdkAdapter';
 import { signWithCertificateFiles, type CertificateFiles } from '../services/certificateFileSigner';
@@ -33,6 +35,9 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   const [privateKey, setPrivateKey] = useState<File>();
   const [chain, setChain] = useState<File>();
   const [password, setPassword] = useState('');
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const passwordInput = useRef<HTMLInputElement>(null);
+  const virtualCaret = useRef<number | null>(null);
   const [signing, setSigning] = useState(false);
   const [error, setError] = useState('');
   const [now, setNow] = useState(Date.now());
@@ -41,6 +46,32 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   const manualComplete = kind === 'PFX' ? Boolean(bundle) : Boolean(certificate && privateKey);
   const expires = Date.parse(challenge?.expiresAt ?? expiresAt ?? '');
   const expired = !Number.isFinite(expires) || now >= expires;
+
+  function insertPassword(character: string) {
+    const input = passwordInput.current;
+    const start = virtualCaret.current ?? input?.selectionStart ?? password.length;
+    const end = virtualCaret.current ?? input?.selectionEnd ?? start;
+    const nextCaret = start + character.length;
+    virtualCaret.current = nextCaret;
+    setPassword(password.slice(0, start) + character + password.slice(end));
+    window.setTimeout(() => {
+      input?.focus(); input?.setSelectionRange(nextCaret, nextCaret);
+      if (virtualCaret.current === nextCaret) virtualCaret.current = null;
+    }, 0);
+  }
+
+  function deletePasswordCharacter() {
+    const input = passwordInput.current;
+    const end = virtualCaret.current ?? input?.selectionEnd ?? password.length;
+    const start = virtualCaret.current ?? input?.selectionStart ?? end;
+    const from = start === end ? Math.max(0, start - 1) : start;
+    virtualCaret.current = from;
+    setPassword(password.slice(0, from) + password.slice(end));
+    window.setTimeout(() => {
+      input?.focus(); input?.setSelectionRange(from, from);
+      if (virtualCaret.current === from) virtualCaret.current = null;
+    }, 0);
+  }
 
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => {
@@ -139,14 +170,14 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '인증서 서명에 실패했습니다.');
     } finally {
-      setSigning(false); setPassword(''); setBundle(undefined); setCertificate(undefined);
+      setSigning(false); setPassword(''); setKeyboardOpen(false); setBundle(undefined); setCertificate(undefined);
       setPrivateKey(undefined); setChain(undefined);
       form.querySelectorAll<HTMLInputElement>('input[type="file"]').forEach(input => { input.value = ''; });
     }
   }
 
   function cancel() {
-    setPassword(''); setSelectedId(undefined); setError('');
+    setPassword(''); setKeyboardOpen(false); setSelectedId(undefined); setError('');
     if (onCancel) { onCancel(); return; }
     if (window.opener && !window.opener.closed) window.close();
     else if (window.history.length > 1) window.history.back();
@@ -156,11 +187,13 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   return <section className="account-proof cert-dialog" aria-label={actionLabel ?? '공동인증서 선택 및 로그인'}>
     <div className="cert-dialog-titlebar">
       <strong>공동인증서 인증</strong>
-      <span>INVIZ</span>
+      <span>v{appPackage.version}</span>
       <button type="button" aria-label="인증서 선택 취소" onClick={cancel}><X size={19} /></button>
     </div>
     <div className="cert-dialog-content">
-    <div className="cert-brand-banner"><img src="/inviz-logo.jpg" alt="INVIZ" /></div>
+    <div className="cert-brand-banner">
+      <img src="/inviz-logo-transparent.png" alt="INVIZ" />
+    </div>
     <p className="cert-dialog-instruction">인증서 저장위치를 선택해 주세요.</p>
     <p role="status" className="cert-dialog-timer">{expired ? '인증 요청이 만료되었습니다. 새 요청을 시작해 주세요.' : `남은 시간 ${Math.ceil((expires - now) / 1000)}초`}</p>
     <form onSubmit={submit}>
@@ -214,8 +247,14 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
             <label>중간 인증기관 인증서 (있는 경우)<input type="file" accept=".der" onChange={event => setChain(event.target.files?.[0])} /></label>
           </>}
         </details>
-        <label className="cert-password-label">현재 인증서 암호를 입력해 주세요.<span className="cert-password-input"><input type="password" aria-label="인증서 비밀번호" autoComplete="off" value={password}
-          onChange={event => setPassword(event.target.value)} placeholder="인증서 비밀번호" required /><Keyboard aria-hidden="true" size={21} /></span></label>
+        <label className="cert-password-label">현재 인증서 암호를 입력해 주세요.<span className="cert-password-input"><input ref={passwordInput} type="password" aria-label="인증서 비밀번호" autoComplete="off" value={password}
+          onChange={event => { virtualCaret.current = null; setPassword(event.target.value); }} placeholder="인증서 비밀번호" required />
+          <button type="button" className="cert-keyboard-toggle" aria-label={keyboardOpen ? '가상키보드 닫기' : '가상키보드 열기'}
+            aria-expanded={keyboardOpen} aria-controls="cert-virtual-keyboard" onClick={() => setKeyboardOpen(!keyboardOpen)}>
+            <Keyboard aria-hidden="true" size={21} />
+          </button></span></label>
+        {keyboardOpen && <CertificateVirtualKeyboard onInsert={insertPassword} onBackspace={deletePasswordCharacter}
+          onClose={() => setKeyboardOpen(false)} />}
         <div className="cert-dialog-buttons">
           <button className="enroll-primary" disabled={!password || (!selected && !(manualMode && manualComplete)) || signing}>
             {signing ? '인증서 확인 중…' : actionLabel ?? '확인'}

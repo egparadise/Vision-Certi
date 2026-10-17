@@ -72,6 +72,15 @@ def api_ready() -> bool:
         return False
 
 
+def postgres_ready() -> bool:
+    try:
+        return subprocess.run([str(ROOT / 'work/postgres/pgsql/bin/pg_isready.exe'), '-h', '127.0.0.1', '-p', '15432'],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              creationflags=subprocess.CREATE_NO_WINDOW).returncode == 0
+    except OSError:
+        return False
+
+
 def openbao_unsealed() -> bool:
     try:
         return http_json('http://127.0.0.1:18200/v1/sys/seal-status')['sealed'] is False
@@ -131,11 +140,12 @@ def main() -> None:
     report = {}
 
     if not listening('127.0.0.1', 15432):
-        subprocess.run([str(PY), 'infra/local_database.py', 'postgres'], cwd=ROOT, check=True,
-                       stdout=subprocess.DEVNULL)
+        # local_database.py stays in the foreground for the server's whole lifetime, so run it detached too.
+        detach('postgres', [PY, 'infra/local_database.py', 'postgres'])
         report['postgres'] = 'started'
     else:
         report['postgres'] = 'running'
+    wait_for(postgres_ready, 'PostgreSQL 15432')
 
     if not listening('127.0.0.1', 18200):
         detach('openbao', [PY, 'infra/openbao/server_persistent_local.py'])

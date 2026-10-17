@@ -98,7 +98,7 @@ with engine.begin() as db:
                {'license': str(int(run,16))[:20], 'u': number})
 assert invoke(service.enrollment_status,number)['registrationStatus']=='NOT_REGISTERED'
 try: invoke(service.require_enrolled_pacs_access,number)
-except VcError as error: assert error.code=='VC_ENROLLMENT_REQUIRED'
+except VcError as error: assert error.code=='VC_SESSION_REQUIRED'
 else: raise AssertionError('Unregistered doctor admitted')
 started=invoke(service.enrollment_start,number)
 doctor=started['doctorId']
@@ -131,8 +131,10 @@ api('POST',f'/v1/admin/doctors/{doctor}/certificate-reviews',{'registrationId':r
 active=api('POST','/v1/doctor-activation/activate',{},token=token)
 assert active['status']=='ACTIVE' and active['certificate']['kind']=='X509'
 assert invoke(service.enrollment_status,number)['registrationStatus']=='ACTIVE'
-invoke(service.require_enrolled_pacs_access,number)
-checks.append('verified active enrollment auto-links PACS account and allows existing password-session access')
+try: invoke(service.require_enrolled_pacs_access,number,'Bearer legacy-password-session')
+except VcError as error: assert error.code=='VC_SESSION_REQUIRED'
+else: raise AssertionError('Password-only session admitted an enrolled doctor')
+checks.append('active enrollment still rejects password-only PACS access')
 checks.append('actual challenge proof, trusted synthetic CA and CRL, doctor consent, real OpenBao X509 activation')
 challenge=api('POST','/v1/certificate-enrollment/login-challenges',{},expected=201)
 token=api('POST','/v1/certificate-enrollment/login',proof(challenge,True))['activationToken']
@@ -142,6 +144,8 @@ try: invoke(service.certificate_login,handoff['handoffCode'],'127.0.0.1')
 except VcError as error: assert error.status==401
 else: raise AssertionError('Handoff replay accepted')
 principal=invoke(service.resolve_session,'Bearer '+pacs_token)
+invoke(service.require_enrolled_pacs_access,number,'Bearer '+pacs_token)
+checks.append('fresh certificate login required and valid certificate session permits PACS access')
 checks.append('server-to-server HMAC handoff redemption, replay rejection, self-enrolled mapping, hashed PACS session')
 with Session() as db: expected=content_sha256(port.get_report_for_study(db,number))
 approval,_=invoke(service.prepare,principal,number,expected)

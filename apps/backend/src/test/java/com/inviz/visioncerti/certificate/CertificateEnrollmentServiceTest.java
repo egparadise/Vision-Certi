@@ -99,7 +99,7 @@ class CertificateEnrollmentServiceTest {
                 return super.signDigest(credential, sha256Digest);
             }
         };
-        doctors = new DoctorService(audit, credentials, google.verifier(), clock, DoctorPolicy.defaults(), false, true);
+        doctors = new DoctorService(audit, credentials, google.verifier(), clock, DoctorPolicy.defaults(), false, true, true);
         pki = new TestPki(clock, "Joint");
         trust = new TestTrust();
         trust.anchors.add(pki.root.certificate());

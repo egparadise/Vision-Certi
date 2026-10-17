@@ -60,6 +60,6 @@ export function PacsCertificateEnrollment() {
   return <section className="personal-certificate-provider-notice" aria-labelledby="pacs-enrollment-title">
     <h2 id="pacs-enrollment-title">PACS 첫 로그인 시 공동인증서 등록</h2>
     <p>{context ? 'PACS에서 로그인 계정을 확인하고 있습니다.' : 'PACS 로그인 화면에서 기존 ID·비밀번호를 입력한 뒤, 최초 공동인증서 등록을 진행해주세요. 관리자 초대코드는 필요하지 않습니다.'}</p>
-    <p>등록·활성화 후에는 기존 PACS ID·비밀번호로 로그인합니다. 판독문 최종 승인 시 서명 확인은 별도로 진행합니다.</p>
+    <p>등록·활성화 후에도 매번 공동인증서로 로그인합니다. 판독문 최종 승인 시 서명 확인은 별도로 진행합니다.</p>
   </section>;
 }

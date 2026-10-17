@@ -1543,11 +1543,11 @@
 +
 +ENROLLMENT_BOOTSTRAP_PATHS = frozenset({
 +    "/api/vc/config", "/api/vc/auth/enrollment-status", "/api/vc/auth/enrollment-start",
-+    "/api/user/auth/logout", "/api/vc/auth/logout",
++    "/api/user/auth/logout", "/api/vc/auth/logout", "/api/vc/auth/certificate-step-up",
 +})
 +
 +
-+def enrollment_access_guard(path: str, user_idx) -> None:
++def enrollment_access_guard(path: str, user_idx, authorization: str | None = None) -> None:
 +    """Run after token authentication on every protected request, even a cached legacy token."""
 +    if path in ENROLLMENT_BOOTSTRAP_PATHS or not service().config.guard_active:
 +        return
@@ -1555,7 +1555,7 @@
 +    main_gen, manage_gen = db.session(), manageDB.session()
 +    try:
 +        main, manage = next(main_gen), next(manage_gen)
-+        service().require_enrolled_pacs_access(main, manage, user_idx)
++        service().require_enrolled_pacs_access(main, manage, user_idx, authorization)
 +    finally:
 +        main_gen.close()
 +        manage_gen.close()
@@ -1574,7 +1574,7 @@
 +        raise HTTPException(status_code=e.status, detail={"code": e.code, "message": e.message})
 --- /dev/null
 +++ b/app/integrations/vision_certi/service.py
-@@ -0,0 +1,954 @@
+@@ -0,0 +1,963 @@
 +"""Integration logic: certificate-login sessions, explicit doctor links, report prepare/finalize/reconcile, and the
 +legacy A/RA guard. Framework-free; the HTTP layer is api.py.
 +
@@ -1829,7 +1829,7 @@
 +        session.commit()
 +        return {"doctorId": result["doctorId"], "challenge": result["challenge"]}
 +
-+    def require_enrolled_pacs_access(self, session, manage_session, user_idx):
++    def require_enrolled_pacs_access(self, session, manage_session, user_idx, authorization=None):
 +        if not self.config.guard_active:
 +            return
 +        # The certificate policy applies only to doctors. A misconfigured provider must not lock staff out of PACS.
@@ -1837,10 +1837,19 @@
 +            user = self.port.get_user(manage_session, int(user_idx))
 +            if user is not None and user.active and user.pacs_user and not user.is_doctor:
 +                return
++        # Enrollment is not login authentication. Each physician request needs a live certificate session;
++        # a cached/password JWT, client flags or a remembered ACTIVE enrollment cannot satisfy this check.
++        principal = self.resolve_session(session, manage_session, authorization)
++        if principal.user_idx != user_idx:
++            raise VcError(401, "VC_SESSION_REQUIRED", "Certificate session does not match the PACS account")
 +        result = self.enrollment_status(session, manage_session, user_idx)
-+        if result["registrationStatus"] not in {"ACTIVE", "NOT_REQUIRED"}:
++        if result["registrationStatus"] != "ACTIVE":
 +            raise VcError(403, "VC_ENROLLMENT_REQUIRED", "Complete first-login certificate registration",
 +                          data={"registrationStatus": result["registrationStatus"]})
++        if (result["doctorId"] != principal.doctor_id
++                or result["certificateEnrollmentId"] != principal.enrollment_id
++                or result["fingerprintSha256"] != principal.certificate_fingerprint):
++            raise VcError(401, "VC_SESSION_REQUIRED", "Registered certificate changed; log in with it again")
 +
 +    def certificate_login(self, session: Session, manage_session: Session, handoff_code, client_ip: str | None):
 +        self.require_operational()
@@ -3434,7 +3443,7 @@
 +    uvicorn.run("main:app", **uvicorn_config)
 --- a/app/middlewares/TokenHTTPMiddleware.py
 +++ b/app/middlewares/TokenHTTPMiddleware.py
-@@ -1,219 +1,233 @@
+@@ -1,219 +1,234 @@
 -"""
 -토큰 인증 미들웨어 (순수 ASGI)
 -
@@ -3815,7 +3824,8 @@
 +                # authentication or issue certificate sessions for password-only logins.
 +                from app.integrations.vision_certi.runtime import enrollment_access_guard
 +                authenticated = scope["state"]["user"] or {}
-+                await asyncio.to_thread(enrollment_access_guard, url, authenticated.get("user_idx"))
++                await asyncio.to_thread(enrollment_access_guard, url, authenticated.get("user_idx"),
++                                        request.headers.get("Authorization"))
 +        except VcError as e:
 +            response = JSONResponse(status_code=e.status, content={
 +                "status": e.status, "code": e.code, "message": e.message, "retryable": e.retryable, **e.data},
@@ -6828,9 +6838,10 @@
 +    unittest.main()
 --- /dev/null
 +++ b/tests/vision_certi/test_vc_self_enrollment.py
-@@ -0,0 +1,201 @@
+@@ -0,0 +1,262 @@
 +"""First-login enrollment uses trusted PACS records; proof remains a separate real certificate operation."""
 +import json
++import datetime
 +import importlib.util
 +from dataclasses import replace
 +from pathlib import Path
@@ -6878,6 +6889,15 @@
 +    def call(self, method, user=7):
 +        return self.env.call(method, user)
 +
++    def certificate_token(self):
++        self.active()
++        self.call(self.env.service.enrollment_status)
++        self.env.fake.licenses[self.doctor] = "7"
++        return self.env.login(self.doctor, enrollment_id=self.enrollment, fingerprint="ab" * 32)
++
++    def access(self, token, user=7):
++        return self.env.call(self.env.service.require_enrolled_pacs_access, user, 'Bearer ' + token)
++
 +    def test_start_only_authenticated_own_trusted_profile(self):
 +        self.assertEqual(self.http.post('/api/vc/auth/enrollment-start').status_code, 401)
 +        r = self.http.post('/api/vc/auth/enrollment-start', headers=self.auth,
@@ -6900,13 +6920,16 @@
 +        self.http.get('/api/vc/auth/enrollment-status?pacsUserId=8', headers=self.auth)
 +        self.env.client.enrollment_status.assert_called_once_with(TENANT, "7")
 +
-+    def test_pending_denied_active_password_access_links_once_without_certificate_session(self):
++    def test_pending_and_active_password_access_denied_while_linking_stays_idempotent(self):
 +        with self.assertRaises(VcError) as e:
 +            self.call(self.env.service.require_enrolled_pacs_access)
-+        self.assertEqual(e.exception.code, "VC_ENROLLMENT_REQUIRED")
++        self.assertEqual(e.exception.code, "VC_SESSION_REQUIRED")
 +        self.active()
 +        for _ in range(2):
-+            self.call(self.env.service.require_enrolled_pacs_access)
++            self.call(self.env.service.enrollment_status)
++            with self.assertRaises(VcError) as e:
++                self.access('legacy-password-token')
++            self.assertEqual(e.exception.code, "VC_SESSION_REQUIRED")
 +        with self.env.Session() as s:
 +            links = s.scalars(select(VcDoctorLink)).all()
 +            self.assertEqual(len(links), 1)
@@ -6916,16 +6939,51 @@
 +            self.assertEqual(s.scalar(select(func.count()).select_from(VcSession)), 0)
 +
 +    def test_revocation_suspension_and_outage_rechecked_after_active(self):
-+        self.active()
-+        self.call(self.env.service.require_enrolled_pacs_access)
++        token = self.certificate_token()
++        self.access(token)
 +        for state in ["REVOKED", "SUSPENDED", "PENDING", "NOT_REGISTERED"]:
 +            self.status["registrationStatus"] = state
 +            with self.assertRaises(VcError):
-+                self.call(self.env.service.require_enrolled_pacs_access)
++                self.access(token)
 +        self.env.client.enrollment_status.side_effect = VcUnavailable('test timeout')
 +        with self.assertRaises(VcError) as e:
-+            self.call(self.env.service.require_enrolled_pacs_access)
++            self.access(token)
 +        self.assertEqual(e.exception.status, 503)
++
++    def test_expired_revoked_and_wrong_user_certificate_sessions_denied(self):
++        token = self.certificate_token()
++        self.access(token)
++        with self.assertRaises(VcError):
++            self.access(token, user=8)
++        self.env.clock.now += datetime.timedelta(minutes=61)
++        with self.assertRaises(VcError) as e:
++            self.access(token)
++        self.assertEqual(e.exception.code, 'VC_SESSION_REQUIRED')
++        self.env.clock.now -= datetime.timedelta(minutes=61)
++        self.env.sql("UPDATE pacs_vc_session SET revoked_at=:at", at=self.env.clock())
++        with self.assertRaises(VcError) as e:
++            self.access(token)
++        self.assertEqual(e.exception.code, 'VC_SESSION_REQUIRED')
++
++    def test_changed_certificate_requires_new_certificate_login(self):
++        token = self.certificate_token()
++        for key, value in [('certificateEnrollmentId', str(uuid.uuid4())), ('fingerprintSha256', 'cd' * 32)]:
++            previous = self.status[key]
++            self.status[key] = value
++            with self.assertRaises(VcError) as e:
++                self.access(token)
++            self.assertEqual(e.exception.code, 'VC_SESSION_REQUIRED')
++            self.status[key] = previous
++
++    def test_legacy_step_up_proves_certificate_and_unlocks_access(self):
++        self.active()
++        self.call(self.env.service.enrollment_status)
++        self.env.fake.licenses[self.doctor] = '7'
++        handoff = self.env.fake.issue_handoff(self.doctor, enrollment_id=self.enrollment, fingerprint='ab' * 32)
++        response = self.http.post('/api/vc/auth/certificate-step-up', headers=self.auth,
++                                  json={'handoffCode': handoff})
++        self.assertEqual(response.status_code, 200, response.text)
++        self.access(response.json()['token'])
 +
 +    def test_conflicting_and_revoked_local_links_not_overwritten(self):
 +        self.active()
@@ -7010,6 +7068,10 @@
 +
 +        @app.get('/api/study')
 +        @app.get('/api/vc/auth/enrollment-status')
++        @app.post('/api/vc/auth/enrollment-start')
++        @app.post('/api/vc/auth/certificate-step-up')
++        @app.get('/api/user/auth/logout')
++        @app.get('/api/vc/config')
 +        def endpoint():
 +            return {'reached': True}
 +
@@ -7019,13 +7081,22 @@
 +            with TestClient(app) as http:
 +                headers = {'Authorization': 'Bearer legacy-token'}
 +                first = http.get('/api/study', headers=headers)
-+                self.assertEqual((first.status_code, first.json()['code']), (403, 'VC_ENROLLMENT_REQUIRED'))
++                self.assertEqual((first.status_code, first.json()['code']), (401, 'VC_SESSION_REQUIRED'))
 +                self.assertEqual(http.get('/api/vc/auth/enrollment-status', headers=headers).status_code, 200)
-+                self.active()
-+                self.assertEqual(http.get('/api/study', headers=headers).status_code, 200)
++                self.assertEqual(http.post('/api/vc/auth/enrollment-start', headers=headers).status_code, 200)
++                self.assertEqual(http.post('/api/vc/auth/certificate-step-up', headers=headers).status_code, 200)
++                self.assertEqual(http.get('/api/user/auth/logout', headers=headers).status_code, 200)
++                self.assertEqual(http.get('/api/vc/config', headers=headers).status_code, 200)
++                token = self.certificate_token()
++                self.assertEqual(http.get('/api/study', headers=headers).status_code, 401)
++                self.assertEqual(lookup.call_count, 1, 'Cached JWT cannot become a certificate session')
++                cert_headers = {'Authorization': 'Bearer ' + token}
++                self.assertEqual(http.get('/api/study', headers=cert_headers).status_code, 200)
 +                self.status['registrationStatus'] = 'REVOKED'
-+                self.assertEqual(http.get('/api/study', headers=headers).status_code, 403)
-+                self.assertEqual(lookup.call_count, 1, 'Cached JWT must still recheck current enrollment')
++                self.assertEqual(http.get('/api/study', headers=cert_headers).status_code, 403)
++                self.status['registrationStatus'] = 'ACTIVE'
++                self.env.clock.now += datetime.timedelta(minutes=61)
++                self.assertEqual(http.get('/api/study', headers=cert_headers).status_code, 401)
 +
 +
 +if __name__ == '__main__':

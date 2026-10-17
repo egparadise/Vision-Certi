@@ -159,7 +159,8 @@ class TokenASGIMiddleware:
                 # authentication or issue certificate sessions for password-only logins.
                 from app.integrations.vision_certi.runtime import enrollment_access_guard
                 authenticated = scope["state"]["user"] or {}
-                await asyncio.to_thread(enrollment_access_guard, url, authenticated.get("user_idx"))
+                await asyncio.to_thread(enrollment_access_guard, url, authenticated.get("user_idx"),
+                                        request.headers.get("Authorization"))
         except VcError as e:
             response = JSONResponse(status_code=e.status, content={
                 "status": e.status, "code": e.code, "message": e.message, "retryable": e.retryable, **e.data},

@@ -36,7 +36,8 @@ import org.springframework.test.web.servlet.request.AbstractMockHttpServletReque
  * HTTP flow under the default CERTIFICATE_REQUIRED policy with trust anchors and CRLs read from files (synthetic PKI
  * generated at test time), DEV_SIMULATED signing keys, and the physician's bearer session only.
  */
-@SpringBootTest(properties = "visioncerti.doctor.signing-backend=DEV_SIMULATED")
+@SpringBootTest(properties = {"visioncerti.doctor.signing-backend=DEV_SIMULATED",
+        "visioncerti.doctor.admin-invitations-enabled=true"})
 @AutoConfigureMockMvc
 @ActiveProfiles("dev")
 class CertificateEnrollmentApiTest {

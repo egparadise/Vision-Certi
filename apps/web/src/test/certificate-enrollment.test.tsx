@@ -147,6 +147,16 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
     authCertificate: mockCandidateGood,
   };
 
+  it('offers certificate login by default and no invitation form in self-enrollment', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(mockEnrollmentConfig), { status: 200 }));
+    render(<AppProvider><CertificateEnrollmentView /></AppProvider>);
+    expect(await screen.findByTestId('request-login-challenge-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('tab-cert-enroll'));
+    expect(screen.getByTestId('pc-enroll-step-1')).toHaveTextContent('공동인증서 직접 등록');
+    expect(screen.queryByTestId('cert-invitation-code-input')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('request-cert-challenge-btn')).not.toBeInTheDocument();
+  });
+
   it('1. GET /v1/certificate-enrollment/config: enforces nested pcCertificate and blocks flow on config error without fake fallback', async () => {
     let callCount = 0;
     globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
@@ -182,7 +192,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
     });
   });
 
-  it('2. POST /v1/certificate-enrollment/challenges: displays exact signedPayload bytes and strictly NO private key/password inputs', async () => {
+  it('2. PACS-issued challenge: displays exact signedPayload bytes and strictly NO private key/password inputs', async () => {
     let capturedBody: any = null;
     globalThis.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.includes('/certificate-enrollment/config')) {
@@ -197,13 +207,10 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
     render(
       <AppProvider>
-        <CertificateEnrollmentView />
+        <CertificateEnrollmentView initialChallenge={mockChallenge} />
       </AppProvider>
     );
 
-    await waitFor(() => screen.getByTestId('cert-invitation-code-input'));
-    fireEvent.change(screen.getByTestId('cert-invitation-code-input'), { target: { value: 'INV-TEST-PC-1234' } });
-    fireEvent.click(screen.getByTestId('request-cert-challenge-btn'));
 
     await waitFor(() => {
       expect(screen.getByTestId('cert-step-2')).toBeInTheDocument();
@@ -211,7 +218,8 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
     });
 
     // Verify exact backend request payload
-    expect(capturedBody).toEqual({ invitationCode: 'INV-TEST-PC-1234' });
+    expect(capturedBody).toBeNull();
+    expect(screen.queryByTestId('cert-invitation-code-input')).not.toBeInTheDocument();
 
     // Exact signed payload is displayed
     expect(screen.getByTestId('canonical-bytes-preview').textContent).toContain('vision-certi-certificate-auth-v1');
@@ -254,14 +262,11 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
     render(
       <AppProvider>
-        <CertificateEnrollmentView />
+        <CertificateEnrollmentView initialChallenge={mockChallenge} />
       </AppProvider>
     );
 
     // Advance to Step 2
-    await waitFor(() => screen.getByTestId('cert-invitation-code-input'));
-    fireEvent.change(screen.getByTestId('cert-invitation-code-input'), { target: { value: 'INV-TEST-REVOKED' } });
-    fireEvent.click(screen.getByTestId('request-cert-challenge-btn'));
 
     await waitFor(() => screen.getByTestId('public-cert-input'));
 
@@ -314,14 +319,11 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
     render(
       <AppProvider>
-        <CertificateEnrollmentView />
+        <CertificateEnrollmentView initialChallenge={mockChallenge} />
       </AppProvider>
     );
 
     // Advance to Step 2
-    await waitFor(() => screen.getByTestId('cert-invitation-code-input'));
-    fireEvent.change(screen.getByTestId('cert-invitation-code-input'), { target: { value: 'INV-TEST-UNKNOWN' } });
-    fireEvent.click(screen.getByTestId('request-cert-challenge-btn'));
 
     await waitFor(() => screen.getByTestId('public-cert-input'));
 
@@ -380,14 +382,11 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
     render(
       <AppProvider>
-        <CertificateEnrollmentView />
+        <CertificateEnrollmentView initialChallenge={mockChallenge} />
       </AppProvider>
     );
 
     // Advance to Step 2
-    await waitFor(() => screen.getByTestId('cert-invitation-code-input'));
-    fireEvent.change(screen.getByTestId('cert-invitation-code-input'), { target: { value: 'INV-VALID-GOOD' } });
-    fireEvent.click(screen.getByTestId('request-cert-challenge-btn'));
 
     await waitFor(() => screen.getByTestId('public-cert-input'));
     fireEvent.change(screen.getByTestId('public-cert-input'), {
@@ -612,14 +611,11 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
     render(
       <AppProvider>
-        <CertificateEnrollmentView />
+        <CertificateEnrollmentView initialChallenge={mockChallenge} />
       </AppProvider>
     );
 
     // Step 1
-    await waitFor(() => screen.getByTestId('cert-invitation-code-input'));
-    fireEvent.change(screen.getByTestId('cert-invitation-code-input'), { target: { value: 'INV-DEV-MOCK' } });
-    fireEvent.click(screen.getByTestId('request-cert-challenge-btn'));
 
     // Step 2 shows Dev Mock Sign button when devMockCertificateEnabled is true
     await waitFor(() => {

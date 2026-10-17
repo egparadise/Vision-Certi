@@ -2,6 +2,17 @@
 
 PACS가 기존 ID/비밀번호를 검증한 뒤, 서버 간 HMAC 인증으로 최초 등록을 시작한다. 사용자가 관리자 초대 코드를 입력할 필요가 없다. INVIZ는 PACS 비밀번호를 받거나 보관하지 않는다.
 
+관리자 사전등록과 초대 발급·초대 기반 등록은 기본적으로 중지되어 있다. 설정은
+`visioncerti.doctor.admin-invitations-enabled` / `VISIONCERTI_ADMIN_INVITATIONS_ENABLED`이며 기본값은
+`false`다. 이 상태에서는 기존 미사용 초대와 이미 발급된 초대 기반 인증 요청의 완료도
+`403 ADMIN_INVITATIONS_DISABLED`로 거절한다. `/v1/doctor-activation/config`의
+`adminInvitationsEnabled`가 현재 정책을 표시한다. 기존 기능을 재개할 때만 명시적으로 `true`를 설정한다.
+
+이 스위치는 PACS 자체 등록, 공동인증서 로그인, 유효한 의사 세션을 통한 인증서 갱신,
+관리자의 인증서 검토·정지·폐지에는 영향을 주지 않는다. PACS 로그인마다 등록된 공동인증서의
+새로운 일회성 요청 서명을 검증한다. 최초 계정 연결에 사용하는 PACS 계정 확인과 이후의
+공동인증서 로그인은 구분한다.
+
 ## API
 
 두 API 모두 기존 `IntegrationAuthFilter`의 HMAC, 시간 및 nonce 검증과 기관 허용 목록을 적용한다.
@@ -11,7 +22,7 @@ PACS가 기존 ID/비밀번호를 검증한 뒤, 서버 간 HMAC 인증으로 �
 
 `registrationStatus`는 `NOT_REGISTERED`, `PENDING`, `ACTIVE`, `SUSPENDED`, `REVOKED` 중 하나다. 등록되지 않은 계정의 나머지 값은 null이다. `ACTIVE`는 의사 활성 상태와 현재 인증서의 신뢰체인·유효기간·폐지 상태를 다시 확인한 뒤 반환한다. 인증서 상태를 확인할 수 없으면 오류로 종료한다.
 
-PACS 서버는 요청자 세션에서 계정과 면허 정보를 조회해야 한다. 브라우저가 제공한 사용자 ID나 면허번호를 그대로 전달해서는 안 된다. 이후 비밀번호 로그인 정책과 PACS 세션 발급은 PACS 서버가 담당한다.
+PACS 서버는 요청자 세션에서 계정과 면허 정보를 조회해야 한다. 브라우저가 제공한 사용자 ID나 면허번호를 그대로 전달해서는 안 된다. 이후 매 로그인 시 공동인증서 인증 결과를 확인하고 PACS 세션을 발급하는 절차는 PACS 서버가 담당한다.
 
 ## 등록과 확인
 

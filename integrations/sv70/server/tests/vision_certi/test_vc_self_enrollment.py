@@ -1,5 +1,6 @@
 """First-login enrollment uses trusted PACS records; proof remains a separate real certificate operation."""
 import json
+import datetime
 import importlib.util
 from dataclasses import replace
 from pathlib import Path
@@ -47,6 +48,15 @@ class SelfEnrollmentTest(unittest.TestCase):
     def call(self, method, user=7):
         return self.env.call(method, user)
 
+    def certificate_token(self):
+        self.active()
+        self.call(self.env.service.enrollment_status)
+        self.env.fake.licenses[self.doctor] = "7"
+        return self.env.login(self.doctor, enrollment_id=self.enrollment, fingerprint="ab" * 32)
+
+    def access(self, token, user=7):
+        return self.env.call(self.env.service.require_enrolled_pacs_access, user, 'Bearer ' + token)
+
     def test_start_only_authenticated_own_trusted_profile(self):
         self.assertEqual(self.http.post('/api/vc/auth/enrollment-start').status_code, 401)
         r = self.http.post('/api/vc/auth/enrollment-start', headers=self.auth,
@@ -69,13 +79,16 @@ class SelfEnrollmentTest(unittest.TestCase):
         self.http.get('/api/vc/auth/enrollment-status?pacsUserId=8', headers=self.auth)
         self.env.client.enrollment_status.assert_called_once_with(TENANT, "7")
 
-    def test_pending_denied_active_password_access_links_once_without_certificate_session(self):
+    def test_pending_and_active_password_access_denied_while_linking_stays_idempotent(self):
         with self.assertRaises(VcError) as e:
             self.call(self.env.service.require_enrolled_pacs_access)
-        self.assertEqual(e.exception.code, "VC_ENROLLMENT_REQUIRED")
+        self.assertEqual(e.exception.code, "VC_SESSION_REQUIRED")
         self.active()
         for _ in range(2):
-            self.call(self.env.service.require_enrolled_pacs_access)
+            self.call(self.env.service.enrollment_status)
+            with self.assertRaises(VcError) as e:
+                self.access('legacy-password-token')
+            self.assertEqual(e.exception.code, "VC_SESSION_REQUIRED")
         with self.env.Session() as s:
             links = s.scalars(select(VcDoctorLink)).all()
             self.assertEqual(len(links), 1)
@@ -85,16 +98,51 @@ class SelfEnrollmentTest(unittest.TestCase):
             self.assertEqual(s.scalar(select(func.count()).select_from(VcSession)), 0)
 
     def test_revocation_suspension_and_outage_rechecked_after_active(self):
-        self.active()
-        self.call(self.env.service.require_enrolled_pacs_access)
+        token = self.certificate_token()
+        self.access(token)
         for state in ["REVOKED", "SUSPENDED", "PENDING", "NOT_REGISTERED"]:
             self.status["registrationStatus"] = state
             with self.assertRaises(VcError):
-                self.call(self.env.service.require_enrolled_pacs_access)
+                self.access(token)
         self.env.client.enrollment_status.side_effect = VcUnavailable('test timeout')
         with self.assertRaises(VcError) as e:
-            self.call(self.env.service.require_enrolled_pacs_access)
+            self.access(token)
         self.assertEqual(e.exception.status, 503)
+
+    def test_expired_revoked_and_wrong_user_certificate_sessions_denied(self):
+        token = self.certificate_token()
+        self.access(token)
+        with self.assertRaises(VcError):
+            self.access(token, user=8)
+        self.env.clock.now += datetime.timedelta(minutes=61)
+        with self.assertRaises(VcError) as e:
+            self.access(token)
+        self.assertEqual(e.exception.code, 'VC_SESSION_REQUIRED')
+        self.env.clock.now -= datetime.timedelta(minutes=61)
+        self.env.sql("UPDATE pacs_vc_session SET revoked_at=:at", at=self.env.clock())
+        with self.assertRaises(VcError) as e:
+            self.access(token)
+        self.assertEqual(e.exception.code, 'VC_SESSION_REQUIRED')
+
+    def test_changed_certificate_requires_new_certificate_login(self):
+        token = self.certificate_token()
+        for key, value in [('certificateEnrollmentId', str(uuid.uuid4())), ('fingerprintSha256', 'cd' * 32)]:
+            previous = self.status[key]
+            self.status[key] = value
+            with self.assertRaises(VcError) as e:
+                self.access(token)
+            self.assertEqual(e.exception.code, 'VC_SESSION_REQUIRED')
+            self.status[key] = previous
+
+    def test_legacy_step_up_proves_certificate_and_unlocks_access(self):
+        self.active()
+        self.call(self.env.service.enrollment_status)
+        self.env.fake.licenses[self.doctor] = '7'
+        handoff = self.env.fake.issue_handoff(self.doctor, enrollment_id=self.enrollment, fingerprint='ab' * 32)
+        response = self.http.post('/api/vc/auth/certificate-step-up', headers=self.auth,
+                                  json={'handoffCode': handoff})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.access(response.json()['token'])
 
     def test_conflicting_and_revoked_local_links_not_overwritten(self):
         self.active()
@@ -179,6 +227,10 @@ class SelfEnrollmentTest(unittest.TestCase):
 
         @app.get('/api/study')
         @app.get('/api/vc/auth/enrollment-status')
+        @app.post('/api/vc/auth/enrollment-start')
+        @app.post('/api/vc/auth/certificate-step-up')
+        @app.get('/api/user/auth/logout')
+        @app.get('/api/vc/config')
         def endpoint():
             return {'reached': True}
 
@@ -188,13 +240,22 @@ class SelfEnrollmentTest(unittest.TestCase):
             with TestClient(app) as http:
                 headers = {'Authorization': 'Bearer legacy-token'}
                 first = http.get('/api/study', headers=headers)
-                self.assertEqual((first.status_code, first.json()['code']), (403, 'VC_ENROLLMENT_REQUIRED'))
+                self.assertEqual((first.status_code, first.json()['code']), (401, 'VC_SESSION_REQUIRED'))
                 self.assertEqual(http.get('/api/vc/auth/enrollment-status', headers=headers).status_code, 200)
-                self.active()
-                self.assertEqual(http.get('/api/study', headers=headers).status_code, 200)
+                self.assertEqual(http.post('/api/vc/auth/enrollment-start', headers=headers).status_code, 200)
+                self.assertEqual(http.post('/api/vc/auth/certificate-step-up', headers=headers).status_code, 200)
+                self.assertEqual(http.get('/api/user/auth/logout', headers=headers).status_code, 200)
+                self.assertEqual(http.get('/api/vc/config', headers=headers).status_code, 200)
+                token = self.certificate_token()
+                self.assertEqual(http.get('/api/study', headers=headers).status_code, 401)
+                self.assertEqual(lookup.call_count, 1, 'Cached JWT cannot become a certificate session')
+                cert_headers = {'Authorization': 'Bearer ' + token}
+                self.assertEqual(http.get('/api/study', headers=cert_headers).status_code, 200)
                 self.status['registrationStatus'] = 'REVOKED'
-                self.assertEqual(http.get('/api/study', headers=headers).status_code, 403)
-                self.assertEqual(lookup.call_count, 1, 'Cached JWT must still recheck current enrollment')
+                self.assertEqual(http.get('/api/study', headers=cert_headers).status_code, 403)
+                self.status['registrationStatus'] = 'ACTIVE'
+                self.env.clock.now += datetime.timedelta(minutes=61)
+                self.assertEqual(http.get('/api/study', headers=cert_headers).status_code, 401)
 
 
 if __name__ == '__main__':

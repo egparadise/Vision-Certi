@@ -21,11 +21,11 @@ export const CertificateEnrollmentView: React.FC<{
   initialMode?: 'PC_ENROLL' | 'PC_LOGIN';
   initialChallenge?: CertificateChallenge;
   onEnrollmentComplete?: () => void;
-}> = ({ initialMode = 'PC_ENROLL', initialChallenge, onEnrollmentComplete }) => {
+}> = ({ initialMode = 'PC_LOGIN', initialChallenge, onEnrollmentComplete }) => {
   const { client } = useApp();
 
   // Mode: PC_ENROLL (initial onboarding), PC_LOGIN (returning doctor), MOBILE, GOOGLE_AUX
-  const [authMode, setAuthMode] = useState<'PC_ENROLL' | 'PC_LOGIN' | 'MOBILE' | 'GOOGLE'>(initialMode);
+  const [authMode, setAuthMode] = useState<'PC_ENROLL' | 'PC_LOGIN' | 'MOBILE' | 'GOOGLE'>(initialChallenge ? 'PC_ENROLL' : initialMode);
 
   // Step 1: Challenge Request
   // Step 2: Proof Submission & CA Validation
@@ -39,7 +39,6 @@ export const CertificateEnrollmentView: React.FC<{
   const [configError, setConfigError] = useState<string | null>(null);
 
   // Invitation code and challenge
-  const [invitationCode, setInvitationCode] = useState('');
   const [challenge, setChallenge] = useState<CertificateChallenge | null>(initialChallenge ?? null);
 
   // Security critical: activationToken and active session must ONLY be kept in volatile component memory
@@ -150,12 +149,7 @@ export const CertificateEnrollmentView: React.FC<{
       if (purpose === 'CERTIFICATE_LOGIN') {
         chal = await client.createCertificateLoginChallenge();
       } else {
-        if (!invitationCode.trim()) {
-          setError('사전등록 초대 코드를 입력해주세요.');
-          setLoading(false);
-          return;
-        }
-        chal = await client.createCertificateChallenge(invitationCode.trim(), purpose);
+        throw new Error('최초 인증서 등록은 PACS에서 본인 계정을 확인한 뒤 시작해주세요.');
       }
       setChallenge(chal);
       setStep(2);
@@ -462,7 +456,7 @@ export const CertificateEnrollmentView: React.FC<{
           {initialChallenge ? 'PACS 최초 공동인증서 등록' : '의사 본인확인 및 전자서명 인증서 등록 (Certificate Enrollment)'}
         </h2>
         <p style={{ margin: 0, fontSize: '0.875rem', lineHeight: '1.5', color: 'var(--text-muted, #64748b)' }}>
-          {initialChallenge ? <>로그인한 PACS 계정에 본인의 공동인증서를 연결합니다. 등록과 활성화가 완료되면 다음부터 기존 PACS ID·비밀번호로 로그인할 수 있습니다.</> : <>본 의료 플랫폼은 <strong>2계층 암호화 아키텍처</strong>를 운영합니다.<br />
+          {initialChallenge ? <>로그인한 PACS 계정에 본인의 공동인증서를 연결합니다. 등록과 활성화 후에도 매번 공동인증서로 로그인합니다.</> : <>본 의료 플랫폼은 <strong>2계층 암호화 아키텍처</strong>를 운영합니다.<br />
           • <strong>1계층 (의사 본인확인):</strong> 외부 공인/공동/금융인증서를 통한 비대면 신원 검증 (개인키/비밀번호 입력 절대 금지)<br />
           • <strong>2계층 (판독문 전자서명):</strong> OpenBao Transit 소프트웨어 키 관리(Software Transit) 기반의 전용 전자서명키 발급</>}
         </p>
@@ -520,7 +514,7 @@ export const CertificateEnrollmentView: React.FC<{
             cursor: 'pointer',
           }}
         >
-          PC 공동/금융인증서 등록 (초대)
+          공동인증서 직접 등록
         </button>
         <button
           type="button"
@@ -612,52 +606,10 @@ export const CertificateEnrollmentView: React.FC<{
         <div className="card" style={{ padding: '1.5rem', background: 'var(--bg-card, #ffffff)', borderRadius: '8px', border: '1px solid var(--border-color, #e2e8f0)' }}>
           {authMode === 'PC_ENROLL' && (
             <div data-testid="pc-enroll-step-1">
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                1단계: 사전등록 초대 코드 확인 및 서명 챌린지 생성
-              </h3>
-              <p style={{ color: 'var(--text-muted, #64748b)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-                관리자로부터 발급받은 의사 사전등록 초대 코드를 입력하여 일회용 전자서명 챌린지 바이트를 수령합니다.
-              </p>
-
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
-                  초대 코드 (Invitation Code) <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input
-                  type="text"
-                  data-testid="cert-invitation-code-input"
-                  value={invitationCode}
-                  onChange={e => setInvitationCode(e.target.value)}
-                  placeholder="예: INV-DOC-ABCD1234"
-                  style={{
-                    width: '100%',
-                    padding: '0.625rem',
-                    fontSize: '0.95rem',
-                    borderRadius: '4px',
-                    border: '1px solid var(--border-color, #cbd5e1)',
-                  }}
-                />
-              </div>
-
-              <button
-                type="button"
-                data-testid="request-cert-challenge-btn"
-                disabled={loading || !invitationCode.trim()}
-                onClick={() => handleRequestChallenge('CERTIFICATE_ENROLLMENT')}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  fontSize: '0.95rem',
-                  fontWeight: 600,
-                  background: 'var(--primary-color, #0284c7)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: loading || !invitationCode.trim() ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {loading ? '챌린지 요청 중...' : '인증서 서명 챌린지 수령 (Next)'}
-              </button>
+              <h3>판독의사 공동인증서 직접 등록</h3>
+              <p>PACS 로그인 화면에서 본인 계정을 확인한 뒤 공동인증서를 등록해주세요. 관리자 초대코드는 필요하지 않습니다.</p>
+              <p>등록 후에도 매번 공동인증서로 로그인합니다.</p>
+              <a className="btn btn-primary" href="#/certificates/pacs-enroll">최초 등록 안내</a>
             </div>
           )}
 
@@ -732,7 +684,7 @@ export const CertificateEnrollmentView: React.FC<{
                     setMobileError(null);
                     await client.createMobileCertificateTransaction(
                       'CERTIFICATE_ENROLLMENT',
-                      invitationCode.trim() || undefined
+                      undefined
                     );
                   } catch (err: unknown) {
                     setMobileError(err instanceof Error ? err.message : '모바일 인증 요청 실패');

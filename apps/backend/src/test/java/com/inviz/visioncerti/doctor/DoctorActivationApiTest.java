@@ -37,6 +37,7 @@ import org.springframework.test.web.servlet.request.AbstractMockHttpServletReque
  * test key (real signature verification, test issuer key). Admin uses dev headers; the physician uses only a bearer.
  */
 @SpringBootTest(properties = {
+        "visioncerti.doctor.admin-invitations-enabled=true",
         "visioncerti.doctor.signing-backend=DEV_SIMULATED",
         "visioncerti.doctor.activation-policy=GOOGLE_PERMITTED_DEV",
         "visioncerti.doctor.dev-identity-enabled=true"})

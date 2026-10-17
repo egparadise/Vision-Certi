@@ -166,6 +166,7 @@ class ProductionRuntimeTest {
 
     private Map<String, Object> prodProperties() {
         Map<String, Object> p = new HashMap<>();
+        p.put("visioncerti.doctor.admin-invitations-enabled", "true"); // legacy lifecycle scenarios opt in
         p.put("server.port", "0");
         p.put("visioncerti.db.url", db.url());
         p.put("visioncerti.db.username", db.username());

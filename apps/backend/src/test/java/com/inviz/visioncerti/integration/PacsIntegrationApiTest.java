@@ -44,6 +44,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * signing with the physician's explicit approval at Vision-Certi. Synthetic PKI and DEV_SIMULATED keys only.
  */
 @SpringBootTest(properties = {
+        "visioncerti.doctor.admin-invitations-enabled=true",
         "visioncerti.doctor.signing-backend=DEV_SIMULATED",
         "visioncerti.pacs.client-id=" + PacsIntegrationApiTest.CLIENT,
         "visioncerti.pacs.client-secret=" + PacsIntegrationApiTest.SECRET,

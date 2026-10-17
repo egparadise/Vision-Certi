@@ -13,7 +13,6 @@ import { AuditEventsView } from './components/AuditEventsView';
 import { CertificatesView } from './components/CertificatesView';
 import { RegistrationView } from './components/RegistrationView';
 import { DoctorAdminView } from './components/DoctorAdminView';
-import { DoctorActivationView } from './components/DoctorActivationView';
 import { CertificateEnrollmentView } from './components/CertificateEnrollmentView';
 import { CertificateLoginView } from './components/CertificateLoginView';
 import { PersonalCertificateRegistration } from './components/PersonalCertificateRegistration';
@@ -125,7 +124,7 @@ export const App: React.FC = () => {
         <Header />
         <Navigation />
         <main className="main-content" id="main-content">
-          <DoctorActivationView />
+          <PacsCertificateEnrollment />
         </main>
       </div>
     );
@@ -137,7 +136,7 @@ export const App: React.FC = () => {
         <Header />
         <Navigation />
         <main className="main-content" id="main-content">
-          <CertificateEnrollmentView initialMode={hash.startsWith('#/certificates/pacs-login') ? 'PC_LOGIN' : 'PC_ENROLL'} />
+          <CertificateEnrollmentView initialMode="PC_LOGIN" />
         </main>
       </div>
     );

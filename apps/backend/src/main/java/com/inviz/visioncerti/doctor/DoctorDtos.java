@@ -132,6 +132,6 @@ public final class DoctorDtos {
 
     public record ConfigResponse(String googleClientId, boolean googleConfigured, boolean devSimulationEnabled,
             String signingBackend, boolean signingBackendAvailable, boolean clinicalUseAllowed,
-            String activationPolicy) {
+            String activationPolicy, boolean adminInvitationsEnabled) {
     }
 }

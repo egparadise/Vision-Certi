@@ -158,7 +158,7 @@ class DoctorSigningFlowTest {
             }
         };
         // Google-only activation under the dev GOOGLE_PERMITTED_DEV policy; certificate gating is covered elsewhere.
-        doctors = new DoctorService(audit, hooked, google.verifier(), clock, DoctorPolicy.defaults(), false, false);
+        doctors = new DoctorService(audit, hooked, google.verifier(), clock, DoctorPolicy.defaults(), false, false, true);
         DocumentRepository documentRepository = new DocumentRepository();
         documents = new DocumentService(documentRepository, directory, doctors, audit, clock, 1_000_000);
         signingRepository = new SigningRepository();

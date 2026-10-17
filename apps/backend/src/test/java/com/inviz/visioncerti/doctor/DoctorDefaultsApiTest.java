@@ -34,7 +34,8 @@ class DoctorDefaultsApiTest {
                 .andExpect(jsonPath("$.signingBackend").value("NOT_CONFIGURED"))
                 .andExpect(jsonPath("$.signingBackendAvailable").value(false))
                 .andExpect(jsonPath("$.clinicalUseAllowed").value(false))
-                .andExpect(jsonPath("$.activationPolicy").value("CERTIFICATE_REQUIRED"));
+                .andExpect(jsonPath("$.activationPolicy").value("CERTIFICATE_REQUIRED"))
+                .andExpect(jsonPath("$.adminInvitationsEnabled").value(false));
 
         mvc.perform(post("/v1/doctor-activation/google").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"challengeId\":\"" + UUID.randomUUID() + "\",\"idToken\":\"x\"}"))
@@ -48,5 +49,19 @@ class DoctorDefaultsApiTest {
                                 + "\",\"email\":\"a@example.com\",\"subject\":\"s\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("DEV_IDENTITY_DISABLED"));
+    }
+
+    @Test
+    void defaultDisablesAdminCreationReissueAndPublicInvitationEntryPoints() throws Exception {
+        mvc.perform(post("/v1/admin/doctors").header("X-Tenant-Id", "demo-hospital-a")
+                        .header("X-Actor-Id", "admin-demo").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ADMIN_INVITATIONS_DISABLED"));
+        mvc.perform(post("/v1/admin/doctors/" + UUID.randomUUID() + "/invitation")
+                        .header("X-Tenant-Id", "demo-hospital-a").header("X-Actor-Id", "admin-demo"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ADMIN_INVITATIONS_DISABLED"));
+        for (String path : new String[]{"/v1/doctor-activation/challenges", "/v1/certificate-enrollment/challenges"}) {
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{\"invitationCode\":\"OLD-INVITE\"}"))
+                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ADMIN_INVITATIONS_DISABLED"));
+        }
     }
 }

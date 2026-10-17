@@ -28,6 +28,9 @@ import {
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 
+// Administrator invitation issuance is temporarily disabled; review and suspension remain available.
+const adminInvitationsEnabled = false;
+
 export const DoctorAdminView: React.FC = () => {
   const { client, tenantId, isMockMode, mockStore, setMockStore } = useApp();
 
@@ -163,6 +166,7 @@ export const DoctorAdminView: React.FC = () => {
   // Handle Form Submit (Pre-registration)
   const handlePreregister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!adminInvitationsEnabled) return;
     if (!evidenceReviewed) {
       setFormError('관리자의 신원 및 의사 면허 증빙 대조·검토 확인(체크박스)이 필수입니다.');
       return;
@@ -269,7 +273,7 @@ export const DoctorAdminView: React.FC = () => {
 
   // Reissue Invitation
   const handleReissue = async (doc: Doctor) => {
-    if (doc.status !== 'PENDING') return;
+    if (!adminInvitationsEnabled || doc.status !== 'PENDING') return;
     if (!window.confirm(`${doc.name} 의사에게 새 초대 코드를 재발급하시겠습니까? 기존 초대 코드는 즉시 무효화(VOID)됩니다.`)) {
       return;
     }
@@ -386,7 +390,7 @@ export const DoctorAdminView: React.FC = () => {
   const renderStatusBadge = (status: DoctorStatus) => {
     switch (status) {
       case 'PENDING':
-        return <span className="badge badge-pending" data-testid="status-chip-pending">초대 발급 (PENDING)</span>;
+        return <span className="badge badge-pending" data-testid="status-chip-pending">등록 대기 (PENDING)</span>;
       case 'IDENTITY_VERIFIED':
         return <span className="badge" style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>구글 신원 검증 (VERIFIED)</span>;
       case 'CONSENTED':
@@ -516,7 +520,7 @@ export const DoctorAdminView: React.FC = () => {
         </a>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <a href="#/activate" className="btn btn-outline" style={{ textDecoration: 'none', color: 'var(--teal-700)' }}>
-            의사 초대 활성화 화면으로 이동 <ArrowRight size={14} />
+            의사 직접 등록 안내 <ArrowRight size={14} />
           </a>
           <button type="button" onClick={loadDoctors} className="btn btn-secondary" disabled={loading}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> 새로고침
@@ -572,7 +576,7 @@ export const DoctorAdminView: React.FC = () => {
       {/* Grid: Pre-registration Form (Left) & Summary (Right) */}
       <div className="detail-grid" style={{ marginBottom: '24px' }}>
         {/* Left: Pre-registration Form */}
-        <div className="card">
+        {adminInvitationsEnabled && <div className="card">
           <div className="card-header" style={{ backgroundColor: 'var(--teal-50)' }}>
             <span className="card-title" style={{ color: 'var(--teal-900)' }}>
               <UserPlus size={18} style={{ color: 'var(--teal-700)' }} />
@@ -764,14 +768,14 @@ export const DoctorAdminView: React.FC = () => {
               </button>
             </form>
           </div>
-        </div>
+        </div>}
 
         {/* Right: Architecture Notice & Summary */}
         <div className="card">
           <div className="card-header">
             <span className="card-title">
               <Building2 size={18} />
-              기관별 의사 사전등록 현황
+              기관별 의사 등록 현황
             </span>
           </div>
           <div className="card-body">
@@ -793,9 +797,9 @@ export const DoctorAdminView: React.FC = () => {
             <div style={{ fontSize: '0.8rem', color: 'var(--navy-600)', lineHeight: '1.5' }}>
               <strong>보안 원칙 안내:</strong>
               <ul style={{ paddingLeft: '20px', marginTop: '6px' }}>
-                <li>관리자 사전등록은 1회용 초대 코드만 발행합니다 (이메일 자동 발송 없음).</li>
-                <li>초대 코드는 단 한 번만 조회되며 서버에 해시되어 저장됩니다.</li>
-                <li>의사의 서명키는 의사 본인이 직접 구글 인증과 3대 동의를 완료한 후에만 생성됩니다.</li>
+                <li data-testid="admin-invitations-disabled">관리자 사전등록·초대코드 발급은 비활성화되어 있습니다.</li>
+                <li>판독의사가 PACS에서 본인의 공동인증서를 직접 등록하고, 매번 공동인증서로 로그인합니다.</li>
+                <li>의사의 서명키는 인증서 검증, 본인 동의 및 신원·면허 연결 검토를 완료한 후 생성됩니다.</li>
               </ul>
             </div>
           </div>
@@ -803,7 +807,7 @@ export const DoctorAdminView: React.FC = () => {
       </div>
 
       {/* One-time Invitation Code Modal / Banner */}
-      {latestInvitation && (
+      {adminInvitationsEnabled && latestInvitation && (
         <div
           className="card"
           style={{
@@ -901,7 +905,7 @@ export const DoctorAdminView: React.FC = () => {
             <LoadingSpinner message="의사 목록을 불러오는 중입니다..." />
           ) : doctors.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--navy-500)' }}>
-              등록된 의사가 없습니다. 위 양식을 통해 첫 의사를 사전등록하십시오.
+              등록된 의사가 없습니다. 판독의사가 PACS에서 공동인증서 등록을 시작하면 표시됩니다.
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -1010,7 +1014,7 @@ export const DoctorAdminView: React.FC = () => {
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                          {doc.status === 'PENDING' && (
+                          {adminInvitationsEnabled && doc.status === 'PENDING' && (
                             <button
                               type="button"
                               className="btn btn-secondary"
@@ -1296,7 +1300,7 @@ export const DoctorAdminView: React.FC = () => {
                     />
                     <span style={{ fontSize: '0.82rem', color: 'var(--navy-900)', fontWeight: 600 }}>
                       <FileCheck2 size={16} style={{ display: 'inline', verticalAlign: '-3px', marginRight: '4px', color: 'var(--teal-700)' }} />
-                      관리자 본인은 위 인증서 소유자 정보가 사전등록된 의사의 신원 및 의사 면허 정보와 일치함을 검증하였습니다.
+                      관리자 본인은 위 인증서 소유자 정보가 등록된 의사의 신원 및 의사 면허 정보와 일치함을 검증하였습니다.
                     </span>
                   </label>
                 </div>

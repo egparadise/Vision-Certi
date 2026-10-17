@@ -164,6 +164,7 @@ public class DoctorService implements RegisteredSigners {
     private final Clock clock;
     private final DoctorPolicy policy;
     private final boolean devIdentityEnabled;
+    private final boolean adminInvitationsEnabled;
     private final SecureRandom random = new SecureRandom();
     private volatile Instant lastPrune = Instant.EPOCH;
 
@@ -192,14 +193,22 @@ public class DoctorService implements RegisteredSigners {
     public DoctorService(AuditService audit, DoctorCredentialProvider credentials, GoogleIdTokenVerifier google,
             Clock clock, DoctorPolicy policy, Environment environment,
             @Value("${visioncerti.doctor.dev-identity-enabled:false}") boolean devIdentityFlag,
-            @Value("${visioncerti.doctor.activation-policy:CERTIFICATE_REQUIRED}") String activationPolicy) {
+            @Value("${visioncerti.doctor.activation-policy:CERTIFICATE_REQUIRED}") String activationPolicy,
+            @Value("${visioncerti.doctor.admin-invitations-enabled:false}") boolean adminInvitationsEnabled) {
         this(audit, credentials, google, clock, policy,
                 devIdentityFlag && environment.acceptsProfiles(Profiles.of("dev")),
-                certificateRequired(activationPolicy, environment.acceptsProfiles(Profiles.of("dev"))));
+                certificateRequired(activationPolicy, environment.acceptsProfiles(Profiles.of("dev"))),
+                adminInvitationsEnabled);
     }
 
     public DoctorService(AuditService audit, DoctorCredentialProvider credentials, GoogleIdTokenVerifier google,
             Clock clock, DoctorPolicy policy, boolean devIdentityEnabled, boolean certificateRequired) {
+        this(audit, credentials, google, clock, policy, devIdentityEnabled, certificateRequired, false);
+    }
+
+    public DoctorService(AuditService audit, DoctorCredentialProvider credentials, GoogleIdTokenVerifier google,
+            Clock clock, DoctorPolicy policy, boolean devIdentityEnabled, boolean certificateRequired,
+            boolean adminInvitationsEnabled) {
         this.audit = audit;
         this.store = audit.store();
         this.credentials = credentials;
@@ -208,6 +217,7 @@ public class DoctorService implements RegisteredSigners {
         this.policy = policy;
         this.devIdentityEnabled = devIdentityEnabled;
         this.certificateRequired = certificateRequired;
+        this.adminInvitationsEnabled = adminInvitationsEnabled;
     }
 
     static boolean certificateRequired(String activationPolicy, boolean devProfile) {
@@ -239,7 +249,14 @@ public class DoctorService implements RegisteredSigners {
 
     public ConfigResponse config() {
         return new ConfigResponse(google.clientId(), google.configured(), devIdentityEnabled, credentials.backend(),
-                credentials.available(), false, activationPolicy());
+                credentials.available(), false, activationPolicy(), adminInvitationsEnabled);
+    }
+
+    public void requireAdminInvitationsEnabled() {
+        if (!adminInvitationsEnabled) {
+            throw ApiException.forbidden("ADMIN_INVITATIONS_DISABLED",
+                    "관리자 사전등록 및 초대 코드 등록은 현재 중지되어 있습니다. PACS에서 본인 인증서 등록을 진행해 주세요.");
+        }
     }
 
     public static boolean isCertificateMode(String identityMode) {
@@ -268,6 +285,7 @@ public class DoctorService implements RegisteredSigners {
 
     public PreregistrationResponse preregister(RequestActor admin, PreregisterDoctor body) {
         requireAdmin(admin);
+        requireAdminInvitationsEnabled();
         if (body == null) {
             throw invalid("요청 본문이 필요합니다.");
         }
@@ -322,6 +340,7 @@ public class DoctorService implements RegisteredSigners {
 
     public PreregistrationResponse reissueInvitation(RequestActor admin, UUID id) {
         requireAdmin(admin);
+        requireAdminInvitationsEnabled();
         return store.tx(tx -> {
             Doctor doctor = lockInTenant(tx, admin.tenantId(), id);
             boolean reEnrollment = !doctor.status.blocked() && doctor.status != DoctorStatus.PENDING
@@ -418,6 +437,7 @@ public class DoctorService implements RegisteredSigners {
     // ------------------------------------------------------------------ challenges and identity
 
     public ChallengeResponse createActivationChallenge(String invitationCode, String source) {
+        requireAdminInvitationsEnabled();
         return store.tx(tx -> {
             Instant now = clock.instant();
             prune(tx, now);
@@ -512,6 +532,7 @@ public class DoctorService implements RegisteredSigners {
                     challenge.invitationHash(), challenge.expiresAt(), true, challenge.expiresAt());
             tx.update(CHALLENGES, used);
             if (used.purpose() == Purpose.ACTIVATION) {
+                requireAdminInvitationsEnabled();
                 Doctor doctor = tx.get(DOCTORS, used.doctorId()).orElse(null);
                 if (doctor != null && doctor.invitationState == InvitationState.LOCKED) {
                     throw invitationLocked();
@@ -527,6 +548,7 @@ public class DoctorService implements RegisteredSigners {
             Doctor doctor;
             String bindingKey = Hashing.sha256Hex(identity.bindingKey());
             if (challenge.purpose() == Purpose.ACTIVATION) {
+                requireAdminInvitationsEnabled();
                 doctor = tx.lockGet(DOCTORS, challenge.doctorId()).orElse(null);
                 if (doctor == null || doctor.invitationState == InvitationState.LOCKED) {
                     throw doctor == null ? invitationInvalid() : invitationLocked();
@@ -1024,6 +1046,7 @@ public class DoctorService implements RegisteredSigners {
 
     /** Resolves an invitation for a certificate challenge (PENDING doctors, or re-enrollment after reissue). */
     public CertificateInvitation claimInvitationForCertificate(String invitationCode, String source) {
+        requireAdminInvitationsEnabled();
         return store.tx(tx -> {
             Instant now = clock.instant();
             prune(tx, now);
@@ -1063,6 +1086,7 @@ public class DoctorService implements RegisteredSigners {
      * IDENTITY_VERIFIED, records login evidence and issues a bearer session in the certificate identity mode.
      */
     public SessionResponse completeCertificateIdentity(CertificateIdentity identity) {
+        if (identity.invitationHash() != null) requireAdminInvitationsEnabled();
         return store.tx(tx -> {
             Instant now = clock.instant();
             Doctor doctor = tx.lockGet(DOCTORS, identity.doctorId()).orElse(null);

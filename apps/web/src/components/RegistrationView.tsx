@@ -148,23 +148,23 @@ export function RegistrationView() {
           {step === 0 && <>
             <p className="enroll-section-label">01 / ACCOUNT TYPE</p><h2 ref={heading} tabIndex={-1}>어떤 유형으로 가입하시나요?</h2><p className="enroll-description">개인과 의료인에게 필요한 가입 항목을 안내합니다.</p>
             <div className="enroll-type-options" role="radiogroup" aria-label="가입 유형">
-              {([{ type: 'PERSONAL', title: '개인', subtitle: '개인 전자인증 · 전자서명 서비스', icon: <UserRound size={25} /> }, { type: 'CLINICIAN', title: '의료인 (판독의)', subtitle: '관리자 사전등록 및 초대 활성화 전용', icon: <Stethoscope size={25} /> }] as const).map(item => <label key={item.type} className={`enroll-type ${accountType === item.type ? 'selected' : ''}`}><input type="radio" name="accountType" value={item.type} checked={accountType === item.type} onChange={() => setAccountType(item.type)} /><span className="enroll-type-icon">{item.icon}</span><span><strong>{item.title}</strong><small>{item.subtitle}</small></span><span className="enroll-radio-mark">{accountType === item.type && <Check size={14} />}</span></label>)}
+              {([{ type: 'PERSONAL', title: '개인', subtitle: '개인 전자인증 · 전자서명 서비스', icon: <UserRound size={25} /> }, { type: 'CLINICIAN', title: '의료인 (판독의)', subtitle: 'PACS 계정 확인 후 공동인증서 직접 등록', icon: <Stethoscope size={25} /> }] as const).map(item => <label key={item.type} className={`enroll-type ${accountType === item.type ? 'selected' : ''}`}><input type="radio" name="accountType" value={item.type} checked={accountType === item.type} onChange={() => setAccountType(item.type)} /><span className="enroll-type-icon">{item.icon}</span><span><strong>{item.title}</strong><small>{item.subtitle}</small></span><span className="enroll-radio-mark">{accountType === item.type && <Check size={14} />}</span></label>)}
             </div>
             {accountType === 'CLINICIAN' ? (
               <div className="enroll-clinician-guide" style={{ marginTop: '16px', padding: '16px', backgroundColor: 'var(--navy-50, #f8fafc)', borderRadius: '8px', border: '1px solid var(--teal-500, #14b8a6)' }} data-testid="clinician-activation-notice">
                 <h3 style={{ fontSize: '0.95rem', color: 'var(--navy-900, #0f172a)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Stethoscope size={18} style={{ color: 'var(--teal-700, #0f766e)' }} />
-                  의사 계정은 병원 관리자의 사전 등록 및 초대 활성화로 진행됩니다
+                  판독의사가 PACS에서 공동인증서를 직접 등록합니다
                 </h3>
                 <p style={{ fontSize: '0.85rem', color: 'var(--navy-700, #334155)', lineHeight: '1.5', marginBottom: '12px' }}>
-                  판독의(의료인) 계정은 환자 안전 및 의료법 준수를 위해 소속 의료기관 관리자의 신원·면허 사전 검증을 거친 후 발급된 <strong>1회용 초대 코드</strong>를 통해서만 활성화할 수 있습니다. 자가 면허 등록 가입은 지원되지 않습니다.
+                  PACS에서 본인 계정을 확인한 뒤 인증서 검증, 이용 동의 및 신원·면허 연결 검토를 진행합니다. <strong>관리자 초대코드는 필요하지 않으며, 등록 후에도 매번 공동인증서로 로그인합니다.</strong>
                 </p>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <a href="#/activate" className="enroll-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }} data-testid="link-to-doctor-activation">
-                    초대 코드로 의사 계정 활성화하기 <ArrowRight size={16} />
+                    공동인증서 직접 등록 안내 <ArrowRight size={16} />
                   </a>
                   <a href="#/doctors" className="enroll-secondary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }} data-testid="link-to-doctor-admin">
-                    관리자이신가요? 의사 사전등록 관리
+                    관리자 인증서 검토·계정 관리
                   </a>
                 </div>
               </div>

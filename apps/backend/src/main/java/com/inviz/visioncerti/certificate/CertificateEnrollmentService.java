@@ -170,6 +170,7 @@ public class CertificateEnrollmentService implements CertificateGate {
     /** Enrollment challenge from an invitation code, or (principal != null) a renewal for the signed-in doctor. */
     public ChallengeResponse createEnrollmentChallenge(String invitationCode, DoctorPrincipal principal,
             String source) {
+        if (principal == null) doctors.requireAdminInvitationsEnabled();
         requireTrust();
         UUID doctorId;
         String tenantId;
@@ -691,6 +692,7 @@ public class CertificateEnrollmentService implements CertificateGate {
     // ------------------------------------------------------------------ mobile
 
     public MobileStartResponse startMobile(String purpose, String invitationCode, String source) {
+        if (PURPOSE_ENROLLMENT.equals(purpose)) doctors.requireAdminInvitationsEnabled();
         requireMobile();
         if (!PURPOSE_ENROLLMENT.equals(purpose) && !PURPOSE_LOGIN.equals(purpose)) {
             throw ApiException.unprocessable("VALIDATION_FAILED", "purpose는 CERTIFICATE_ENROLLMENT 또는 CERTIFICATE_LOGIN이어야 합니다.");

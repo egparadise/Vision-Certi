@@ -45,6 +45,7 @@ visioncerti:
     synthetic-identities-enabled: false
   # Physician activation and signing keys (docs/DOCTOR_ACTIVATION.md). Empty values mean "not configured".
   doctor:
+    admin-invitations-enabled: ${VISIONCERTI_ADMIN_INVITATIONS_ENABLED:false}
     google:
       client-id: ${VISIONCERTI_GOOGLE_CLIENT_ID:}
       jwks-uri: ${VISIONCERTI_GOOGLE_JWKS_URI:https://www.googleapis.com/oauth2/v3/certs}

@@ -59,7 +59,30 @@ class DoctorServiceTest {
 
     /** These tests exercise the Google path under the dev-only GOOGLE_PERMITTED_DEV policy (certificateRequired=false). */
     private DoctorService newService(DoctorCredentialProvider provider, boolean devIdentity) {
-        return new DoctorService(audit, provider, google.verifier(), clock, DoctorPolicy.defaults(), devIdentity, false);
+        return new DoctorService(audit, provider, google.verifier(), clock, DoctorPolicy.defaults(), devIdentity, false, true);
+    }
+
+    @Test
+    void disablingInvitationsBlocksPreviouslyIssuedCodesAndOutstandingActivationChallenges() {
+        PreregistrationResponse pre = preregister(service, "old-invite@example.com");
+        ChallengeResponse challenge = service.createActivationChallenge(pre.invitationCode(), "before-disable");
+        DoctorService disabled = new DoctorService(audit, simulated, google.verifier(), clock,
+                DoctorPolicy.defaults(), true, false); // default false, shares the same durable store
+        assertThat(disabled.config().adminInvitationsEnabled()).isFalse();
+        assertThatThrownBy(() -> disabled.reissueInvitation(ADMIN_A, pre.doctor().id()))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("ADMIN_INVITATIONS_DISABLED"));
+        assertThatThrownBy(() -> disabled.createActivationChallenge(pre.invitationCode(), "after-disable"))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("ADMIN_INVITATIONS_DISABLED"));
+        assertThatThrownBy(() -> disabled.claimInvitationForCertificate(pre.invitationCode(), "after-disable"))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("ADMIN_INVITATIONS_DISABLED"));
+        assertThatThrownBy(() -> disabled.completeGoogle(challenge.challengeId(),
+                google.token("old-subject", "old-invite@example.com", challenge.nonce())))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("ADMIN_INVITATIONS_DISABLED"));
+        String hash = com.inviz.visioncerti.common.Hashing.sha256Hex(
+                pre.invitationCode().replace("-", "").replace(" ", "").toUpperCase(java.util.Locale.ROOT));
+        assertThatThrownBy(() -> disabled.completeCertificateIdentity(new DoctorService.CertificateIdentity(
+                pre.doctor().id(), hash, "PC_CERTIFICATE", "issuer", "fingerprint", "CERTIFICATE_ENROLLMENT", UUID.randomUUID())))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("ADMIN_INVITATIONS_DISABLED"));
     }
 
     private PreregistrationResponse preregister(DoctorService s, String email) {
@@ -397,7 +420,7 @@ class DoctorServiceTest {
     @Test
     void certificateRequiredPolicyRefusesGoogleOnlyActivation() {
         DoctorService strict = new DoctorService(audit, simulated, google.verifier(), clock, DoctorPolicy.defaults(),
-                false, true);
+                false, true, true);
         assertThat(strict.config().activationPolicy()).isEqualTo("CERTIFICATE_REQUIRED");
         PreregistrationResponse pre = preregister(strict, "strict@example.com");
         DoctorPrincipal p = principal(strict, verifyGoogle(strict, pre.invitationCode(), "sub-strict",

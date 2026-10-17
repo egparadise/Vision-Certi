@@ -252,7 +252,7 @@ class VcIntegrationService:
         session.commit()
         return {"doctorId": result["doctorId"], "challenge": result["challenge"]}
 
-    def require_enrolled_pacs_access(self, session, manage_session, user_idx):
+    def require_enrolled_pacs_access(self, session, manage_session, user_idx, authorization=None):
         if not self.config.guard_active:
             return
         # The certificate policy applies only to doctors. A misconfigured provider must not lock staff out of PACS.
@@ -260,10 +260,19 @@ class VcIntegrationService:
             user = self.port.get_user(manage_session, int(user_idx))
             if user is not None and user.active and user.pacs_user and not user.is_doctor:
                 return
+        # Enrollment is not login authentication. Each physician request needs a live certificate session;
+        # a cached/password JWT, client flags or a remembered ACTIVE enrollment cannot satisfy this check.
+        principal = self.resolve_session(session, manage_session, authorization)
+        if principal.user_idx != user_idx:
+            raise VcError(401, "VC_SESSION_REQUIRED", "Certificate session does not match the PACS account")
         result = self.enrollment_status(session, manage_session, user_idx)
-        if result["registrationStatus"] not in {"ACTIVE", "NOT_REQUIRED"}:
+        if result["registrationStatus"] != "ACTIVE":
             raise VcError(403, "VC_ENROLLMENT_REQUIRED", "Complete first-login certificate registration",
                           data={"registrationStatus": result["registrationStatus"]})
+        if (result["doctorId"] != principal.doctor_id
+                or result["certificateEnrollmentId"] != principal.enrollment_id
+                or result["fingerprintSha256"] != principal.certificate_fingerprint):
+            raise VcError(401, "VC_SESSION_REQUIRED", "Registered certificate changed; log in with it again")
 
     def certificate_login(self, session: Session, manage_session: Session, handoff_code, client_ip: str | None):
         self.require_operational()

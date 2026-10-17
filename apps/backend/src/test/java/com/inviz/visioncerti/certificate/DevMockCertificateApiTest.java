@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 /** The opt-in dev MOCK_CERTIFICATE shortcut still runs path + CRL + review + consent and is labeled as mock. */
 @SpringBootTest(properties = {
+        "visioncerti.doctor.admin-invitations-enabled=true",
         "visioncerti.doctor.signing-backend=DEV_SIMULATED",
         "visioncerti.cert.dev-mock-enabled=true"})
 @AutoConfigureMockMvc

@@ -25,7 +25,8 @@ export const CertificateEnrollmentView: React.FC<{
   proofMethod?: 'sdk' | 'external';
   initialChallenge?: CertificateChallenge;
   onEnrollmentComplete?: () => void;
-}> = ({ initialMode = 'PC_LOGIN', initialChallenge, onEnrollmentComplete, proofMethod = 'sdk' }) => {
+  onLoginComplete?: (activationToken: string) => Promise<void>;
+}> = ({ initialMode = 'PC_LOGIN', initialChallenge, onEnrollmentComplete, onLoginComplete, proofMethod = 'sdk' }) => {
   const { client } = useApp();
 
   // Mode: PC_ENROLL (initial onboarding), PC_LOGIN (returning doctor), MOBILE, GOOGLE_AUX
@@ -235,6 +236,10 @@ export const CertificateEnrollmentView: React.FC<{
           signatureAlgorithm: proof.signatureAlgorithm,
         });
 
+        if (version !== operationVersion.current) return;
+        // A PACS popup must finish the server-side certificate login before
+        // issuing a one-time handoff. A failed handoff keeps this flow open.
+        if (onLoginComplete) await onLoginComplete(res.activationToken);
         if (version !== operationVersion.current) return;
         setActivationToken(res.activationToken);
         setEnrollment(res.enrollment);

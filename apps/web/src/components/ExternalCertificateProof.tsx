@@ -5,6 +5,7 @@ import { CertificateVirtualKeyboard } from './CertificateVirtualKeyboard';
 import type { CertificateChallenge } from '../types/api';
 import type { LocalSignResult } from '../services/localCertSdkAdapter';
 import { signWithCertificateFiles, type CertificateFiles } from '../services/certificateFileSigner';
+import { discoverBridgeCertificates, type BridgeCertificate } from '../services/localCertificateBridge';
 import { getRememberedDirectory, rememberDirectory, scanCertificateDirectory,
   type CertificateMedium, type DiscoveredCertificate, type ReadableDirectoryHandle } from '../services/localCertificateDiscovery';
 import './physician-account.css';
@@ -14,6 +15,7 @@ type DirectoryPickerWindow = Window & { showDirectoryPicker?: (options: {
 }) => Promise<ReadableDirectoryHandle> };
 const MEDIA: CertificateMedium[] = ['hard-disk', 'removable-disk'];
 const MEDIA_LABEL: Record<CertificateMedium, string> = { 'hard-disk': '하드디스크', 'removable-disk': '이동식디스크' };
+type CertificateChoice = DiscoveredCertificate | BridgeCertificate;
 
 /** The server-supplied exact bytes are signed locally; only public proof fields reach INVIZ. */
 export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, actionLabel, busy, onProof, onCancel }: {
@@ -23,7 +25,7 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   const [medium, setMedium] = useState<CertificateMedium>('hard-disk');
   const [directories, setDirectories] = useState<Partial<Record<CertificateMedium, ReadableDirectoryHandle>>>({});
   const [permissionNeeded, setPermissionNeeded] = useState<Partial<Record<CertificateMedium, boolean>>>({});
-  const [discovered, setDiscovered] = useState<Partial<Record<CertificateMedium, DiscoveredCertificate[]>>>({});
+  const [discovered, setDiscovered] = useState<Partial<Record<CertificateMedium, CertificateChoice[]>>>({});
   const [scanLimited, setScanLimited] = useState<Partial<Record<CertificateMedium, boolean>>>({});
   const scanGeneration = useRef(0);
   const [selectedId, setSelectedId] = useState<string>();
@@ -43,6 +45,7 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   const [now, setNow] = useState(Date.now());
   const entries = discovered[medium] ?? [];
   const selected = entries.find(entry => entry.id === selectedId);
+  const selectedExpired = Boolean(selected?.expiresAt && selected.expiresAt.getTime() <= now);
   const manualComplete = kind === 'PFX' ? Boolean(bundle) : Boolean(certificate && privateKey);
   const expires = Date.parse(challenge?.expiresAt ?? expiresAt ?? '');
   const expired = !Number.isFinite(expires) || now >= expires;
@@ -81,6 +84,16 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
       setScanning(true);
       for (const item of MEDIA) {
         try {
+          if (item === 'hard-disk') {
+            const local = await discoverBridgeCertificates(item);
+            if (cancelled || generation !== scanGeneration.current) continue;
+            if (local.length) {
+              setDiscovered(previous => ({ ...previous, [item]: local }));
+              if (local.length === 1 && (!local[0].expiresAt || local[0].expiresAt.getTime() > Date.now()))
+                setSelectedId(local[0].id);
+              continue;
+            }
+          }
           const directory = await getRememberedDirectory(item);
           if (!directory || cancelled || generation !== scanGeneration.current) continue;
           setDirectories(previous => ({ ...previous, [item]: directory }));
@@ -158,15 +171,20 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     setError('');
     if (busy || signing || expired) return;
     try {
-      let files: CertificateFiles;
-      if (selected) files = await selected.getFiles();
-      else if (manualMode && kind === 'PFX' && bundle) files = { kind, bundle };
-      else if (manualMode && kind === 'NPKI' && certificate && privateKey) files = { kind, certificate, privateKey, chain };
-      else throw new Error('목록에서 인증서를 선택하거나 인증서 파일을 직접 선택해 주세요.');
+      if (selectedExpired) throw new Error('선택한 인증서가 만료되었습니다. 다른 인증서를 선택해 주세요.');
       setSigning(true);
       const toSign = challenge?.signedPayloadBase64 ?? payloadBase64;
       if (!toSign) throw new Error('서명할 인증 요청이 없습니다. 다시 시도해 주세요.');
-      await onProof(await signWithCertificateFiles(files, password, toSign));
+      if (selected && 'sign' in selected) {
+        await onProof(await selected.sign(password, toSign));
+      } else {
+        let files: CertificateFiles;
+        if (selected) files = await selected.getFiles();
+        else if (manualMode && kind === 'PFX' && bundle) files = { kind, bundle };
+        else if (manualMode && kind === 'NPKI' && certificate && privateKey) files = { kind, certificate, privateKey, chain };
+        else throw new Error('목록에서 인증서를 선택하거나 인증서 파일을 직접 선택해 주세요.');
+        await onProof(await signWithCertificateFiles(files, password, toSign));
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '인증서 서명에 실패했습니다.');
     } finally {
@@ -234,7 +252,7 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
           {permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={signing}>저장된 폴더 접근 허용</button>}
           {directories[medium] && !permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={signing}>목록 새로고침</button>}
         </div>
-        <p className="cert-location-help">선택한 폴더와 하위 폴더를 검색합니다. 브라우저 보안상 처음 한 번은 해당 폴더의 읽기 권한을 허용해야 합니다.</p>
+        <p className="cert-location-help">인비즈 PC 인증서 프로그램이 실행 중이면 NPKI 인증서를 자동으로 표시합니다. 연결되지 않으면 폴더를 선택해 검색할 수 있습니다.</p>
         <details className="cert-manual" onToggle={event => { if (event.currentTarget.open) { setSelectedId(undefined); setManualMode(true); } }}>
           <summary>목록에 없나요? 인증서 파일 직접 선택</summary>
           <label>파일 형식<select value={kind} onChange={event => { setKind(event.target.value as 'PFX' | 'NPKI'); setManualMode(true); setSelectedId(undefined); }}>
@@ -256,7 +274,7 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
         {keyboardOpen && <CertificateVirtualKeyboard onInsert={insertPassword} onBackspace={deletePasswordCharacter}
           onClose={() => setKeyboardOpen(false)} />}
         <div className="cert-dialog-buttons">
-          <button className="enroll-primary" disabled={!password || (!selected && !(manualMode && manualComplete)) || signing}>
+          <button className="enroll-primary" disabled={!password || selectedExpired || (!selected && !(manualMode && manualComplete)) || signing}>
             {signing ? '인증서 확인 중…' : actionLabel ?? '확인'}
           </button>
           <button type="button" className="cert-dialog-cancel" onClick={cancel}>취소</button>

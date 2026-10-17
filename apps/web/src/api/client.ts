@@ -617,15 +617,23 @@ export class ApiClient {
   async loginWithCertificate(
     req: CertificateLoginRequest
   ): Promise<CertificateSessionResponse> {
-    const res = await fetch(`${this.baseUrl}/certificate-enrollment/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Correlation-Id': `web-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      },
-      body: JSON.stringify(req),
-    });
-    return this.handleResponse<CertificateSessionResponse>(res);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30000);
+    try {
+      const res = await fetch(`${this.baseUrl}/certificate-enrollment/login`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Correlation-Id': `web-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        },
+        body: JSON.stringify(req),
+      });
+      return await this.handleResponse<CertificateSessionResponse>(res);
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('인증 서버 응답 시간이 초과되었습니다. PACS에서 다시 로그인해 주세요.');
+      throw error;
+    } finally { window.clearTimeout(timeout); }
   }
 
   async getCertificateEnrollments(token: string): Promise<ListResponse<Enrollment>> {
@@ -816,16 +824,24 @@ export class ApiClient {
     token: string,
     audience: string
   ): Promise<PacsHandoffResponse> {
-    const res = await fetch(`${this.baseUrl}/doctor/pacs-handoffs`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'X-Correlation-Id': `web-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      },
-      body: JSON.stringify({ audience }),
-    });
-    return this.handleResponse<PacsHandoffResponse>(res);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(`${this.baseUrl}/doctor/pacs-handoffs`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Correlation-Id': `web-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        },
+        body: JSON.stringify({ audience }),
+      });
+      return await this.handleResponse<PacsHandoffResponse>(res);
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('PACS 로그인 연결 시간이 초과되었습니다. 다시 시도해 주세요.');
+      throw error;
+    } finally { window.clearTimeout(timeout); }
   }
 
   async getRuntimeCapabilities(): Promise<RuntimeCapabilities> {

@@ -111,10 +111,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--address', default='192.168.45.160', help='this PC LAN IPv4 (INVIZ web)')
     parser.add_argument('--pacs-origins', default=None,
-                        help='comma list for VITE_PACS_ALLOWED_ORIGINS (default: Saintview 5174/5175 on localhost+LAN)')
+                        help='comma list for VITE_PACS_ALLOWED_ORIGINS (default: SaintView dev and Tauri production origins)')
     args = parser.parse_args()
-    origins = args.pacs_origins or ','.join(
-        f'https://{h}:{p}' for h in ('localhost', '127.0.0.1', args.address) for p in (5174, 5175))
+    origins = args.pacs_origins or ','.join([
+        *(f'https://{h}:{p}' for h in ('localhost', '127.0.0.1', args.address) for p in (5174, 5175)),
+        'http://localhost:1421',
+        'http://tauri.localhost',
+    ])
     report = {}
 
     if not listening('127.0.0.1', 15432):

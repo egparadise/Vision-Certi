@@ -18,6 +18,7 @@ import { CertificateEnrollmentView } from './components/CertificateEnrollmentVie
 import { CertificateLoginView } from './components/CertificateLoginView';
 import { PersonalCertificateRegistration } from './components/PersonalCertificateRegistration';
 import { PacsCertificateEnrollment } from './components/PacsCertificateEnrollment';
+import { PacsCertificateLogin } from './components/PacsCertificateLogin';
 
 export const AppContent: React.FC = () => {
   const { activeTab, tenantId, actorId, isMockMode, runtimeCapabilities } = useApp();
@@ -134,7 +135,11 @@ export const App: React.FC = () => {
     );
   }
 
-  if (hash.startsWith('#/certificates/pacs-login') || hash.startsWith('#/doctor/sign-requests')) {
+  if (hash.startsWith('#/certificates/pacs-login')) {
+    return <main className="personal-certificate-page"><PacsCertificateLogin /></main>;
+  }
+
+  if (hash.startsWith('#/doctor/sign-requests')) {
     return (
       <div className="app-container">
         <Header />

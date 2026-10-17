@@ -49,6 +49,8 @@ def extend(spec):
     add(d+'/me','get','doctorMe')
     add('/v1/doctor/sign-requests','get','physicianRequests',listed('SignRequest'))
     add('/v1/doctor/sign-requests/{id}','get','physicianRequest',ref('SignRequest'))
+    add('/v1/doctor/sign-requests/{id}/certificate-payload','get','physicianReportCertificatePayload',
+        {'type':'object','properties':{'signedPayloadBase64':{'type':'string'}},'required':['signedPayloadBase64']})
     add('/v1/doctor/sign-requests/{id}/approve','post','physicianApprove',ref('SignRequest'),ref('ApproveSignRequest'),status=202)
     op=add('/v1/doctor/sign-requests/{id}/document','get','physicianDocument')
     op['responses']['200']={'description':'Exact PDF, X-Document-Sha256, no-store','content':{'application/pdf':{'schema':{'type':'string','format':'binary'}}}}
@@ -67,4 +69,3 @@ def extend(spec):
     add(c+'/mobile/transactions/{transactionId}/consume','post','mobileConsume',ref('CertificateSession'),obj({'transactionSecret':S}),'public',description='One-use secret and server-verified transaction required')
     spec['info'].update(version='0.2.0-dev',description='Development only: certificate enrollment, optional Google, OpenBao private X509 and raw ECDSA. In-memory and synthetic staff headers. No clinical validity, HSM, TSA, CAdES or contracted mobile adapter.')
     spec['x-public-operations']=sorted(PUBLIC_PATHS)
-

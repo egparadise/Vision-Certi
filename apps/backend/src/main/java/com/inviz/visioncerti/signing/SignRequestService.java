@@ -182,6 +182,31 @@ public class SignRequestService {
         return store.tx(tx -> documentForDoctorTx(tenantId, doctorId, id));
     }
 
+    /** The exact bytes the physician's registered external certificate must sign for a PACS approval. */
+    public String reportApprovalPayloadForDoctor(String tenantId, String doctorId, UUID id) {
+        return store.tx(tx -> {
+            SignRequest request = find(tenantId, id);
+            if (!request.registeredDoctor() || !request.signerId().equals(doctorId)) {
+                throw ApiException.notFound("SIGN_REQUEST_NOT_FOUND", "Sign request not found");
+            }
+            if (expireIfDue(request) || request.status() != SignRequestStatus.PENDING_APPROVAL) {
+                throw ApiException.conflict("SIGN_REQUEST_NOT_PENDING", "Sign request is not pending approval");
+            }
+            DocumentVersion version = documents.findVersion(tenantId, request.documentVersionId())
+                    .orElseThrow(() -> ApiException.notFound("DOCUMENT_VERSION_NOT_FOUND", "Document version not found"));
+            if (!DocumentService.PACS_REPORT_CONTENT_TYPE.equals(version.contentType())
+                    || !Hashing.sha256Hex(version.content()).equals(request.documentSha256())) {
+                throw ApiException.conflict("REPORT_VERSION_INVALID", "The bound report version is unavailable or changed");
+            }
+            Document document = documents.find(tenantId, request.documentId())
+                    .orElseThrow(() -> ApiException.notFound("DOCUMENT_NOT_FOUND", "Document not found"));
+            if (!document.latestVersion().id().equals(version.id())) {
+                throw ApiException.conflict("DOCUMENT_VERSION_SUPERSEDED", "A newer report version exists");
+            }
+            return Base64.getEncoder().encodeToString(ReportCertificateApproval.payload(request, document));
+        });
+    }
+
     private BoundDocument documentForDoctorTx(String tenantId, String doctorId, UUID id) {
         SignRequest request = find(tenantId, id);
         if (!request.registeredDoctor() || !request.signerId().equals(doctorId)) {
@@ -269,6 +294,19 @@ public class SignRequestService {
                         "Only the signer bound to this request can approve it"));
             }
             byte[] content = checkApprovable(tenantId, doctorId, "REGISTERED_DOCTOR", request, body);
+            DocumentVersion boundVersion = documents.findVersion(tenantId, request.documentVersionId())
+                    .orElseThrow(() -> ApiException.notFound("DOCUMENT_VERSION_NOT_FOUND", "Document version not found"));
+            boolean pacsReport = DocumentService.PACS_REPORT_CONTENT_TYPE.equals(boundVersion.contentType());
+            if (pacsReport) {
+                Document boundDocument = documents.find(tenantId, request.documentId())
+                        .orElseThrow(() -> ApiException.notFound("DOCUMENT_NOT_FOUND", "Document not found"));
+                try {
+                    ReportCertificateApproval.verify(request, boundDocument, body,
+                            snapshot.certificateEnrollmentFingerprint());
+                } catch (ApiException e) {
+                    throw deny(tenantId, doctorId, "REGISTERED_DOCTOR", request, e);
+                }
+            }
             Instant now = clock.instant();
             UUID approvalId = UUID.randomUUID();
             request.markApproved(now, doctorId);
@@ -281,7 +319,9 @@ public class SignRequestService {
                             "keyVersion", Integer.toString(snapshot.keyVersion())));
             request.markSigning();
             repository.updateRequest(request);
-            return new Approved(content, approvalId, approval.id());
+            return new Approved(content, approvalId, approval.id(), pacsReport,
+                    pacsReport ? Base64.getEncoder().encodeToString(ReportCertificateApproval.payload(request,
+                            documents.find(tenantId, request.documentId()).orElseThrow())) : null);
         });
 
         // 2. Remote signature (outside any transaction), then the post-signing re-checks.
@@ -320,7 +360,11 @@ public class SignRequestService {
                     document.externalDocumentId(), request.documentVersionId(), request.documentSha256(), signedAt,
                     approved.approvalAuditId(), DoctorSignatureEvidence.FORMAT, snapshot.signingBackend(),
                     snapshot.cryptographicallyAttributable(), snapshot.revocationChecked(), snapshot.publicKeySpki(),
-                    snapshot.certificateEnrollmentId(), snapshot.certificateEnrollmentFingerprint());
+                    snapshot.certificateEnrollmentId(), snapshot.certificateEnrollmentFingerprint(),
+                    approved.pacsReport() ? body.certificateDerBase64() : null,
+                    approved.pacsReport() ? body.externalSignatureBase64() : null,
+                    approved.pacsReport() ? body.externalSignatureAlgorithm() : null,
+                    approved.externalPayloadBase64());
             Signature signature = new Signature(UUID.randomUUID(), tenantId, request.id(), request.documentId(),
                     request.documentVersionId(), request.documentSha256(), doctorId, snapshot.signatureMode(),
                     "ECDSA_P256_SHA256", Base64.getEncoder().encodeToString(der), false, signedAt, evidence);
@@ -329,7 +373,8 @@ public class SignRequestService {
     }
 
     /** Result of the approval transaction: the exact bytes to sign and the approval identifiers. */
-    private record Approved(byte[] content, UUID approvalId, UUID approvalAuditId) {
+    private record Approved(byte[] content, UUID approvalId, UUID approvalAuditId, boolean pacsReport,
+            String externalPayloadBase64) {
     }
 
     /** Marks a SIGNING request FAILED after a remote/post-check failure and returns the audited refusal. */

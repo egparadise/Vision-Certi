@@ -1790,6 +1790,58 @@
         }
       }
     },
+    "/v1/doctor/sign-requests/{id}/certificate-payload": {
+      "get": {
+        "operationId": "physicianReportCertificatePayload",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "signedPayloadBase64": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "signedPayloadBase64"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/doctor/sign-requests/{id}/approve": {
       "post": {
         "operationId": "physicianApprove",
@@ -2668,6 +2720,18 @@
             "pattern": "^[0-9a-f]{64}$"
           },
           "nonce": {
+            "type": "string"
+          },
+          "reviewAttestation": {
+            "type": "string"
+          },
+          "certificateDerBase64": {
+            "type": "string"
+          },
+          "externalSignatureBase64": {
+            "type": "string"
+          },
+          "externalSignatureAlgorithm": {
             "type": "string"
           }
         },

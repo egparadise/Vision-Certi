@@ -6,6 +6,7 @@ import com.inviz.visioncerti.signing.SigningDtos.ApproveSignRequest;
 import com.inviz.visioncerti.signing.SigningDtos.SignRequestResponse;
 import jakarta.validation.Valid;
 import java.util.UUID;
+import java.util.Map;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -59,6 +60,14 @@ public class DoctorSigningController {
                 .header("X-Document-Sha256", document.sha256())
                 .header("X-Document-Version-Id", document.documentVersionId().toString())
                 .body(document.content());
+    }
+
+    @GetMapping("/{id}/certificate-payload")
+    ResponseEntity<Map<String, String>> certificatePayload(DoctorPrincipal principal, @PathVariable UUID id) {
+        doctors.signerFor(principal).assertCanSign();
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(Map.of("signedPayloadBase64", signRequests.reportApprovalPayloadForDoctor(
+                        principal.tenantId(), principal.doctorId().toString(), id)));
     }
 
     @PostMapping("/{id}/approve")

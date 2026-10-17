@@ -429,6 +429,40 @@ class PacsIntegrationApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"documentSha256\":\"" + sha + "\",\"nonce\":\"" + nonce
                                 + "\",\"reviewAttestation\":\"REVIEWED_EXACT_REPORT_CONTENT\"}"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("REPORT_CERTIFICATE_SIGNATURE_REQUIRED"));
+        String approvalPayload = JsonPath.read(mvc.perform(bearer(get("/v1/doctor/sign-requests/"
+                        + requestId + "/certificate-payload"), doctor.token()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.signedPayloadBase64");
+        String externalSignature = TestPki.sign(doctor.leaf().keys(), "SHA256withRSA",
+                Base64.getDecoder().decode(approvalPayload));
+        TestPki.Leaf otherCertificate = PKI.leaf(TestPki.rsa(2048));
+        mvc.perform(bearer(post("/v1/doctor/sign-requests/" + requestId + "/approve"), doctor.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"documentSha256\":\"" + sha + "\",\"nonce\":\"" + nonce
+                                + "\",\"reviewAttestation\":\"REVIEWED_EXACT_REPORT_CONTENT\""
+                                + ",\"certificateDerBase64\":\"" + otherCertificate.der()
+                                + "\",\"externalSignatureBase64\":\""
+                                + TestPki.sign(otherCertificate.keys(), "SHA256withRSA", Base64.getDecoder().decode(approvalPayload))
+                                + "\",\"externalSignatureAlgorithm\":\"SHA256withRSA\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("REPORT_CERTIFICATE_MISMATCH"));
+        mvc.perform(bearer(post("/v1/doctor/sign-requests/" + requestId + "/approve"), doctor.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"documentSha256\":\"" + sha + "\",\"nonce\":\"" + nonce
+                                + "\",\"reviewAttestation\":\"REVIEWED_EXACT_REPORT_CONTENT\""
+                                + ",\"certificateDerBase64\":\"" + doctor.leaf().der()
+                                + "\",\"externalSignatureBase64\":\"AA==\""
+                                + ",\"externalSignatureAlgorithm\":\"SHA256withRSA\"}"))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("REPORT_CERTIFICATE_SIGNATURE_INVALID"));
+        mvc.perform(bearer(post("/v1/doctor/sign-requests/" + requestId + "/approve"), doctor.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"documentSha256\":\"" + sha + "\",\"nonce\":\"" + nonce
+                                + "\",\"reviewAttestation\":\"REVIEWED_EXACT_REPORT_CONTENT\""
+                                + ",\"certificateDerBase64\":\"" + doctor.leaf().der()
+                                + "\",\"externalSignatureBase64\":\"" + externalSignature
+                                + "\",\"externalSignatureAlgorithm\":\"SHA256withRSA\"}"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.status").value("COMPLETED"));
 
@@ -441,6 +475,7 @@ class PacsIntegrationApiTest {
                         .value(doctor.registrationId()))
                 .andExpect(jsonPath("$.signature.doctorEvidence.certificateEnrollmentFingerprint")
                         .value(doctor.leaf().fingerprint()))
+                .andExpect(jsonPath("$.signature.doctorEvidence.externalSignatureBase64").value(externalSignature))
                 .andReturn().getResponse().getContentAsString();
         // The evidence verifies over the exact snapshot bytes with the recorded key.
         java.security.Signature verifier = java.security.Signature.getInstance("SHA256withECDSA");

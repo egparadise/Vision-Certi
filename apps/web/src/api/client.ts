@@ -505,7 +505,8 @@ export class ApiClient {
   async approveDoctorSignRequest(
     token: string,
     id: string,
-    data: { documentSha256: string; nonce: string; reviewAttestation?: string }
+    data: { documentSha256: string; nonce: string; reviewAttestation?: string;
+      certificateDerBase64?: string; externalSignatureBase64?: string; externalSignatureAlgorithm?: string }
   ): Promise<SignRequest> {
     const res = await fetch(`${this.baseUrl}/doctor/sign-requests/${id}/approve`, {
       method: 'POST',
@@ -517,6 +518,14 @@ export class ApiClient {
       body: JSON.stringify(data),
     });
     return this.handleResponse<SignRequest>(res);
+  }
+
+  async getReportCertificatePayload(token: string, id: string): Promise<{ signedPayloadBase64: string }> {
+    const res = await fetch(`${this.baseUrl}/doctor/sign-requests/${id}/certificate-payload`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}`, 'X-Correlation-Id': `web-${Date.now()}` },
+    });
+    return this.handleResponse<{ signedPayloadBase64: string }>(res);
   }
 
   // --- Certificate Enrollment & Verification APIs ---

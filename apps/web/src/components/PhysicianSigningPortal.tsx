@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { ApiClientError } from '../api/client';
 import { Doctor, SignRequest, PacsReportSnapshot, PacsHandoffResponse } from '../types/api';
+import { ExternalCertificateProof } from './ExternalCertificateProof';
+import type { LocalSignResult } from '../services/localCertSdkAdapter';
 
 interface PhysicianSigningPortalProps {
   token: string;
@@ -79,6 +81,7 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
   const [approving, setApproving] = useState(false);
   const [signingSuccessMsg, setSigningSuccessMsg] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [certificatePayload, setCertificatePayload] = useState<string | null>(null);
 
   // PACS Handoff state
   const [pacsAudience, setPacsAudience] = useState<string>(() => getQueryOrHashParam('audience') || 'pacs-sv70');
@@ -281,20 +284,33 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
     };
   }, [client, selectedSignRequest, token]);
 
-  const handleApprove = async () => {
+  const isPacsReport = Boolean(docContentType?.includes('pacs-report') || parsedPacsReport !== null);
+
+  useEffect(() => {
+    setCertificatePayload(null);
+    if (!selectedSignRequest || !isPacsReport || selectedSignRequest.status !== 'PENDING_APPROVAL') return;
+    let active = true;
+    client.getReportCertificatePayload(token, selectedSignRequest.id)
+      .then(result => { if (active) setCertificatePayload(result.signedPayloadBase64); })
+      .catch(error => { if (active) setActionError(error instanceof Error ? error.message : '판독문 서명 요청을 불러오지 못했습니다.'); });
+    return () => { active = false; };
+  }, [client, token, selectedSignRequest?.id, selectedSignRequest?.status, isPacsReport]);
+
+  const handleApprove = async (proof?: LocalSignResult) => {
     if (!selectedSignRequest || !signConfirmed || !hashVerified || docLoading || docError || !pdfBlobUrl) {
       return;
     }
     setApproving(true);
     setActionError(null);
     try {
-      const isPacsReport = Boolean(
-        docContentType?.includes('pacs-report') || parsedPacsReport !== null
-      );
+      if (isPacsReport && !proof) throw new Error('공동인증서로 판독문에 직접 서명해 주세요.');
       await client.approveDoctorSignRequest(token, selectedSignRequest.id, {
         documentSha256: selectedSignRequest.documentSha256,
         nonce: selectedSignRequest.nonce || '',
         reviewAttestation: isPacsReport ? 'REVIEWED_EXACT_REPORT_CONTENT' : undefined,
+        certificateDerBase64: proof?.certificateDerBase64,
+        externalSignatureBase64: proof?.signatureBase64,
+        externalSignatureAlgorithm: proof?.signatureAlgorithm,
       });
       setSigningSuccessMsg(`요청 #${selectedSignRequest.id.slice(0, 8)} 전자서명이 안전하게 완료되었습니다.`);
       setSignConfirmed(false);
@@ -740,11 +756,15 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
                       </span>
                     </label>
 
-                    <button
+                    {isPacsReport ? (signConfirmed && hashVerified && certificatePayload ?
+                      <ExternalCertificateProof key={selectedSignRequest.id} payloadBase64={certificatePayload}
+                        expiresAt={selectedSignRequest.expiresAt} actionLabel="공동인증서로 판독문 최종 서명"
+                        busy={approving} onProof={handleApprove} /> :
+                      <p role="status">{certificatePayload ? '판독문 확인에 동의하면 공동인증서 서명을 진행할 수 있습니다.' : '판독문 서명 요청을 준비 중입니다.'}</p>) : <button
                       type="button"
                       data-testid="doctor-sign-approve-btn"
                       disabled={approving || !signConfirmed || !hashVerified || docLoading}
-                      onClick={handleApprove}
+                      onClick={() => void handleApprove()}
                       style={{
                         width: '100%',
                         padding: '0.625rem',
@@ -758,7 +778,7 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
                       }}
                     >
                       {approving ? '서명 승인 처리 중...' : '최종 전자서명 승인 (Bearer Authorized Approval)'}
-                    </button>
+                    </button>}
                   </div>
                 )}
               </div>

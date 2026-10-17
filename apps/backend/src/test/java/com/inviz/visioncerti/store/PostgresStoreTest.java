@@ -283,7 +283,7 @@ class PostgresStoreTest {
                 PreparedStatement ps = c.prepareStatement("SELECT version FROM certi_rt.schema_info")) {
             ps.executeQuery().close();
         }
-        assertThat(PostgresStore.SCHEMA_VERSION).isEqualTo(6);
+        assertThat(PostgresStore.SCHEMA_VERSION).isEqualTo(7);
         assertThat(StoreConfig.problem("jdbc:postgresql://db.example:5432/x", "u", db.passwordFile(), true))
                 .contains("sslmode");
         assertThat(StoreConfig.problem("jdbc:postgresql://db.example:5432/x?sslmode=verify-full", "u",

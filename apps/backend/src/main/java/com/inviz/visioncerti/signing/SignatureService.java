@@ -3,6 +3,8 @@ package com.inviz.visioncerti.signing;
 import com.inviz.visioncerti.audit.AuditService;
 import com.inviz.visioncerti.common.ApiException;
 import com.inviz.visioncerti.common.Hashing;
+import com.inviz.visioncerti.certificate.CertificateValidator;
+import com.inviz.visioncerti.document.DocumentService;
 import com.inviz.visioncerti.document.DocumentRepository;
 import com.inviz.visioncerti.document.DocumentVersion;
 import com.inviz.visioncerti.security.RequestActor;
@@ -15,6 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Base64;
+import java.security.cert.X509Certificate;
+import java.util.Date;
 import org.springframework.stereotype.Service;
 
 /**
@@ -116,6 +121,29 @@ public class SignatureService {
         DoctorSignatureEvidence evidence = signature.doctorEvidence();
         boolean verifies = version.isPresent() && SignRequestService.verifiesOver(evidence.publicKeySpki(),
                 version.get().content(), decode(signature.signatureValue()));
+        if (version.isPresent() && DocumentService.PACS_REPORT_CONTENT_TYPE.equals(version.get().contentType())) {
+            boolean externalValid = false;
+            try {
+                SignRequest request = repository.findRequest(actor.tenantId(), signature.signRequestId()).orElseThrow();
+                var document = documents.find(actor.tenantId(), signature.documentId()).orElseThrow();
+                byte[] expected = ReportCertificateApproval.payload(request, document);
+                X509Certificate cert = CertificateValidator.parseDer(decode(evidence.externalCertificateDerBase64()));
+                cert.checkValidity(Date.from(signature.createdAt()));
+                externalValid = evidence.externalSignedPayloadBase64() != null
+                        && Hashing.constantTimeEquals(Base64.getEncoder().encodeToString(expected),
+                                evidence.externalSignedPayloadBase64())
+                        && Hashing.constantTimeEquals(CertificateValidator.fingerprint(cert),
+                                evidence.certificateEnrollmentFingerprint())
+                        && ReportCertificateApproval.verifyRaw(cert, evidence.externalSignatureAlgorithm(), expected,
+                                decode(evidence.externalSignatureBase64()));
+            } catch (Exception e) {
+                externalValid = false;
+            }
+            if (!externalValid) {
+                verifies = false;
+                reasons.add("REPORT_CERTIFICATE_SIGNATURE_INVALID_OR_MISSING");
+            }
+        }
         CheckResult documentIntegrity = version.isEmpty() ? CheckResult.INDETERMINATE
                 : hashMatches ? CheckResult.VALID : CheckResult.INVALID;
         CheckResult signatureCheck;
@@ -160,6 +188,7 @@ public class SignatureService {
 
     private static byte[] decode(String base64) {
         try {
+            if (base64 == null) return new byte[0];
             return java.util.Base64.getDecoder().decode(base64);
         } catch (IllegalArgumentException e) {
             return new byte[0];

@@ -1,9 +1,9 @@
 /**
  * Utility functions for client-side X.509 Certificate and Cryptographic validation.
  *
- * SECURITY INVARIANT:
- * Zero private key handling. Any occurrence of private key identifiers, encrypted keys,
- * or PKCS#12/PFX bundles is immediately rejected.
+ * SECURITY INVARIANT FOR SERVER-BOUND PUBLIC PROOF FIELDS:
+ * Private key and password text is rejected here. Local file signing is isolated in
+ * certificateFileSigner.ts and never sends those file bytes to the API.
  */
 
 const PRIVATE_KEY_PATTERNS = [

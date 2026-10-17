@@ -4,7 +4,7 @@ Status: implemented and tested in `apps/backend` (dev and prod profiles; Vision-
 
 **This is not production-complete.** It still lacks:
 - a real accredited CA root and CRL feed;
-- a PC certificate SDK/agent and a mobile provider adapter;
+- validation against the actual issuing CA's certificate/CRL files and the target physician PCs;
 - durable Vision-Certi storage for handoffs, nonces, idempotency and evidence (the proposed tables are in §6);
 - production staff authentication.
 
@@ -14,8 +14,9 @@ Status: implemented and tested in `apps/backend` (dev and prod profiles; Vision-
 2. `POST /v1/doctor/pacs-handoffs` (VC bearer) returns a one-time handoff code. The browser POSTs it to PACS `/api/vc/auth/certificate-login`.
 3. The PACS server calls `POST /v1/integrations/pacs/handoffs/redeem` (HMAC) and gets the verified identity. It maps that identity to a local user only through an admin link, and issues its own `vc1.` bearer.
 4. On "approve", the PACS server builds the report snapshot from its DB and calls `POST /v1/integrations/pacs/report-sign-requests` (HMAC, `Idempotency-Key`).
-5. The physician reads `GET /v1/doctor/sign-requests/{id}/document` (exact JSON bytes) and approves with `POST /v1/doctor/sign-requests/{id}/approve` and `reviewAttestation`. Signing then:
+5. The physician reads `GET /v1/doctor/sign-requests/{id}/document` (exact JSON bytes). The browser gets `GET /v1/doctor/sign-requests/{id}/certificate-payload`, signs those exact bytes with the locally opened PFX/P12 or NPKI private key, and calls `POST /v1/doctor/sign-requests/{id}/approve` with `reviewAttestation`, public certificate DER and signature. Signing then:
    - re-validates the certificate (path + CRL);
+   - checks the external signature against the enrolled certificate fingerprint and bound report ID, study ID, version, hash, signer and nonce;
    - checks the enrollment binding before and after the OpenBao call;
    - signs with the physician's OpenBao Transit key;
    - verifies the signature over the stored bytes.
@@ -126,7 +127,8 @@ Only requests this client created are visible; any other id returns `404`.
 ### Physician routes (existing; changes are additive)
 
 - `GET /v1/doctor/sign-requests/{id}/document` now serves the version's own `Content-Type`: PDF, or the report JSON type above.
-- `POST /v1/doctor/sign-requests/{id}/approve` accepts `reviewAttestation`. For report snapshots it must be `REVIEWED_EXACT_REPORT_CONTENT`, otherwise `422 REVIEW_ATTESTATION_REQUIRED`; PDFs ignore it.
+- `GET /v1/doctor/sign-requests/{id}/certificate-payload` (physician bearer) returns `{signedPayloadBase64}` for the pending PACS report. The value is binary length-prefixed UTF-8 fields; sign the decoded bytes exactly. It includes protocol version, tenant, request/document/version IDs, report/study IDs, SHA-256, signer ID, nonce and review attestation.
+- `POST /v1/doctor/sign-requests/{id}/approve` accepts `reviewAttestation`, `certificateDerBase64`, `externalSignatureBase64`, and `externalSignatureAlgorithm` (`SHA256withRSA` or `SHA256withECDSA`). For report snapshots the attestation must be `REVIEWED_EXACT_REPORT_CONTENT` and the registered external certificate signature is mandatory; PDFs ignore these extra fields.
 
 ## 4. Tests (`integration/PacsIntegrationApiTest`, 5)
 

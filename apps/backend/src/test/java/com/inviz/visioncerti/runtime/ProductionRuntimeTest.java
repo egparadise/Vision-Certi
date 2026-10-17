@@ -344,11 +344,16 @@ class ProductionRuntimeTest {
         return mvc.perform(signed(post(path), "POST", path, body, nonce()).header("Idempotency-Key", key));
     }
 
-    private static String approveBody(MockMvc mvc, String token, String requestId) throws Exception {
+    private String approveBody(MockMvc mvc, String token, String requestId) throws Exception {
         String request = body(mvc.perform(bearer(get("/v1/doctor/sign-requests/" + requestId), token))
                 .andExpect(status().isOk()));
+        String payload = JsonPath.read(body(mvc.perform(bearer(get("/v1/doctor/sign-requests/" + requestId
+                + "/certificate-payload"), token)).andExpect(status().isOk())), "$.signedPayloadBase64");
+        String signature = TestPki.sign(doctor.leaf().keys(), "SHA256withRSA", Base64.getDecoder().decode(payload));
         return "{\"documentSha256\":\"" + JsonPath.read(request, "$.documentSha256") + "\",\"nonce\":\""
-                + JsonPath.read(request, "$.nonce") + "\",\"reviewAttestation\":\"REVIEWED_EXACT_REPORT_CONTENT\"}";
+                + JsonPath.read(request, "$.nonce") + "\",\"reviewAttestation\":\"REVIEWED_EXACT_REPORT_CONTENT\""
+                + ",\"certificateDerBase64\":\"" + doctor.leaf().der() + "\",\"externalSignatureBase64\":\""
+                + signature + "\",\"externalSignatureAlgorithm\":\"SHA256withRSA\"}";
     }
 
     private long countSql(String sql, Object... params) throws SQLException {

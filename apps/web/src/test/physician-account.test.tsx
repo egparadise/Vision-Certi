@@ -68,21 +68,22 @@ describe('Physician account onboarding', () => {
 });
 describe('External proof input', () => {
   const challenge = { challengeId: 'test', signedPayloadBase64: btoa('exact\nbytes'), expiresAt: new Date(Date.now()+600000).toISOString() } as CertificateChallenge;
-  it('rejects private key material before sending any proof', async () => {
+  it('requires a local certificate and password before sending any proof', async () => {
     const onProof = vi.fn();
     render(<ExternalCertificateProof challenge={challenge} busy={false} onProof={onProof} />);
-    const file = new File(['private'], 'bad.pem');
-    Object.defineProperty(file, 'text', { value: async () => '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----' });
-    fireEvent.change(screen.getByLabelText(/공개 인증서 PEM 파일/), { target: { files: [file] } });
-    expect(await screen.findByRole('alert')).toHaveTextContent('개인키');
-    expect(screen.getByRole('button', { name: '인증서·서명 검증' })).toBeDisabled();
+    expect(screen.getByLabelText('PFX/P12 파일')).toBeInTheDocument();
+    expect(screen.getByLabelText('인증서 비밀번호')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '인증서로 계속' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('파일 형식'), { target: { value: 'NPKI' } });
+    expect(screen.getByLabelText(/signCert.der/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/signPri.key/)).toBeInTheDocument();
     expect(onProof).not.toHaveBeenCalled();
   });
   it('does not submit after challenge expiry', () => {
     const onProof = vi.fn();
     render(<ExternalCertificateProof challenge={{ ...challenge, expiresAt: new Date(Date.now()-1000).toISOString() }} busy={false} onProof={onProof} />);
     expect(screen.getByRole('status')).toHaveTextContent('만료');
-    expect(screen.getByRole('button', { name: '인증서·서명 검증' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '인증서로 계속' })).toBeDisabled();
     expect(onProof).not.toHaveBeenCalled();
   });
 });

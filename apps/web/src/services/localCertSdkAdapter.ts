@@ -4,8 +4,10 @@
  * Formal interface for connecting to client-side hardware/software certificate security modules
  * (KISA/Accredited CA PC local signing agent or native PKCS#11 bridge).
  * 
- * In production, certificates and private keys remain strictly in the secure module;
- * the browser never accesses or invents private keys. If the native SDK is missing or
+ * When this optional adapter is used, private keys remain in the secure module.
+ * The separate SDK-free certificateFileSigner path opens an explicitly selected local
+ * encrypted certificate file in browser memory and sends only public proof fields.
+ * If the native SDK is missing or
  * unconfigured, it reports unavailable (no fake or guessed successful provider operations).
  */
 

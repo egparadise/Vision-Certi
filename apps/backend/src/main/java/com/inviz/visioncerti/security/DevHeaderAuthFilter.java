@@ -37,7 +37,7 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
             "/v1/enrollment/phone-challenges/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/verify");
     private static final String UUID_SEGMENT = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
     private static final Pattern DOCTOR_GET_ROUTE = Pattern.compile(
-            "/v1/doctor-activation/(config|me)|/v1/doctor/sign-requests(/" + UUID_SEGMENT + "(/document)?)?"
+            "/v1/doctor-activation/(config|me)|/v1/doctor/sign-requests(/" + UUID_SEGMENT + "(/document|/certificate-payload)?)?"
                     + "|/v1/certificate-enrollment/(config|enrollments)"
                     + "|/v1/physician-accounts/(config|me)");
     private static final Pattern DOCTOR_POST_ROUTE = Pattern.compile(

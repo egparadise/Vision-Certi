@@ -28,7 +28,11 @@ public record DoctorSignatureEvidence(
         boolean revocationCheckedAtSigning,
         String publicKeySpki,
         String certificateEnrollmentId,
-        String certificateEnrollmentFingerprint) {
+        String certificateEnrollmentFingerprint,
+        String externalCertificateDerBase64,
+        String externalSignatureBase64,
+        String externalSignatureAlgorithm,
+        String externalSignedPayloadBase64) {
 
     public static final String FORMAT = "RAW_ECDSA_P256_SHA256_DER";
 }

@@ -5,6 +5,14 @@ import { PhysicianSigningPortal } from '../components/PhysicianSigningPortal';
 import { Header } from '../components/Header';
 import { getLocalCertSdkAdapter } from '../services/localCertSdkAdapter';
 import { SignRequest, Doctor, PacsReportSnapshot } from '../types/api';
+import { signWithCertificateFiles } from '../services/certificateFileSigner';
+
+vi.mock('../services/certificateFileSigner', () => ({
+  signWithCertificateFiles: vi.fn(async () => ({
+    certificateDerBase64: 'Y2VydA==', chainDerBase64: [], signatureBase64: 'c2lnbg==',
+    signatureAlgorithm: 'SHA256withRSA', fingerprintSha256: 'a'.repeat(64),
+  })),
+}));
 
 const mockDoctor: Doctor = {
   id: 'doc-uuid-1',
@@ -99,7 +107,7 @@ describe('SV70 PACS & Production Runtime Integration Tests', () => {
       signatureId: null,
       nonce: 'test-nonce-1234567890',
       createdAt: '2026-10-13T10:00:00Z',
-      expiresAt: '2026-10-13T10:15:00Z',
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
     };
 
     // Mock URL.createObjectURL and URL.revokeObjectURL
@@ -166,7 +174,7 @@ describe('SV70 PACS & Production Runtime Integration Tests', () => {
       signatureId: null,
       nonce: 'nonce-for-approval',
       createdAt: '2026-10-13T10:00:00Z',
-      expiresAt: '2026-10-13T10:15:00Z',
+      expiresAt: new Date(Date.now() + 600000).toISOString(),
     };
 
     let approvePayload: any = null;
@@ -187,6 +195,9 @@ describe('SV70 PACS & Production Runtime Integration Tests', () => {
           })
         );
       }
+      if (url.includes('/doctor/sign-requests/req-pacs-2/certificate-payload')) {
+        return Promise.resolve(new Response(JSON.stringify({ signedPayloadBase64: btoa('exact-report-approval') }), { status: 200 }));
+      }
       if (url.includes('/doctor/sign-requests')) {
         return Promise.resolve(new Response(JSON.stringify({ items: [mockSignRequest], total: 1 }), { status: 200 }));
       }
@@ -204,16 +215,18 @@ describe('SV70 PACS & Production Runtime Integration Tests', () => {
     });
 
     const checkbox = screen.getByTestId('doctor-sign-confirm-checkbox');
-    const approveBtn = screen.getByTestId('doctor-sign-approve-btn');
-
-    expect(approveBtn).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '공동인증서로 판독문 최종 서명' })).not.toBeInTheDocument();
 
     // Check confirmation checkbox
     fireEvent.click(checkbox);
-    expect(approveBtn).not.toBeDisabled();
-
-    // Click approve
-    fireEvent.click(approveBtn);
+    const approveBtn = await screen.findByRole('button', { name: '공동인증서로 판독문 최종 서명' });
+    expect(approveBtn).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('PFX/P12 파일'), { target: { files: [new File(['bundle'], 'doctor.p12')] } });
+    fireEvent.change(screen.getByLabelText('인증서 비밀번호'), { target: { value: 'local-password' } });
+    await waitFor(() => expect(approveBtn).not.toBeDisabled());
+    fireEvent.submit(approveBtn.closest('form')!);
+    expect(signWithCertificateFiles).toHaveBeenCalled();
+    expect(screen.queryAllByRole('alert').map(node => node.textContent)).toEqual([]);
 
     await waitFor(() => {
       expect(approvePayload).not.toBeNull();
@@ -222,6 +235,8 @@ describe('SV70 PACS & Production Runtime Integration Tests', () => {
     expect(approvePayload.documentSha256).toBe(expectedSha256);
     expect(approvePayload.nonce).toBe('nonce-for-approval');
     expect(approvePayload.reviewAttestation).toBe('REVIEWED_EXACT_REPORT_CONTENT');
+    expect(approvePayload.certificateDerBase64).toBe('Y2VydA==');
+    expect(approvePayload.externalSignatureBase64).toBe('c2lnbg==');
   });
 
   it('generates PACS handoff code and delivers to popup opener via postMessage with nonce correlation', async () => {

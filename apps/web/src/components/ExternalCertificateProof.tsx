@@ -1,71 +1,71 @@
 import React, { useEffect, useState } from 'react';
 import type { CertificateChallenge } from '../types/api';
 import type { LocalSignResult } from '../services/localCertSdkAdapter';
-import { assertNoPrivateKeyOrPassword, parseCertificateChainPem } from '../utils/cryptoCert';
+import { signWithCertificateFiles, type CertificateFiles } from '../services/certificateFileSigner';
 
-/** Provider-independent proof submission. No private key handling or invented signatures. */
-export function ExternalCertificateProof({ challenge, busy, onProof }: {
-  challenge: CertificateChallenge; busy: boolean; onProof: (proof: LocalSignResult) => Promise<void>;
+/** The server-supplied exact bytes are signed locally; only proof fields reach INVIZ. */
+export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, actionLabel, busy, onProof }: {
+  challenge?: CertificateChallenge; payloadBase64?: string; expiresAt?: string; actionLabel?: string;
+  busy: boolean; onProof: (proof: LocalSignResult) => Promise<void>;
 }) {
-  const [certificate, setCertificate] = useState('');
-  const [signature, setSignature] = useState('');
-  const [algorithm, setAlgorithm] = useState('SHA256withRSA');
+  const [kind, setKind] = useState<'PFX' | 'NPKI'>('PFX');
+  const [bundle, setBundle] = useState<File>();
+  const [certificate, setCertificate] = useState<File>();
+  const [privateKey, setPrivateKey] = useState<File>();
+  const [chain, setChain] = useState<File>();
+  const [password, setPassword] = useState('');
+  const [signing, setSigning] = useState(false);
   const [error, setError] = useState('');
-  const [reading, setReading] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  const expires = Date.parse(challenge.expiresAt);
+  const expires = Date.parse(challenge?.expiresAt ?? expiresAt ?? '');
   const expired = !Number.isFinite(expires) || now >= expires;
-  async function read(file: File | undefined) {
-    setCertificate(''); setError('');
-    if (!file) return;
-    setReading(true);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    setError('');
+    if (busy || signing || expired) return;
     try {
-      if (!/\.pem$/i.test(file.name) || file.size > 131072) throw new Error('공개 인증서 PEM 파일(128KB 이하)을 선택해 주세요.');
-      const pem = await file.text();
-      assertNoPrivateKeyOrPassword(pem);
-      const blocks = pem.match(/-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----/g);
-      if (!blocks?.length || pem.replace(/-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----/g, '').trim()) {
-        throw new Error('공개 인증서 블록만 포함된 PEM 파일이 필요합니다.');
+      let files: CertificateFiles;
+      if (kind === 'PFX') {
+        if (!bundle) throw new Error('PFX/P12 인증서 파일을 선택해 주세요.');
+        files = { kind, bundle };
+      } else {
+        if (!certificate || !privateKey) throw new Error('signCert.der와 signPri.key를 모두 선택해 주세요.');
+        files = { kind, certificate, privateKey, chain };
       }
-      setCertificate(pem);
-    } catch (e) { setError(e instanceof Error ? e.message : '인증서 파일을 읽을 수 없습니다.'); }
-    finally { setReading(false); }
+      setSigning(true);
+      const toSign = challenge?.signedPayloadBase64 ?? payloadBase64;
+      if (!toSign) throw new Error('서명할 인증 요청이 없습니다. 다시 시도해 주세요.');
+      const proof = await signWithCertificateFiles(files, password, toSign);
+      setPassword('');
+      await onProof(proof);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '인증서 서명에 실패했습니다.');
+    } finally {
+      setSigning(false); setPassword(''); setBundle(undefined); setCertificate(undefined);
+      setPrivateKey(undefined); setChain(undefined);
+      form.querySelectorAll<HTMLInputElement>('input[type="file"]').forEach(input => { input.value = ''; });
+    }
   }
-  function download() {
-    const binary = atob(challenge.signedPayloadBase64);
-    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
-    const a = document.createElement('a'); a.href = url; a.download = 'certificate-challenge.bin'; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError('');
-    if (busy || reading || expired) return;
-    try {
-      assertNoPrivateKeyOrPassword(signature);
-      const value = signature.replace(/\s/g, '');
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length > 16384) throw new Error('올바른 Base64 서명값을 입력해 주세요.');
-      const parsed = parseCertificateChainPem(certificate);
-      await onProof({ certificateDerBase64: parsed.leaf, chainDerBase64: parsed.chain,
-        signatureBase64: value, signatureAlgorithm: algorithm, fingerprintSha256: '' });
-    } catch (e) { setError(e instanceof Error ? e.message : '서명 검증 요청에 실패했습니다.'); }
-  }
-  return <section className="account-proof" aria-label="인증서 서명 결과 제출">
-    <p>SDK 없이 외부에서 생성한 서명 결과를 검증하는 연결 화면입니다. 공개 인증서만 제출해서는 인증이 완료되지 않습니다.</p>
-    <p>아래 요청 파일의 정확한 바이트에 대한 서명이 필요합니다. 개인키·PFX·인증서 비밀번호는 입력하지 않습니다.</p>
-    <button type="button" className="enroll-secondary" disabled={expired || busy} onClick={download}>인증 요청 파일 받기</button>
+
+  return <section className="account-proof" aria-label={actionLabel ?? '공동인증서 선택 및 로그인'}>
+    <p>의사 PC의 공동인증서를 선택하고 비밀번호를 입력해 주세요. 개인키 파일과 비밀번호는 서버로 전송되지 않습니다.</p>
     <p role="status">{expired ? '인증 요청이 만료되었습니다. 새 요청을 시작해 주세요.' : `남은 시간 ${Math.ceil((expires - now) / 1000)}초`}</p>
     <form onSubmit={submit}>
-      <fieldset disabled={busy || expired} className="enroll-form-fields">
-        <legend>공개 인증서와 서명 결과</legend>
-        <label>공개 인증서 PEM 파일 (본인 인증서, 필요한 중간 인증서 순서)
-          <input type="file" accept=".pem" onChange={e => void read(e.target.files?.[0])} disabled={reading} /></label>
-        <label>서명 알고리즘<select value={algorithm} onChange={e => setAlgorithm(e.target.value)}>
-          <option value="SHA256withRSA">RSA SHA-256</option><option value="SHA256withECDSA">ECDSA SHA-256</option>
+      <fieldset disabled={busy || signing || expired} className="enroll-form-fields">
+        <legend>공동인증서</legend>
+        <label>파일 형식<select value={kind} onChange={event => setKind(event.target.value as 'PFX' | 'NPKI')}>
+          <option value="PFX">PFX / P12</option><option value="NPKI">NPKI (signCert.der + signPri.key)</option>
         </select></label>
-        <label>서명값 (Base64)<textarea value={signature} onChange={e => setSignature(e.target.value)} maxLength={16384} rows={3} required /></label>
-        <button className="enroll-primary" disabled={!certificate || !signature.trim() || reading}>인증서·서명 검증</button>
+        {kind === 'PFX' ? <label>PFX/P12 파일<input type="file" accept=".pfx,.p12,application/x-pkcs12" onChange={event => setBundle(event.target.files?.[0])} required /></label> : <>
+          <label>공개 인증서 (signCert.der)<input type="file" accept=".der" onChange={event => setCertificate(event.target.files?.[0])} required /></label>
+          <label>암호화된 개인키 (signPri.key)<input type="file" accept=".key" onChange={event => setPrivateKey(event.target.files?.[0])} required /></label>
+          <label>중간 인증기관 인증서 (있는 경우)<input type="file" accept=".der" onChange={event => setChain(event.target.files?.[0])} /></label>
+        </>}
+        <label>인증서 비밀번호<input type="password" autoComplete="off" value={password} onChange={event => setPassword(event.target.value)} required /></label>
+        <button className="enroll-primary" disabled={!password || signing}>{signing ? '인증서 확인 중…' : actionLabel ?? '인증서로 계속'}</button>
       </fieldset>
     </form>
     {error && <p role="alert">{error}</p>}

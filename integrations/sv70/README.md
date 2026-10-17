@@ -16,6 +16,6 @@ python integrations/sv70/apply_overlay.py client C:\path\to\SaintViewPACS --appl
 
 기존 Vision-Certi 클라이언트 묶음이 적용된 PACS에는 로그인 화면과 인증서 등록 화면 두 파일의 **정확한 이전 SHA-256**을 확인한 후 갱신합니다. `apply_overlay.py client <경로>`로 먼저 검증하고 `--apply`를 사용하세요. 파일이 현장에서 수정되었으면 자동으로 덮어쓰지 않으며, 적용 시 원본을 `.vision-certi-backup-*`에 보관합니다. 등록되지 않은 `NOT_REGISTERED`·`PENDING` 계정은 PACS ID·비밀번호 확인 후 등록 화면, `ACTIVE` 계정은 공동인증서 로그인 화면으로 분기합니다. 실제 접근은 매번 인증서 소유 증명과 PACS 서버의 일회용 handoff 교환이 끝난 뒤에만 허용됩니다.
 
-공동인증서 등록·로그인은 의사 인증용이며, 판독문은 의사의 명시적 최종 승인 후 OpenBao 키로 서명합니다. 판독문 서명 결과를 검증하기 전에는 PACS 승인 상태를 변경하지 않습니다.
+공동인증서 등록·로그인은 의사 인증용입니다. PACS 판독문 최종 승인에서는 등록된 **같은 공동인증서로 문서 ID·검사 ID·버전·SHA-256·일회용 nonce에 결합된 요청을 의사 PC에서 직접 서명**하고, INVIZ가 검증·보존한 뒤 OpenBao 의사별 키 서명도 수행합니다. 두 서명 증거가 저장되기 전에는 PACS 승인 상태를 변경하지 않습니다.
 
-실제 인증 SDK, 인증기관 신뢰체인·폐지목록, 관리자 OIDC, 운영 DB·TLS·OpenBao 설정은 배포기관의 값으로 구성해야 합니다. 테스트 인증서와 가짜 인증 결과를 운영에 사용하지 마세요.
+PC 파일 서명은 별도 SDK 없이 PFX/P12와 NPKI `signCert.der`·`signPri.key`를 지원합니다. 비밀번호와 개인키 파일은 의사 PC 브라우저에서만 열고 공개 인증서와 서명값만 보냅니다. HTTPS, 인증기관 신뢰체인·최신 CRL, 관리자 OIDC, 운영 DB·OpenBao는 배포기관의 실제 값으로 구성해야 합니다. 실제 발급기관 인증서의 암호화 OID와 CRL 배포 방식을 현장 시험한 뒤 사용하세요.

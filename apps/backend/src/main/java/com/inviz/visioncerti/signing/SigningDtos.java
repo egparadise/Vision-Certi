@@ -25,12 +25,19 @@ public final class SigningDtos {
             @NotBlank @Pattern(regexp = "[0-9a-f]{64}", message = "must be 64 lowercase hex characters")
             String documentSha256,
             @NotBlank @Size(max = 128) String nonce,
-            @Size(max = 64) String reviewAttestation) {
+            @Size(max = 64) String reviewAttestation,
+            @Size(max = 131072) String certificateDerBase64,
+            @Size(max = 32768) String externalSignatureBase64,
+            @Size(max = 32) String externalSignatureAlgorithm) {
 
         public static final String REVIEWED_EXACT_REPORT_CONTENT = "REVIEWED_EXACT_REPORT_CONTENT";
 
         public ApproveSignRequest(String documentSha256, String nonce) {
-            this(documentSha256, nonce, null);
+            this(documentSha256, nonce, null, null, null, null);
+        }
+
+        public ApproveSignRequest(String documentSha256, String nonce, String reviewAttestation) {
+            this(documentSha256, nonce, reviewAttestation, null, null, null);
         }
     }
 

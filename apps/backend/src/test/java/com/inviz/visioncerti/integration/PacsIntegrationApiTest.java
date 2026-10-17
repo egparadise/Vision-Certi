@@ -371,6 +371,39 @@ class PacsIntegrationApiTest {
     }
 
     @Test
+    void completedPacsCertificateLoginRecordsAccountIdOnlyAfterRedeemedHandoff() throws Exception {
+        ActiveDoctor doctor = activeDoctor();
+        String code = handoff(doctor.token());
+        String path = "/v1/integrations/pacs/certificate-logins/confirm";
+        String body = "{\"handoffCodeSha256\":\"" + Hashing.sha256Hex(code) + "\",\"tenantId\":\"" + A
+                + "\",\"doctorId\":\"" + doctor.id() + "\",\"certificateEnrollmentId\":\""
+                + doctor.registrationId() + "\",\"pacsAccountId\":\"42\",\"pacsLoginId\":\"reader42\"}";
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        servicePost(path, body).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("LOGIN_CONFIRMATION_NOT_AUTHORIZED"));
+        servicePost("/v1/integrations/pacs/handoffs/redeem", "{\"handoffCode\":\"" + code + "\"}")
+                .andExpect(status().isOk());
+        servicePost(path, body).andExpect(status().isOk()).andExpect(jsonPath("$.recorded").value(true));
+        servicePost(path, body).andExpect(status().isOk()); // a network retry must not add another event
+        servicePost(path, body.replace("reader42", "otherReader")).andExpect(status().isConflict());
+        mvc.perform(bearer(get("/v1/audit-events/certificate-logins"), doctor.token()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/v1/audit-events/certificate-logins")
+                .header("X-Tenant-Id", A).header("X-Actor-Id", "doctor-demo"))
+                .andExpect(status().isForbidden());
+        String doctorAudit = mvc.perform(get("/v1/audit-events")
+                .header("X-Tenant-Id", A).header("X-Actor-Id", "doctor-demo"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(doctorAudit).doesNotContain("reader42");
+        mvc.perform(admin(get("/v1/audit-events/certificate-logins")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].targetId").value(doctor.id()))
+                .andExpect(jsonPath("$.items[0].details.pacsLoginId").value("reader42"))
+                .andExpect(jsonPath("$.items[0].details.pacsAccountId").value("42"));
+    }
+
+    @Test
     void reportSnapshotIsSignedOnlyAfterTheDoctorsExplicitApprovalAndEvidenceIsReturned() throws Exception {
         ActiveDoctor doctor = activeDoctor();
         String reportId = "pacs-sv70:report:" + SEQ.incrementAndGet();

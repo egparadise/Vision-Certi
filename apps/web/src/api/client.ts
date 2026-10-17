@@ -340,6 +340,14 @@ export class ApiClient {
     return this.handleResponse<ListResponse<AuditEvent>>(res);
   }
 
+  async getCertificateLogins(): Promise<ListResponse<AuditEvent>> {
+    const res = await fetch(`${this.baseUrl}/audit-events/certificate-logins`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse<ListResponse<AuditEvent>>(res);
+  }
+
   // --- Doctor Activation & Admin Preregistration Routes ---
 
   async getDoctorActivationConfig(): Promise<DoctorActivationConfig> {

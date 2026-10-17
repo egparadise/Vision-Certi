@@ -5,9 +5,10 @@ import { AuditEvent } from '../types/api';
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 import { EmptyState } from './EmptyState';
+import { CertificateLoginHistory } from './CertificateLoginHistory';
 
 export const AuditEventsView: React.FC = () => {
-  const { tenantId, client, isMockMode, mockStore } = useApp();
+  const { tenantId, client, isMockMode, mockStore, role } = useApp();
 
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -46,6 +47,7 @@ export const AuditEventsView: React.FC = () => {
 
   return (
     <div>
+      {role === 'ADMIN' && !isMockMode && <CertificateLoginHistory />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
           <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>

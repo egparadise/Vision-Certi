@@ -40,6 +40,14 @@ public final class PacsIntegrationDtos {
         }
     }
 
+    /** Sent only by the HMAC-authenticated PACS server after it has created a local certificate-login session. */
+    public record CertificateLoginConfirmationRequest(String handoffCodeSha256, String tenantId, UUID doctorId,
+            UUID certificateEnrollmentId, String pacsAccountId, String pacsLoginId) {
+        @Override public String toString() { return "CertificateLoginConfirmationRequest[<account data redacted>]"; }
+    }
+
+    public record CertificateLoginConfirmationResponse(boolean recorded, Instant recordedAt) { }
+
     public record VerifiedIdentityResponse(String tenantId, UUID doctorId, String doctorStatus, String identityMode,
             UUID certificateEnrollmentId, String certificateFingerprintSha256, Instant authenticatedAt,
             Instant sessionExpiresAt, Instant verifiedAt, boolean activeSigner, String doctorLicenseNumber) {

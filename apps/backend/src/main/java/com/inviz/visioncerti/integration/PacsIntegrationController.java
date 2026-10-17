@@ -66,6 +66,13 @@ public class PacsIntegrationController {
                 .body(handoffs.redeem(client(request), body == null ? null : body.handoffCode()));
     }
 
+    @PostMapping("/v1/integrations/pacs/certificate-logins/confirm")
+    ResponseEntity<PacsIntegrationDtos.CertificateLoginConfirmationResponse> confirmCertificateLogin(
+            HttpServletRequest request,
+            @RequestBody(required = false) PacsIntegrationDtos.CertificateLoginConfirmationRequest body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(handoffs.confirmLogin(client(request), body));
+    }
+
     @PostMapping("/v1/integrations/pacs/report-sign-requests")
     ResponseEntity<ReportSignRequestCreated> create(HttpServletRequest request,
             @RequestHeader(name = IdempotencyService.HEADER, required = false) String idempotencyKey,

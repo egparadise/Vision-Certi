@@ -8,6 +8,8 @@ import com.inviz.visioncerti.doctor.DoctorService;
 import com.inviz.visioncerti.doctor.DoctorService.IntegrationIdentity;
 import com.inviz.visioncerti.integration.PacsIntegrationDtos.HandoffResponse;
 import com.inviz.visioncerti.integration.PacsIntegrationDtos.VerifiedIdentityResponse;
+import com.inviz.visioncerti.integration.PacsIntegrationDtos.CertificateLoginConfirmationRequest;
+import com.inviz.visioncerti.integration.PacsIntegrationDtos.CertificateLoginConfirmationResponse;
 import com.inviz.visioncerti.store.Kind;
 import com.inviz.visioncerti.store.Store;
 import java.security.SecureRandom;
@@ -30,11 +32,14 @@ import org.springframework.http.HttpStatus;
 public class PacsHandoffService {
 
     private static final Pattern CODE = Pattern.compile("[A-Za-z0-9_-]{43}");
+    private static final Pattern CODE_HASH = Pattern.compile("[0-9a-f]{64}");
+    private static final Pattern PACS_ID = Pattern.compile("[A-Za-z0-9_.@:-]{1,128}");
     private static final int MAX_PENDING = 10_000;
 
     /** A pending handoff; only the SHA-256 of the code is stored. Consumed on the first redeem attempt. */
     record Handoff(UUID id, String codeHash, String clientId, String tenantId, IntegrationIdentity identity,
-            Instant createdAt, Instant expiresAt, boolean consumed) {
+            Instant createdAt, Instant expiresAt, boolean consumed, Instant confirmedAt,
+            String pacsAccountId, String pacsLoginId) {
     }
 
     static final Kind<Handoff> HANDOFFS = Kind.of("pacs_handoffs", Handoff.class)
@@ -83,7 +88,7 @@ public class PacsHandoffService {
                 throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "HANDOFF_CAPACITY", "잠시 후 다시 시도해 주세요.", true);
             }
             tx.insert(HANDOFFS, new Handoff(UUID.randomUUID(), Hashing.sha256Hex(code), client.clientId(),
-                    identity.tenantId(), identity, now, expiresAt, false));
+                    identity.tenantId(), identity, now, expiresAt, false, null, null, null));
             audit.record(identity.tenantId(), identity.doctorId().toString(), "PACS_HANDOFF_ISSUED", "DOCTOR",
                     identity.doctorId().toString(), AuditService.SUCCESS, Map.of("audience", client.clientId(),
                             "certificateEnrollmentId", identity.certificateEnrollmentId().toString()));
@@ -102,7 +107,8 @@ public class PacsHandoffService {
                     return null;
                 }
                 tx.update(HANDOFFS, new Handoff(found.id(), found.codeHash(), found.clientId(), found.tenantId(),
-                        found.identity(), found.createdAt(), found.expiresAt(), true));
+                        found.identity(), found.createdAt(), found.expiresAt(), true, found.confirmedAt(),
+                        found.pacsAccountId(), found.pacsLoginId()));
                 return found;
             });
         }
@@ -129,6 +135,46 @@ public class PacsHandoffService {
                 current.certificateEnrollmentId(), current.certificateFingerprint(), current.authenticatedAt(),
                 current.sessionExpiresAt(), now, true,
                 doctors.registeredLicenseNumber(current.doctorId()).orElse(null));
+    }
+
+    /** Correlates the PACS account actually logged in with the already redeemed certificate proof. */
+    public CertificateLoginConfirmationResponse confirmLogin(IntegrationClient client,
+            CertificateLoginConfirmationRequest body) {
+        if (body == null || body.handoffCodeSha256() == null || !CODE_HASH.matcher(body.handoffCodeSha256()).matches()
+                || body.tenantId() == null || body.doctorId() == null || body.certificateEnrollmentId() == null
+                || body.pacsAccountId() == null || !PACS_ID.matcher(body.pacsAccountId()).matches()
+                || body.pacsLoginId() == null || !PACS_ID.matcher(body.pacsLoginId()).matches()) {
+            throw ApiException.unprocessable("LOGIN_CONFIRMATION_INVALID", "PACS certificate login confirmation is invalid");
+        }
+        Instant now = clock.instant();
+        return store.tx(tx -> {
+            Handoff handoff = tx.lockFindOne(HANDOFFS, "code_hash", body.handoffCodeSha256()).orElse(null);
+            if (handoff == null || !handoff.consumed() || !handoff.clientId().equals(client.clientId())
+                    || !client.allowsTenant(handoff.tenantId()) || !handoff.tenantId().equals(body.tenantId())
+                    || !handoff.identity().doctorId().equals(body.doctorId())
+                    || !handoff.identity().certificateEnrollmentId().equals(body.certificateEnrollmentId())
+                    || !now.isBefore(handoff.createdAt().plus(Duration.ofMinutes(5)))) {
+                throw ApiException.forbidden("LOGIN_CONFIRMATION_NOT_AUTHORIZED",
+                        "No matching redeemed certificate handoff exists for this PACS login");
+            }
+            if (handoff.confirmedAt() != null) {
+                if (!body.pacsAccountId().equals(handoff.pacsAccountId())
+                        || !body.pacsLoginId().equals(handoff.pacsLoginId())) {
+                    throw ApiException.conflict("LOGIN_CONFIRMATION_CONFLICT", "PACS login was already confirmed for another account");
+                }
+                return new CertificateLoginConfirmationResponse(true, handoff.confirmedAt());
+            }
+            tx.update(HANDOFFS, new Handoff(handoff.id(), handoff.codeHash(), handoff.clientId(), handoff.tenantId(),
+                    handoff.identity(), handoff.createdAt(), handoff.expiresAt(), true, now,
+                    body.pacsAccountId(), body.pacsLoginId()));
+            audit.record(handoff.tenantId(), client.actorId(), "PACS_CERTIFICATE_LOGIN_COMPLETED", "DOCTOR",
+                    body.doctorId().toString(), AuditService.SUCCESS,
+                    Map.of("pacsAccountId", body.pacsAccountId(), "pacsLoginId", body.pacsLoginId(),
+                            "certificateEnrollmentId", body.certificateEnrollmentId().toString(),
+                            "certificateFingerprintSha256", handoff.identity().certificateFingerprint(),
+                            "clientId", client.clientId()));
+            return new CertificateLoginConfirmationResponse(true, now);
+        });
     }
 
     private static ApiException handoffInvalid() {

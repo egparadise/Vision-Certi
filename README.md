@@ -12,7 +12,7 @@ INVIZ 인증·전자서명 서버와 SV70 PACS 연동 프로젝트입니다. 의
 
 ## 내부망 접속과 PACS 연결
 
-현재 내부 테스트 주소는 `https://192.168.45.160:5174/#/login`입니다. 인증서 등록은 `/#/certificates/register`, PACS 인증 팝업은 `/#/certificates/pacs-login`을 사용합니다.
+현재 내부 테스트 주소는 `https://192.168.45.160:5184/#/login`입니다. 인증서 등록은 `/#/certificates/register`, PACS 인증 팝업은 `/#/certificates/pacs-login`을 사용합니다.
 
 [실행·CA 설치](docs/LAN_TEST.md), [PACS 연결 값](docs/PACS_LAN_CONNECTION.md), [로그인·판독 승인 흐름](docs/PACS_EXECUTION_FLOW.md)을 따릅니다. 실제 PACS의 웹 주소를 허용 출처로 등록하고, 연동 코드와 DB 마이그레이션을 적용해야 합니다.
 

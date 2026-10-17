@@ -13,7 +13,7 @@ const adminHeaders={'X-Actor-Id':'admin-demo','X-Tenant-Id':'demo-hospital-a'};
 async function shot(page,name){await page.screenshot({path:root+'work/certificate-'+name+'.png',fullPage:true});}
 async function adminMode(){await admin.locator('#actor-select').selectOption('admin-demo');}
 try{
- await admin.goto('http://127.0.0.1:5173/#/doctors'); await adminMode();
+ await admin.goto('http://127.0.0.1:5183/#/doctors'); await adminMode();
  const suffix=Date.now().toString();
  for(const [field,value] of Object.entries({name:'브라우저 검증 의사',license:suffix,center:'합성 판독센터',email:'browser'+suffix+'@example.invalid','id-evidence':'synthetic/identity','license-evidence':'synthetic/license'})){
   await admin.getByTestId('prereg-'+field+'-input').fill(value);
@@ -26,7 +26,7 @@ try{
  const created=await createdResponse.json(); const id=created.doctor.id;
  assert.equal(created.doctor.status,'PENDING'); assert.equal(created.doctor.certificate,null);
  checks.push('administrator preregistration without key or certificate');
- await doctor.goto('http://127.0.0.1:5173/#/certificates/enroll');
+ await doctor.goto('http://127.0.0.1:5183/#/certificates/enroll');
  await doctor.getByTestId('cert-invitation-code-input').fill(created.invitationCode);
  await doctor.getByTestId('request-cert-challenge-btn').click();
  await doctor.getByTestId('canonical-bytes-preview').waitFor();

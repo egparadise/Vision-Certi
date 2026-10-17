@@ -22,7 +22,7 @@ async function phoneVerify(phone){
 try{
   const stamp=Date.now().toString();
   const suffix=String(Math.floor(Math.random()*89999990)+10000000);
-  await page.goto('http://127.0.0.1:5173/#/signup');
+  await page.goto('http://127.0.0.1:5183/#/signup');
   await page.getByRole('heading',{name:'어떤 유형으로 가입하시나요?'}).waitFor();
   await screenshot('type');
   await page.getByRole('button',{name:/동의 항목 확인하기/}).click();

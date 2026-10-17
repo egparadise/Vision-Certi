@@ -16,7 +16,7 @@ export default defineConfig({
   publicDir: lanHost ? process.env.VISIONCERTI_LAN_PUBLIC_DIR : 'public',
   server: {
     host: lanHost || '127.0.0.1',
-    port: lanHost ? 5174 : 5173,
+    port: lanHost ? 5184 : 5183,
     strictPort: true,
     https: lanTls,
     proxy: {

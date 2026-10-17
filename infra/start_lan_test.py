@@ -1,4 +1,4 @@
-"""Start opt-in HTTPS LAN UI on port 5174, proxying the loopback test backend on 18082.
+"""Start opt-in HTTPS LAN UI on port 5184, proxying the loopback test backend on 18082.
 
 Requires cryptography and apps/web/node_modules. Keeps all keys under ignored work/lan-test.
 The public CA certificate must be trusted separately on each test client. Never installs trust silently.
@@ -30,7 +30,7 @@ def main():
     if not any(address in ipaddress.ip_network(cidr) for cidr in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
         parser.error('Use an RFC1918 LAN IPv4 address')
     with socket.socket() as probe:
-        probe.bind((str(address), 5174))  # verify ownership and reject an occupied port
+        probe.bind((str(address), 5184))  # verify ownership and reject an occupied port
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open('http://127.0.0.1:18082/v1/runtime/capabilities', timeout=5) as response:
         capabilities = json.load(response)
@@ -97,7 +97,7 @@ def main():
     node = shutil.which('node')
     if not node:
         raise RuntimeError('Node.js is required')
-    print(f'LAN URL: https://{address}:5174/#/login', flush=True)
+    print(f'LAN URL: https://{address}:5184/#/login', flush=True)
     print(f'Client trust certificate (public only): {ca_file}', flush=True)
     child = subprocess.Popen([node, str(ROOT/'apps/web/node_modules/vite/bin/vite.js')], cwd=ROOT/'apps/web', env=env)
     (folder/'server.pid').write_text(str(child.pid), encoding='ascii')

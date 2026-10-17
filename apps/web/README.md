@@ -15,7 +15,7 @@ Vision-Certi 의사 서명 검증 및 증명서 발급 관리 웹 인터페이�
 npm install
 npm run dev
 ```
-- 브라우저에서 `http://localhost:5173`으로 접속합니다.
+- 브라우저에서 `http://localhost:5183`으로 접속합니다.
 - Vite 프록시(`vite.config.ts`)를 통해 `/api` 요청이 로컬 백엔드(`http://127.0.0.1:8080`)로 프록시됩니다.
 
 ### 목(Mock) 모드 vs 라이브(Live) 모드

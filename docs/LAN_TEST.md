@@ -1,6 +1,6 @@
 # 내부 네트워크 테스트
 
-동일한 사내 Wi-Fi/LAN에서 HTTPS 5174 포트로 접속합니다. 기본 5173 개발 서버, Java API, PostgreSQL, MariaDB 및 OpenBao는 외부에 직접 공개하지 않습니다. 웹의 `/v1` 요청만 현재 로컬 검증 API `127.0.0.1:18082`로 전달합니다.
+동일한 사내 Wi-Fi/LAN에서 HTTPS 5184 포트로 접속합니다. 기본 5183 개발 서버, Java API, PostgreSQL, MariaDB 및 OpenBao는 외부에 직접 공개하지 않습니다. 웹의 `/v1` 요청만 현재 로컬 검증 API `127.0.0.1:18082`로 전달합니다.
 
 ## 서버 실행
 
@@ -28,18 +28,18 @@ work/certificate-tools/Scripts/python.exe infra/start_lan_test.py --address 192.
 
 1. 서버의 `work/lan-test/public/vision-certi-lan-ca.cer` **공개 인증서만** 테스트 PC로 복사합니다.
 2. Windows에서 인증서 설치 → 현재 사용자 → 신뢰할 수 있는 루트 인증 기관에 설치하고 브라우저를 다시 엽니다. 사내 관리 정책에 따라 IT 관리자가 설치해야 할 수 있습니다. 개인키는 복사하지 않습니다.
-3. `https://192.168.45.160:5174/#/login` 또는 `https://192.168.45.160:5174/#/certificates/register`로 접속합니다.
+3. `https://192.168.45.160:5184/#/login` 또는 `https://192.168.45.160:5184/#/certificates/register`로 접속합니다.
 
 HTTPS는 인증서 기능의 Web Crypto 및 OIDC PKCE가 내부 IP에서도 동작하게 합니다. HTTP만 열고 브라우저의 보안 검사를 끄는 방식으로 대체하지 않습니다.
 
 ## Windows 방화벽
 
-관리자 PowerShell에서 다음 명령을 실행하면 해당 PC 주소의 TCP 5174만 Private/Domain 프로파일의 같은 서브넷에 허용합니다. Public 네트워크로 자동 변경하거나 전체 방화벽을 끄지 않습니다.
+관리자 PowerShell에서 다음 명령을 실행하면 해당 PC 주소의 TCP 5184만 Private/Domain 프로파일의 같은 서브넷에 허용합니다. Public 네트워크로 자동 변경하거나 전체 방화벽을 끄지 않습니다.
 
 ```powershell
 & .\infra\Enable-LanTestFirewall.ps1 -Address 192.168.45.160
 ```
 
-종료 후 규칙을 제거하려면 관리자 PowerShell에서 `Remove-NetFirewallRule -Name VisionCerti-LAN-Test-HTTPS-5174`를 실행합니다. 테스트 CA도 각 클라이언트의 신뢰 저장소에서 제거할 수 있습니다.
+종료 후 규칙을 제거하려면 관리자 PowerShell에서 `Remove-NetFirewallRule -Name VisionCerti-LAN-Test-HTTPS-5184`를 실행합니다. 테스트 CA도 각 클라이언트의 신뢰 저장소에서 제거할 수 있습니다.
 
 이 서버는 개발 프로파일입니다. 개발자 역할 선택과 합성 데이터 테스트용이며 실제 환자 정보·기관 운영 계정을 사용하지 않습니다. 내부망 공개가 신분증/ARS/TOSS/PASS 공급업체 연결이나 개인 인증서 최종 등록 구현을 추가하는 것은 아닙니다.

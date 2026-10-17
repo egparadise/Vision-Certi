@@ -20,7 +20,7 @@ try {
   form.append('file', new Blob([await readFile(root + 'work/synthetic-test.pdf')], { type: 'application/pdf' }), 'synthetic.pdf');
   const upload = await fetch('http://127.0.0.1:8080/v1/documents', { method: 'POST', headers: { 'X-Tenant-Id': 'demo-hospital-a', 'X-Actor-Id': 'admin-demo', 'Idempotency-Key': `browser-${Date.now()}` }, body: form });
   assert.equal(upload.status, 201);
-  await page.goto('http://127.0.0.1:5173');
+  await page.goto('http://127.0.0.1:5183');
   await page.getByRole('button', { name: '판독문 목록 및 등록' }).click();
   const row = page.getByRole('row').filter({ hasText: title });
   await row.getByRole('button', { name: '상세 및 서명' }).click();

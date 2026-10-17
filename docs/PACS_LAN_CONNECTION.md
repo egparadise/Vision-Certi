@@ -4,14 +4,14 @@
 
 | 항목 | 값 |
 |---|---|
-| INVIZ 서버 / 브라우저 기본 주소 | `https://192.168.45.160:5174` |
+| INVIZ 서버 / 브라우저 기본 주소 | `https://192.168.45.160:5184` |
 | 상태 확인 | `GET /v1/runtime/capabilities` |
 | 개인 인증서 로그인 | `/#/login` |
 | PACS 의사 인증 팝업 | `/#/certificates/pacs-login` |
 | 서비스 클라이언트 ID | `pacs-sv70` |
 | 테스트 기관 ID | `demo-hospital-a` |
 | 서버 간 HMAC audience | `vision-certi:pacs-integration:v1` |
-| 허용 네트워크 | Windows Private/Domain, 같은 서브넷, TCP 5174 |
+| 허용 네트워크 | Windows Private/Domain, 같은 서브넷, TCP 5184 |
 
 ## PACS 서버 설정
 
@@ -34,7 +34,7 @@
 PACS 서버에서:
 
 ```sh
-curl --cacert /etc/vision-certi/vision-certi-lan-ca.cer https://192.168.45.160:5174/v1/runtime/capabilities
+curl --cacert /etc/vision-certi/vision-certi-lan-ca.cer https://192.168.45.160:5184/v1/runtime/capabilities
 ```
 
 PACS API의 `GET /api/vc/config`가 `state: ENABLED`를 반환하는지 확인한다. 최초 PACS ID·비밀번호 로그인 후 `GET /api/vc/auth/enrollment-status`로 등록 상태를 확인하고, 미등록 계정은 `POST /api/vc/auth/enrollment-start`로 공동인증서 등록을 시작한다. 성명·면허·소속은 PACS 서버 DB에서 읽는다. 사용자에게 초대코드를 요구하거나 관리자가 계정을 일괄 사전등록하지 않는다. 인증서 검증·동의·검토·활성화가 완료되면 `PACS user_idx ↔ INVIZ Doctor ID`가 자동 연결된다.

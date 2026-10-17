@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { FolderSearch, HardDrive, Keyboard, Usb, X } from 'lucide-react';
 import type { CertificateChallenge } from '../types/api';
 import type { LocalSignResult } from '../services/localCertSdkAdapter';
 import { signWithCertificateFiles, type CertificateFiles } from '../services/certificateFileSigner';
 import { getRememberedDirectory, rememberDirectory, scanCertificateDirectory,
   type CertificateMedium, type DiscoveredCertificate, type ReadableDirectoryHandle } from '../services/localCertificateDiscovery';
+import './physician-account.css';
 
 type DirectoryPickerWindow = Window & { showDirectoryPicker?: (options: {
   id: string; mode: 'read'; startIn?: FileSystemDirectoryHandle | 'documents';
@@ -12,14 +14,16 @@ const MEDIA: CertificateMedium[] = ['hard-disk', 'removable-disk'];
 const MEDIA_LABEL: Record<CertificateMedium, string> = { 'hard-disk': '하드디스크', 'removable-disk': '이동식디스크' };
 
 /** The server-supplied exact bytes are signed locally; only public proof fields reach INVIZ. */
-export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, actionLabel, busy, onProof }: {
+export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, actionLabel, busy, onProof, onCancel }: {
   challenge?: CertificateChallenge; payloadBase64?: string; expiresAt?: string; actionLabel?: string;
-  busy: boolean; onProof: (proof: LocalSignResult) => Promise<void>;
+  busy: boolean; onProof: (proof: LocalSignResult) => Promise<void>; onCancel?: () => void;
 }) {
   const [medium, setMedium] = useState<CertificateMedium>('hard-disk');
   const [directories, setDirectories] = useState<Partial<Record<CertificateMedium, ReadableDirectoryHandle>>>({});
   const [permissionNeeded, setPermissionNeeded] = useState<Partial<Record<CertificateMedium, boolean>>>({});
   const [discovered, setDiscovered] = useState<Partial<Record<CertificateMedium, DiscoveredCertificate[]>>>({});
+  const [scanLimited, setScanLimited] = useState<Partial<Record<CertificateMedium, boolean>>>({});
+  const scanGeneration = useRef(0);
   const [selectedId, setSelectedId] = useState<string>();
   const [scanning, setScanning] = useState(false);
   const [manualMode, setManualMode] = useState(false);
@@ -41,53 +45,80 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => {
     let cancelled = false;
+    const generation = ++scanGeneration.current;
     void (async () => {
+      setScanning(true);
       for (const item of MEDIA) {
         try {
           const directory = await getRememberedDirectory(item);
-          if (!directory || cancelled) continue;
+          if (!directory || cancelled || generation !== scanGeneration.current) continue;
           setDirectories(previous => ({ ...previous, [item]: directory }));
           if (await directory.queryPermission({ mode: 'read' }) !== 'granted') {
-            if (!cancelled) setPermissionNeeded(previous => ({ ...previous, [item]: true }));
+            if (!cancelled && generation === scanGeneration.current) setPermissionNeeded(previous => ({ ...previous, [item]: true }));
             continue;
           }
-          const found = await scanCertificateDirectory(directory, item);
-          if (!cancelled) setDiscovered(previous => ({ ...previous, [item]: found }));
+          setDiscovered(previous => ({ ...previous, [item]: [] }));
+          const found = await scanCertificateDirectory(directory, item, {
+            shouldStop: () => cancelled || generation !== scanGeneration.current,
+            onFound: entry => {
+              if (!cancelled && generation === scanGeneration.current) setDiscovered(previous =>
+                ({ ...previous, [item]: [...(previous[item] ?? []), entry] }));
+            },
+            onLimit: () => {
+              if (!cancelled && generation === scanGeneration.current) setScanLimited(previous => ({ ...previous, [item]: true }));
+            },
+          });
+          if (!cancelled && generation === scanGeneration.current) setDiscovered(previous => ({ ...previous, [item]: found }));
         } catch {
           // Manual file selection remains available if a saved folder is inaccessible.
         }
       }
+      if (!cancelled && generation === scanGeneration.current) setScanning(false);
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; scanGeneration.current++; };
   }, []);
 
   async function chooseDirectory(reusePermission: boolean) {
     setError('');
+    const item = medium;
+    const generation = ++scanGeneration.current;
     try {
       let directory: ReadableDirectoryHandle;
-      if (reusePermission && directories[medium]) {
-        directory = directories[medium];
+      if (reusePermission && directories[item]) {
+        directory = directories[item];
         if (await directory.requestPermission({ mode: 'read' }) !== 'granted') return;
       } else {
         const picker = (window as DirectoryPickerWindow).showDirectoryPicker;
         if (!picker) throw new Error('이 브라우저는 폴더 검색을 지원하지 않습니다. Chrome 또는 Edge에서 열거나 아래에서 인증서 파일을 직접 선택해 주세요.');
-        directory = await picker.call(window, { id: `vision-certi-${medium}`, mode: 'read',
-          startIn: directories[medium] ?? 'documents' });
+        directory = await picker.call(window, { id: `vision-certi-${item}`, mode: 'read',
+          startIn: directories[item] ?? 'documents' });
       }
       setScanning(true);
-      const found = await scanCertificateDirectory(directory, medium);
-      setDirectories(previous => ({ ...previous, [medium]: directory }));
-      setPermissionNeeded(previous => ({ ...previous, [medium]: false }));
-      setDiscovered(previous => ({ ...previous, [medium]: found }));
+      setScanLimited(previous => ({ ...previous, [item]: false }));
+      setDiscovered(previous => ({ ...previous, [item]: [] }));
+      const found = await scanCertificateDirectory(directory, item, {
+        shouldStop: () => generation !== scanGeneration.current,
+        onFound: entry => {
+          if (generation === scanGeneration.current) setDiscovered(previous =>
+            ({ ...previous, [item]: [...(previous[item] ?? []), entry] }));
+        },
+        onLimit: () => {
+          if (generation === scanGeneration.current) setScanLimited(previous => ({ ...previous, [item]: true }));
+        },
+      });
+      if (generation !== scanGeneration.current) return;
+      setDirectories(previous => ({ ...previous, [item]: directory }));
+      setPermissionNeeded(previous => ({ ...previous, [item]: false }));
+      setDiscovered(previous => ({ ...previous, [item]: found }));
       setSelectedId(undefined);
-      try { await rememberDirectory(medium, directory); } catch {
+      try { await rememberDirectory(item, directory); } catch {
         setError('인증서 목록은 찾았지만 브라우저가 폴더 위치를 기억하지 못했습니다. 다음 방문 시 다시 선택해야 합니다.');
       }
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
         setError(cause instanceof Error ? cause.message : '인증서 폴더를 열 수 없습니다.');
       }
-    } finally { setScanning(false); }
+    } finally { if (generation === scanGeneration.current) setScanning(false); }
   }
 
   async function submit(event: React.FormEvent) {
@@ -114,43 +145,63 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     }
   }
 
-  return <section className="account-proof" aria-label={actionLabel ?? '공동인증서 선택 및 로그인'}>
-    <p>PC에 보관된 공동인증서를 선택하고 비밀번호를 입력해 주세요. 인증서 개인키와 비밀번호는 서버로 전송되지 않습니다.</p>
-    <p role="status">{expired ? '인증 요청이 만료되었습니다. 새 요청을 시작해 주세요.' : `남은 시간 ${Math.ceil((expires - now) / 1000)}초`}</p>
+  function cancel() {
+    setPassword(''); setSelectedId(undefined); setError('');
+    if (onCancel) { onCancel(); return; }
+    if (window.opener && !window.opener.closed) window.close();
+    else if (window.history.length > 1) window.history.back();
+    else window.location.hash = '#/login';
+  }
+
+  return <section className="account-proof cert-dialog" aria-label={actionLabel ?? '공동인증서 선택 및 로그인'}>
+    <div className="cert-dialog-titlebar">
+      <strong>공동인증서 인증</strong>
+      <span>INVIZ</span>
+      <button type="button" aria-label="인증서 선택 취소" onClick={cancel}><X size={19} /></button>
+    </div>
+    <div className="cert-dialog-content">
+    <div className="cert-brand-banner"><img src="/inviz-logo.jpg" alt="INVIZ" /></div>
+    <p className="cert-dialog-instruction">인증서 저장위치를 선택해 주세요.</p>
+    <p role="status" className="cert-dialog-timer">{expired ? '인증 요청이 만료되었습니다. 새 요청을 시작해 주세요.' : `남은 시간 ${Math.ceil((expires - now) / 1000)}초`}</p>
     <form onSubmit={submit}>
       <fieldset disabled={busy || signing || expired} className="enroll-form-fields">
         <legend className="enroll-sr-only">공동인증서</legend>
         <div className="cert-media" aria-label="인증서 저장매체">
           {MEDIA.map(item => <button key={item} type="button" aria-pressed={medium === item}
             onClick={() => { setMedium(item); setSelectedId(undefined); setManualMode(false); setError(''); }}>
-            <span aria-hidden="true">{item === 'hard-disk' ? '▣' : '▤'}</span> {MEDIA_LABEL[item]}
+            {item === 'hard-disk' ? <HardDrive aria-hidden="true" size={28} /> : <Usb aria-hidden="true" size={28} />}
+            <span>{MEDIA_LABEL[item]}</span>
           </button>)}
         </div>
-        <div className="cert-location-actions">
-          <button type="button" onClick={() => void chooseDirectory(false)} disabled={scanning}>인증서 폴더 찾기</button>
-          {permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={scanning}>저장된 폴더 접근 허용</button>}
-          {directories[medium] && !permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={scanning}>목록 새로고침</button>}
-        </div>
-        <p className="cert-location-help">{MEDIA_LABEL[medium]}의 NPKI 폴더 또는 PFX/P12가 있는 폴더를 선택하세요. 한 번 허용한 폴더는 다음 방문에 다시 확인합니다.</p>
+        <p className="cert-dialog-instruction cert-list-heading">인증서를 선택해 주세요.</p>
         <div className="cert-list-wrap">
           <table className="cert-list">
-            <thead><tr><th>선택</th><th>구분</th><th>사용자 / 인증서</th><th>만료일</th><th>발급기관</th></tr></thead>
+            <thead><tr><th>구분</th><th>사용자 / 인증서</th><th>만료기간</th><th>발급자</th></tr></thead>
             <tbody>{entries.map(entry => {
               const isExpired = Boolean(entry.expiresAt && entry.expiresAt.getTime() <= now);
-              return <tr key={entry.id} className={selectedId === entry.id ? 'selected' : ''}>
-                <td><input type="radio" name="local-certificate" aria-label={`${entry.name} 인증서 선택`} checked={selectedId === entry.id}
-                  disabled={isExpired} onChange={() => { setSelectedId(entry.id); setManualMode(false); }} /></td>
-                <td>{entry.kind === 'NPKI' ? '공동' : 'PFX/P12'}</td>
+              return <tr key={entry.id} className={isExpired ? 'expired' : selectedId === entry.id ? 'selected' : ''} onClick={() => {
+                if (!isExpired) { setSelectedId(entry.id); setManualMode(false); }
+              }}>
+                <td><label className="cert-row-select"><input type="radio" name="local-certificate" aria-label={`${entry.name} 인증서 선택`} checked={selectedId === entry.id}
+                  disabled={isExpired} onChange={() => { setSelectedId(entry.id); setManualMode(false); }} />
+                  {entry.kind === 'NPKI' ? '공동' : 'PFX/P12'}</label></td>
                 <td><strong>{entry.name}</strong><small title={entry.path}>{entry.path || '선택한 폴더'}</small></td>
                 <td>{entry.expiresAt ? entry.expiresAt.toLocaleDateString('ko-KR') : '확인 전'}{isExpired ? ' (만료)' : ''}</td>
                 <td>{entry.issuer}</td>
               </tr>;
             })}</tbody>
           </table>
-          {scanning && <p aria-live="polite">인증서 검색 중…</p>}
+          {scanning && <p aria-live="polite">허용된 저장위치에서 인증서를 검색 중입니다…</p>}
           {!scanning && entries.length === 0 && <p className="cert-empty">{permissionNeeded[medium] ? '저장된 폴더의 접근을 다시 허용해 주세요.' :
-            directories[medium] ? '선택한 폴더에서 NPKI 인증서 또는 PFX/P12 파일을 찾지 못했습니다.' : '인증서 폴더를 선택하면 이곳에 목록이 표시됩니다.'}</p>}
+            directories[medium] ? '선택한 폴더와 하위 폴더에서 인증서를 찾지 못했습니다.' : '처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.'}</p>}
         </div>
+        {scanLimited[medium] && <p className="cert-scan-limit" role="alert">검색 범위가 너무 넓어 일부 폴더만 확인했습니다. NPKI 상위 폴더를 직접 선택해 다시 검색해 주세요.</p>}
+        <div className="cert-location-actions">
+          <button type="button" onClick={() => void chooseDirectory(false)} disabled={signing}><FolderSearch size={17} /> 인증서 찾기</button>
+          {permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={signing}>저장된 폴더 접근 허용</button>}
+          {directories[medium] && !permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={signing}>목록 새로고침</button>}
+        </div>
+        <p className="cert-location-help">선택한 폴더와 하위 폴더를 검색합니다. 브라우저 보안상 처음 한 번은 해당 폴더의 읽기 권한을 허용해야 합니다.</p>
         <details className="cert-manual" onToggle={event => { if (event.currentTarget.open) { setSelectedId(undefined); setManualMode(true); } }}>
           <summary>목록에 없나요? 인증서 파일 직접 선택</summary>
           <label>파일 형식<select value={kind} onChange={event => { setKind(event.target.value as 'PFX' | 'NPKI'); setManualMode(true); setSelectedId(undefined); }}>
@@ -163,12 +214,17 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
             <label>중간 인증기관 인증서 (있는 경우)<input type="file" accept=".der" onChange={event => setChain(event.target.files?.[0])} /></label>
           </>}
         </details>
-        <label>인증서 비밀번호<input type="password" autoComplete="off" value={password} onChange={event => setPassword(event.target.value)} required /></label>
-        <button className="enroll-primary" disabled={!password || (!selected && !(manualMode && manualComplete)) || signing}>
-          {signing ? '인증서 확인 중…' : actionLabel ?? '인증서로 계속'}
-        </button>
+        <label className="cert-password-label">현재 인증서 암호를 입력해 주세요.<span className="cert-password-input"><input type="password" aria-label="인증서 비밀번호" autoComplete="off" value={password}
+          onChange={event => setPassword(event.target.value)} placeholder="인증서 비밀번호" required /><Keyboard aria-hidden="true" size={21} /></span></label>
+        <div className="cert-dialog-buttons">
+          <button className="enroll-primary" disabled={!password || (!selected && !(manualMode && manualComplete)) || signing}>
+            {signing ? '인증서 확인 중…' : actionLabel ?? '확인'}
+          </button>
+          <button type="button" className="cert-dialog-cancel" onClick={cancel}>취소</button>
+        </div>
       </fieldset>
     </form>
     {error && <p role="alert">{error}</p>}
+    </div>
   </section>;
 }

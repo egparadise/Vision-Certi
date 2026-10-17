@@ -42,6 +42,10 @@ def main():
     public = folder / 'public'
     private.mkdir(parents=True, exist_ok=True)
     public.mkdir(parents=True, exist_ok=True)
+    # LAN Vite serves this isolated directory so only the public CA and approved UI assets are exposed.
+    logo = ROOT / 'apps/web/public/inviz-logo.jpg'
+    if logo.is_file():
+        shutil.copy2(logo, public / logo.name)
     if os.name == 'nt':
         from local_database import protect
         protect(private)

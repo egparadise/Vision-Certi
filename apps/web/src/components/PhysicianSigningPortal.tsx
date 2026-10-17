@@ -759,7 +759,7 @@ export const PhysicianSigningPortal: React.FC<PhysicianSigningPortalProps> = ({
                     {isPacsReport ? (signConfirmed && hashVerified && certificatePayload ?
                       <ExternalCertificateProof key={selectedSignRequest.id} payloadBase64={certificatePayload}
                         expiresAt={selectedSignRequest.expiresAt} actionLabel="공동인증서로 판독문 최종 서명"
-                        busy={approving} onProof={handleApprove} /> :
+                        busy={approving} onProof={handleApprove} onCancel={() => setSignConfirmed(false)} /> :
                       <p role="status">{certificatePayload ? '판독문 확인에 동의하면 공동인증서 서명을 진행할 수 있습니다.' : '판독문 서명 요청을 준비 중입니다.'}</p>) : <button
                       type="button"
                       data-testid="doctor-sign-approve-btn"

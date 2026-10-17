@@ -32,12 +32,15 @@ it('shows an authorized certificate automatically and signs only after selection
   render(<ExternalCertificateProof challenge={{ challengeId: 'test', signedPayloadBase64: btoa('challenge'),
     expiresAt: new Date(Date.now() + 600000).toISOString() } as CertificateChallenge} busy={false} onProof={onProof} />);
 
+  expect(screen.getByText('공동인증서 인증')).toBeInTheDocument();
+  expect(screen.getByAltText('INVIZ')).toHaveAttribute('src', '/inviz-logo.jpg');
+  expect(screen.getByRole('button', { name: '하드디스크' })).toHaveAttribute('aria-pressed', 'true');
   const row = await screen.findByRole('radio', { name: 'doctor.p12 인증서 선택' });
-  expect(screen.getByRole('button', { name: '인증서로 계속' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '확인' })).toBeDisabled();
   expect(getFiles).not.toHaveBeenCalled();
   fireEvent.click(row);
   fireEvent.change(screen.getByLabelText('인증서 비밀번호'), { target: { value: 'secret' } });
-  fireEvent.submit(screen.getByRole('button', { name: '인증서로 계속' }).closest('form')!);
+  fireEvent.submit(screen.getByRole('button', { name: '확인' }).closest('form')!);
   await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
   expect(mocks.signWithCertificateFiles).toHaveBeenCalledWith({ kind: 'PFX', bundle }, 'secret', btoa('challenge'));
   expect(getFiles).toHaveBeenCalledTimes(1);

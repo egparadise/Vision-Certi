@@ -1,6 +1,6 @@
 import { generateKeyPairSync } from 'node:crypto';
 import forge from 'korea-forge';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { scanCertificateDirectory, type ReadableDirectoryHandle } from '../services/localCertificateDiscovery';
 
 function file(name: string, content: Uint8Array): File {
@@ -55,4 +55,27 @@ it('finds NPKI pairs and PFX files in an authorized tree without opening private
   expect(files.kind).toBe('NPKI');
   expect(reads).toContain('signPri.key');
   expect(found.find(item => item.kind === 'PFX')?.path).toBe('backup.p12');
+});
+
+it('searches deeply nested folders and reports each certificate as it is found', async () => {
+  const reads: string[] = [];
+  let nested = directory('level-10', { 'doctor.p12': fileHandle('doctor.p12', new Uint8Array([1]), reads) });
+  for (let depth = 9; depth >= 1; depth--) nested = directory(`level-${depth}`, { [`level-${depth + 1}`]: nested });
+  const onFound = vi.fn();
+  const found = await scanCertificateDirectory(nested, 'removable-disk', { onFound });
+  expect(found).toHaveLength(1);
+  expect(onFound).toHaveBeenCalledWith(found[0]);
+  expect(found[0].path).toContain('doctor.p12');
+  expect(reads).toEqual([]);
+});
+
+it('searches NPKI folders before unrelated directories so existing certificates appear first', async () => {
+  const reads: string[] = [];
+  const root = directory('selected', {
+    archive: directory('archive', { 'old.p12': fileHandle('old.p12', new Uint8Array([1]), reads) }),
+    NPKI: directory('NPKI', { 'doctor.p12': fileHandle('doctor.p12', new Uint8Array([1]), reads) }),
+  });
+  const order: string[] = [];
+  await scanCertificateDirectory(root, 'hard-disk', { onFound: entry => order.push(entry.path) });
+  expect(order).toEqual(['NPKI/doctor.p12', 'archive/old.p12']);
 });

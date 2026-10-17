@@ -20,9 +20,15 @@ export interface DiscoveredCertificate {
 
 const DB_NAME = 'vision-certi-certificate-locations';
 const STORE_NAME = 'read-only-directory-handles';
-const MAX_DEPTH = 8;
-const MAX_ENTRIES = 5000;
+const MAX_DEPTH = 16;
+const MAX_ENTRIES = 30000;
 const MAX_RESULTS = 200;
+
+export interface CertificateScanOptions {
+  onFound?: (certificate: DiscoveredCertificate) => void;
+  onLimit?: () => void;
+  shouldStop?: () => boolean;
+}
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -64,6 +70,15 @@ function binary(data: Uint8Array): string {
   return output;
 }
 
+function directoryPriority(name: string): number {
+  const value = name.toLowerCase();
+  if (value === 'npki') return 0;
+  if (value === 'appdata' || value === 'locallow' || value === 'local' || value === 'roaming') return 1;
+  if (value === 'users' || value === 'user') return 2;
+  if (value === 'documents' || value === 'desktop' || value === 'downloads') return 3;
+  return 4;
+}
+
 function displayField(field: { value?: unknown; valueTagClass?: number } | undefined, fallback: string): string {
   if (typeof field?.value !== 'string') return fallback;
   const raw = field.value;
@@ -91,17 +106,25 @@ async function certificateDetails(file: File): Promise<{ name: string; issuer: s
 }
 
 /** Enumerates only the directory explicitly authorized by the doctor; private keys are never read here. */
-export async function scanCertificateDirectory(root: ReadableDirectoryHandle, medium: CertificateMedium): Promise<DiscoveredCertificate[]> {
+export async function scanCertificateDirectory(root: ReadableDirectoryHandle, medium: CertificateMedium,
+  options: CertificateScanOptions = {}): Promise<DiscoveredCertificate[]> {
   const results: DiscoveredCertificate[] = [];
   let visited = 0;
+  let limited = false;
   async function visit(directory: ReadableDirectoryHandle, path: string, depth: number): Promise<void> {
-    if (depth > MAX_DEPTH || visited >= MAX_ENTRIES || results.length >= MAX_RESULTS) return;
+    if (options.shouldStop?.()) return;
+    if (depth > MAX_DEPTH || visited >= MAX_ENTRIES || results.length >= MAX_RESULTS) {
+      limited = true;
+      return;
+    }
     const files = new Map<string, FileSystemFileHandle>();
     const children: Array<[string, ReadableDirectoryHandle]> = [];
     for await (const [name, handle] of directory.entries()) {
-      if (++visited > MAX_ENTRIES) break;
+      if (options.shouldStop?.()) return;
+      if (++visited > MAX_ENTRIES) { limited = true; break; }
       if (handle.kind === 'file') files.set(name.toLowerCase(), handle as FileSystemFileHandle);
       else if (depth < MAX_DEPTH) children.push([name, handle as ReadableDirectoryHandle]);
+      else limited = true;
     }
     const cert = files.get('signcert.der');
     const key = files.get('signpri.key');
@@ -109,22 +132,31 @@ export async function scanCertificateDirectory(root: ReadableDirectoryHandle, me
       const details = await certificateDetails(await cert.getFile());
       if (details) {
         const chain = files.get('cacert.der');
-        results.push({ id: `${medium}:${path}:NPKI`, kind: 'NPKI', path, ...details,
+        const found: DiscoveredCertificate = { id: `${medium}:${path}:NPKI`, kind: 'NPKI', path, ...details,
           getFiles: async () => ({ kind: 'NPKI', certificate: await cert.getFile(), privateKey: await key.getFile(),
-            chain: chain ? await chain.getFile() : undefined }) });
+            chain: chain ? await chain.getFile() : undefined }) };
+        results.push(found);
+        options.onFound?.(found);
       }
     }
     for (const [name, handle] of files) {
-      if (!/\.(pfx|p12)$/.test(name) || results.length >= MAX_RESULTS) continue;
+      if (results.length >= MAX_RESULTS) { limited = true; break; }
+      if (!/\.(pfx|p12)$/.test(name)) continue;
       const filePath = path ? `${path}/${name}` : name;
-      results.push({ id: `${medium}:${filePath}:PFX`, kind: 'PFX', path: filePath,
-        name, issuer: '비밀번호 입력 후 확인', getFiles: async () => ({ kind: 'PFX', bundle: await handle.getFile() }) });
+      const found: DiscoveredCertificate = { id: `${medium}:${filePath}:PFX`, kind: 'PFX', path: filePath,
+        name, issuer: '비밀번호 입력 후 확인', getFiles: async () => ({ kind: 'PFX', bundle: await handle.getFile() }) };
+      results.push(found);
+      options.onFound?.(found);
     }
+    children.sort(([left], [right]) => directoryPriority(left) - directoryPriority(right));
     for (const [name, child] of children) {
+      if (options.shouldStop?.()) return;
       if (visited >= MAX_ENTRIES || results.length >= MAX_RESULTS) break;
       await visit(child, path ? `${path}/${name}` : name, depth + 1);
     }
   }
   await visit(root, '', 0);
+  if (results.length >= MAX_RESULTS) limited = true;
+  if (limited) options.onLimit?.();
   return results.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }

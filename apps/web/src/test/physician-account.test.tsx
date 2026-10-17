@@ -71,19 +71,21 @@ describe('External proof input', () => {
   it('requires a local certificate and password before sending any proof', async () => {
     const onProof = vi.fn();
     render(<ExternalCertificateProof challenge={challenge} busy={false} onProof={onProof} />);
+    await screen.findByText('처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.');
     expect(screen.getByLabelText('PFX/P12 파일')).toBeInTheDocument();
     expect(screen.getByLabelText('인증서 비밀번호')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '인증서로 계속' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '확인' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('파일 형식'), { target: { value: 'NPKI' } });
     expect(screen.getByLabelText(/signCert.der/)).toBeInTheDocument();
     expect(screen.getByLabelText(/signPri.key/)).toBeInTheDocument();
     expect(onProof).not.toHaveBeenCalled();
   });
-  it('does not submit after challenge expiry', () => {
+  it('does not submit after challenge expiry', async () => {
     const onProof = vi.fn();
     render(<ExternalCertificateProof challenge={{ ...challenge, expiresAt: new Date(Date.now()-1000).toISOString() }} busy={false} onProof={onProof} />);
+    await screen.findByText('처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.');
     expect(screen.getByRole('status')).toHaveTextContent('만료');
-    expect(screen.getByRole('button', { name: '인증서로 계속' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '확인' })).toBeDisabled();
     expect(onProof).not.toHaveBeenCalled();
   });
 });

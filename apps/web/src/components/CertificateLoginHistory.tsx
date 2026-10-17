@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { AuditEvent } from '../types/api';
@@ -7,26 +7,33 @@ import type { AuditEvent } from '../types/api';
 export function CertificateLoginHistory() {
   const { client, tenantId } = useApp();
   const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [loadedTenantId, setLoadedTenantId] = useState(tenantId);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const requestGeneration = useRef(0);
 
   const load = useCallback(async () => {
+    const generation = ++requestGeneration.current;
     setLoading(true);
     setError('');
+    setEvents([]);
+    setLoadedTenantId(tenantId);
     try {
       const response = await client.getCertificateLogins();
-      setEvents(response.items ?? []);
+      if (generation === requestGeneration.current) setEvents(response.items ?? []);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '로그인 이력을 불러오지 못했습니다.');
+      if (generation === requestGeneration.current) {
+        setError(cause instanceof Error ? cause.message : '로그인 이력을 불러오지 못했습니다.');
+      }
     } finally {
-      setLoading(false);
+      if (generation === requestGeneration.current) setLoading(false);
     }
   }, [client, tenantId]);
 
   useEffect(() => { void load(); }, [load]);
   const normalized = query.trim().toLocaleLowerCase();
-  const visible = events.filter(event => !normalized || [
+  const visible = (loadedTenantId === tenantId ? events : []).filter(event => !normalized || [
     event.details.pacsLoginId, event.details.pacsAccountId, event.targetId,
   ].some(value => value?.toLocaleLowerCase().includes(normalized)));
 
@@ -48,8 +55,8 @@ export function CertificateLoginHistory() {
           <input type="search" value={query} onChange={event => setQuery(event.target.value)}
             placeholder="로그인 ID 또는 의사 ID" style={{ display: 'block', width: '100%', maxWidth: 360, marginTop: 6 }} />
         </label>
-        {error && <div className="alert alert-error" role="alert">{error}</div>}
-        {loading && !events.length ? <p role="status">로그인 이력을 불러오는 중입니다.</p> :
+        {loadedTenantId === tenantId && error && <div className="alert alert-error" role="alert">{error}</div>}
+        {(loading || loadedTenantId !== tenantId) && !visible.length ? <p role="status">로그인 이력을 불러오는 중입니다.</p> :
           visible.length === 0 ? <p>표시할 공동인증서 로그인 기록이 없습니다.</p> :
           <div className="table-responsive">
             <table className="table">

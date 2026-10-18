@@ -91,12 +91,21 @@ Body: `{"handoffCode"}`. Returns `200`:
 
 The code is consumed on any attempt. An unknown, expired or used code, another client, or a tenant out of scope gives `401 HANDOFF_INVALID`. At redeem time the backend re-checks that the session is live, the doctor is ACTIVE and the same enrollment is ACTIVE/GOOD; otherwise `403 HANDOFF_IDENTITY_NOT_VALID`.
 
+### PACS login confirmation and connection lifetime
+
+After PACS creates its own certificate-login session, it must call `POST /v1/integrations/pacs/certificate-logins/confirm` with HMAC authentication and `{handoffCodeSha256, tenantId, doctorId, certificateEnrollmentId, pacsAccountId, pacsLoginId, pacsSessionId}`. The SHA-256 value is the hash of the one-time handoff code; `pacsSessionId` is the PACS server's numeric `vc_sessions.id`, not the account name. The response includes the authoritative `expiresAt`. The normal initial lifetime is two hours. A replay must use the same account, login ID and session ID.
+
+`GET /v1/integrations/pacs/sessions/{pacsSessionId}` returns the active Vision-Certi expiry, certificate fingerprint and extension count. `POST /v1/integrations/pacs/sessions/{pacsSessionId}/extend` accepts `{tenantId, doctorId, pacsAccountId, pacsSessionId, certificateFingerprintSha256, extendMinutes:60}`. It validates the HMAC client, confirmed PACS login, current Vision-Certi certificate session and current external certificate status, then extends by exactly one hour. PACS must copy the returned `expiresAt` into its own session. An expired session cannot be extended; the doctor must log in again.
+
+Administrators can query `GET /v1/admin/certificate-operations` for the tenant's certificate identity, issuer, expiry, login attempts/successes and report-request counts. The certificate login and report checks are also in the hash-chained audit log.
+
 ### `POST /v1/integrations/pacs/report-sign-requests` (HMAC, `Idempotency-Key` required)
 
-Body: `{tenantId, doctorId, externalReportId, externalStudyId, revision, title, contentType, contentBase64, contentSha256}`.
+Body: `{tenantId, doctorId, externalReportId, externalStudyId, revision, title, contentType, contentBase64, contentSha256, pacsSessionId, certificateFingerprintSha256}`.
 - `contentType` must be `application/vnd.saintview.pacs-report+json;version=1`.
 - The content must be strict UTF-8 JSON of at most 256 KiB, with `schema` = `saintview-pacs-report-snapshot/v1`.
 - Its `tenantId`, `doctorId`, `report.externalReportId` and `report.revision` must equal the request.
+- `pacsSessionId` and the full-DER certificate SHA-256 fingerprint must match a confirmed PACS login for this doctor and the still-live Vision-Certi certificate session. A mismatched or expired certificate is rejected before any document or sign request is created.
 
 It returns `201 {signRequestId, documentId, documentVersionId, documentSha256, signerId, status, expiresAt, revision}`. An idempotent replay returns the stored `201` response. The nonce is never returned.
 
@@ -109,6 +118,7 @@ It returns `201 {signRequestId, documentId, documentVersionId, documentSha256, s
 - `422 VALIDATION_FAILED`, `REPORT_SNAPSHOT_INVALID`, `SIGNER_NOT_ELIGIBLE`, `IDEMPOTENCY_KEY_REQUIRED`.
 - `409 DOCUMENT_HASH_MISMATCH`, `IDEMPOTENCY_KEY_REUSED`, `DOCUMENT_METADATA_CONFLICT`.
 - `403 INTEGRATION_TENANT_FORBIDDEN`.
+- `403 REPORT_CERTIFICATE_MISMATCH`, `REPORT_CERTIFICATE_SESSION_INVALID`; `422 REPORT_CERTIFICATE_PROOF_REQUIRED`.
 
 ### `GET /v1/integrations/pacs/report-sign-requests/{id}` (HMAC)
 

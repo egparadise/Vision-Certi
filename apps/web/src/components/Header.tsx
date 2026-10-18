@@ -279,6 +279,9 @@ export const Header: React.FC = () => {
               <LogIn size={13} />
               <span>개인 인증 로그인</span>
             </a>
+            <a href="#/admin/login" className="header-pill-link" style={{ color: '#fbbf24' }}>
+              관리자 로그인
+            </a>
             <a href="#/signup" className="header-pill-link" style={{ color: '#5eead4' }}>
               <UserPlus size={13} />
               <span>개인·의료인 가입</span>

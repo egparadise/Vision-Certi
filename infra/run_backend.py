@@ -7,6 +7,9 @@ a=p.parse_args(); root=pathlib.Path(__file__).resolve().parents[1]
 config=json.loads((root/'work/openbao/runtime.secrets.json').read_text())
 env={k.upper():v for k,v in os.environ.items()}
 env.update(VISIONCERTI_SIGNING_BACKEND='OPENBAO_TRANSIT',VISIONCERTI_OPENBAO_ADDR=config['address'],VISIONCERTI_OPENBAO_PROVISIONING_TOKEN=config['provisioningToken'],VISIONCERTI_OPENBAO_SIGNING_TOKEN=config['signingToken'],VISIONCERTI_DOCTOR_DEV_IDENTITY_ENABLED=str(a.mock_identity).lower(),VISIONCERTI_CERT_DEV_MOCK_ENABLED=str(a.mock_certificate).lower())
+admin_password_file = root/'work/admin-login.secret'
+if admin_password_file.is_file():
+ env['VISIONCERTI_DEV_ADMIN_PASSWORD'] = admin_password_file.read_text(encoding='utf-8').strip()
 if a.certificate_trust: env['VISIONCERTI_CERT_TRUST_ANCHORS_FILE']=str(pathlib.Path(a.certificate_trust).resolve())
 if a.certificate_crl: env['VISIONCERTI_CERT_CRL_FILES']=str(pathlib.Path(a.certificate_crl).resolve())
 if a.integration:

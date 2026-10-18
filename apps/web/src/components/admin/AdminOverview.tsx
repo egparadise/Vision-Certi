@@ -16,6 +16,8 @@ interface StatusItem {
 export const AdminOverview: React.FC<{ onNavigate: (section: AdminSection) => void }> = ({ onNavigate }) => {
   const { client, runtimeCapabilities: caps, capabilitiesLoading, tenantId, staffProfile } = useApp();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [certificateRows, setCertificateRows] = useState<Awaited<ReturnType<typeof client.getCertificateOperations>>>([]);
+  const [certificateError, setCertificateError] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
 
@@ -24,6 +26,11 @@ export const AdminOverview: React.FC<{ onNavigate: (section: AdminSection) => vo
     setError(null);
     try {
       setDashboard(await client.getDashboard());
+      try { setCertificateRows(await client.getCertificateOperations()); setCertificateError(null); }
+      catch (cause) {
+        setCertificateRows([]);
+        setCertificateError(cause instanceof Error ? cause.message : '인증서 현황을 불러올 수 없습니다.');
+      }
     } catch (err) {
       setError(err);
     } finally {
@@ -132,6 +139,32 @@ export const AdminOverview: React.FC<{ onNavigate: (section: AdminSection) => vo
           <span className="metric-value">
             {loading ? '…' : `${dashboard?.documents ?? '-'} / ${dashboard?.signatures ?? '-'}`}
           </span>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header"><span className="card-title">공동인증서 등록·PACS 이용 현황</span></div>
+        <div className="card-body" style={{ overflowX: 'auto' }}>
+          {certificateError && <p role="alert">인증서 현황 조회 실패: {certificateError}</p>}
+          <table className="admin-certificate-table">
+            <thead><tr><th>이름 / PACS ID</th><th>의사면허</th><th>전문의 번호</th>
+              <th>발급기관</th><th>만료일</th><th>상태</th><th>인증서 SHA-256</th>
+              <th>로그인 시도</th><th>PACS 로그인 성공</th><th>판독 승인 요청</th>
+              <th>PACS 연결 만료 / 연장</th></tr></thead>
+            <tbody>{certificateRows.map(row => <tr key={`${row.doctorId}-${row.fingerprintSha256}`}>
+              <td>{row.name}<br /><small>{row.pacsLoginId ?? '연결 전'}</small></td>
+              <td>{row.licenseNumber ?? '미등록'}</td><td>{row.specialistQualificationNumber ?? '해당 없음'}</td>
+              <td>{row.issuer ?? '확인 불가'}</td>
+              <td>{row.notAfter ? new Date(row.notAfter).toLocaleDateString('ko-KR') : '확인 불가'}</td>
+              <td>{row.registrationStatus}</td>
+              <td title={row.fingerprintSha256}><code>{row.fingerprintSha256.slice(0, 16)}…</code></td>
+              <td>{row.loginAttempts}</td><td>{row.loginApproved}</td><td>{row.reportApprovalRequests}</td>
+              <td>{row.connectionExpiresAt
+                ? <>{new Date(row.connectionExpiresAt).toLocaleString('ko-KR')}<br /><small>연장 {row.extensionCount}회 · 세션 {row.pacsSessionId}</small></>
+                : '연결 기록 없음'}</td>
+            </tr>)}</tbody>
+          </table>
+          {!loading && certificateRows.length === 0 && <p>등록된 인증서가 없습니다.</p>}
         </div>
       </div>
 

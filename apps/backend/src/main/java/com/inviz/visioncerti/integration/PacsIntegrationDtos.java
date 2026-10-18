@@ -42,11 +42,17 @@ public final class PacsIntegrationDtos {
 
     /** Sent only by the HMAC-authenticated PACS server after it has created a local certificate-login session. */
     public record CertificateLoginConfirmationRequest(String handoffCodeSha256, String tenantId, UUID doctorId,
-            UUID certificateEnrollmentId, String pacsAccountId, String pacsLoginId) {
+            UUID certificateEnrollmentId, String pacsAccountId, String pacsLoginId, String pacsSessionId) {
         @Override public String toString() { return "CertificateLoginConfirmationRequest[<account data redacted>]"; }
     }
 
-    public record CertificateLoginConfirmationResponse(boolean recorded, Instant recordedAt) { }
+    public record CertificateLoginConfirmationResponse(boolean recorded, Instant recordedAt, Instant expiresAt) { }
+
+    public record PacsSessionExtendRequest(String tenantId, UUID doctorId, String pacsAccountId,
+            String pacsSessionId, String certificateFingerprintSha256, Integer extendMinutes) { }
+
+    public record PacsSessionStatus(boolean active, String tenantId, UUID doctorId, String pacsSessionId,
+            String certificateFingerprintSha256, Instant expiresAt, int extendedCount) { }
 
     /**
      * {@code certificatePasswordVerified} is true only for a PC certificate login: INVIZ verified a signature over its
@@ -61,7 +67,7 @@ public final class PacsIntegrationDtos {
 
     public record ReportSignRequestCreate(String tenantId, String doctorId, String externalReportId,
             String externalStudyId, Integer revision, String title, String contentType, String contentBase64,
-            String contentSha256) {
+            String contentSha256, String pacsSessionId, String certificateFingerprintSha256) {
         @Override
         public String toString() {
             return "ReportSignRequestCreate[tenantId=" + tenantId + ", externalReportId=" + externalReportId

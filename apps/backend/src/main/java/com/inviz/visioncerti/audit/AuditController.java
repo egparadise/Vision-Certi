@@ -23,7 +23,10 @@ public class AuditController {
         var events = auditService.list(actor.tenantId());
         if (actor.role() != ActorRole.ADMIN) {
             events = events.stream()
-                    .filter(event -> !"PACS_CERTIFICATE_LOGIN_COMPLETED".equals(event.action()))
+                    .filter(event -> !event.action().startsWith("PACS_CERTIFICATE_")
+                            && !event.action().startsWith("PACS_REPORT_CERTIFICATE_")
+                            && !event.action().startsWith("CERTIFICATE_LOGIN_")
+                            && !"CERTIFICATE_SESSION_EXTENDED".equals(event.action()))
                     .toList();
         }
         return ListResponse.of(events);

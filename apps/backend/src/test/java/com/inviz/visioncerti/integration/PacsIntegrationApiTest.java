@@ -275,14 +275,32 @@ class PacsIntegrationApiTest {
                 + "},\"schema\":\"saintview-pacs-report-snapshot/v1\",\"tenantId\":\"" + tenantId + "\"}";
     }
 
-    static String createBody(String tenantId, String doctorId, String reportId, int revision, String snapshot,
+    private String reportSessionId;
+    private String reportFingerprint;
+
+    private void establishReportLogin(ActiveDoctor doctor) throws Exception {
+        String code = handoff(doctor.token());
+        reportSessionId = Integer.toString(SEQ.incrementAndGet());
+        reportFingerprint = doctor.leaf().fingerprint();
+        servicePost("/v1/integrations/pacs/handoffs/redeem", "{\"handoffCode\":\"" + code + "\"}")
+                .andExpect(status().isOk());
+        servicePost("/v1/integrations/pacs/certificate-logins/confirm",
+                "{\"handoffCodeSha256\":\"" + Hashing.sha256Hex(code) + "\",\"tenantId\":\"" + A
+                        + "\",\"doctorId\":\"" + doctor.id() + "\",\"certificateEnrollmentId\":\""
+                        + doctor.registrationId() + "\",\"pacsAccountId\":\"42\",\"pacsLoginId\":\"reader42\""
+                        + ",\"pacsSessionId\":\"" + reportSessionId + "\"}")
+                .andExpect(status().isOk());
+    }
+
+    String createBody(String tenantId, String doctorId, String reportId, int revision, String snapshot,
             String sha) {
         return "{\"tenantId\":\"" + tenantId + "\",\"doctorId\":\"" + doctorId + "\",\"externalReportId\":\""
                 + reportId + "\",\"externalStudyId\":\"pacs-sv70:study:9\",\"revision\":" + revision
                 + ",\"title\":\"CT report rev " + revision + "\",\"contentType\":\""
                 + "application/vnd.saintview.pacs-report+json;version=1\",\"contentBase64\":\""
                 + Base64.getEncoder().encodeToString(snapshot.getBytes(StandardCharsets.UTF_8))
-                + "\",\"contentSha256\":\"" + sha + "\"}";
+                + "\",\"contentSha256\":\"" + sha + "\",\"pacsSessionId\":\"" + reportSessionId
+                + "\",\"certificateFingerprintSha256\":\"" + reportFingerprint + "\"}";
     }
 
     private ResultActions createSignRequest(String key, String body) throws Exception {
@@ -380,7 +398,8 @@ class PacsIntegrationApiTest {
         String path = "/v1/integrations/pacs/certificate-logins/confirm";
         String body = "{\"handoffCodeSha256\":\"" + Hashing.sha256Hex(code) + "\",\"tenantId\":\"" + A
                 + "\",\"doctorId\":\"" + doctor.id() + "\",\"certificateEnrollmentId\":\""
-                + doctor.registrationId() + "\",\"pacsAccountId\":\"42\",\"pacsLoginId\":\"reader42\"}";
+                + doctor.registrationId() + "\",\"pacsAccountId\":\"42\",\"pacsLoginId\":\"reader42\""
+                + ",\"pacsSessionId\":\"4242\"}";
         mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isUnauthorized());
         servicePost(path, body).andExpect(status().isForbidden())
@@ -409,6 +428,21 @@ class PacsIntegrationApiTest {
     @Test
     void reportSnapshotIsSignedOnlyAfterTheDoctorsExplicitApprovalAndEvidenceIsReturned() throws Exception {
         ActiveDoctor doctor = activeDoctor();
+        establishReportLogin(doctor);
+        String sessionPath = "/v1/integrations/pacs/sessions/" + reportSessionId;
+        String beforeExpiry = JsonPath.read(serviceGet(sessionPath).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.expiresAt");
+        assertThat(java.time.Instant.parse(beforeExpiry))
+                .isBetween(java.time.Instant.now().plus(java.time.Duration.ofMinutes(118)),
+                        java.time.Instant.now().plus(java.time.Duration.ofHours(2)).plusSeconds(30));
+        String extendBody = "{\"tenantId\":\"" + A + "\",\"doctorId\":\"" + doctor.id()
+                + "\",\"pacsAccountId\":\"42\",\"pacsSessionId\":\"" + reportSessionId
+                + "\",\"certificateFingerprintSha256\":\"" + reportFingerprint
+                + "\",\"extendMinutes\":60}";
+        String extended = servicePost(sessionPath + "/extend", extendBody).andExpect(status().isOk())
+                .andExpect(jsonPath("$.extendedCount").value(1)).andReturn().getResponse().getContentAsString();
+        assertThat(java.time.Instant.parse(JsonPath.read(extended, "$.expiresAt")))
+                .isEqualTo(java.time.Instant.parse(beforeExpiry).plus(java.time.Duration.ofHours(1)));
         String reportId = "pacs-sv70:report:" + SEQ.incrementAndGet();
         String snap = snapshot(A, doctor.id(), reportId, 1, "No focal lesion.");
         byte[] snapBytes = snap.getBytes(StandardCharsets.UTF_8);
@@ -429,6 +463,8 @@ class PacsIntegrationApiTest {
                 .andExpect(jsonPath("$.code").value("REPORT_SNAPSHOT_INVALID"));
         createSignRequest("k-" + UUID.randomUUID(), createBody("demo-hospital-b", doctor.id(), reportId, 1, snap, sha))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("INTEGRATION_TENANT_FORBIDDEN"));
+        createSignRequest("k-" + UUID.randomUUID(), body.replace(reportFingerprint, "0".repeat(64)))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("REPORT_CERTIFICATE_MISMATCH"));
 
         String created = createSignRequest(key, body)
                 .andExpect(status().isCreated())

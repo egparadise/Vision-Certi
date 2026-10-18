@@ -73,6 +73,21 @@ public class PacsIntegrationController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(handoffs.confirmLogin(client(request), body));
     }
 
+    @GetMapping("/v1/integrations/pacs/sessions/{pacsSessionId}")
+    ResponseEntity<PacsIntegrationDtos.PacsSessionStatus> sessionStatus(HttpServletRequest request,
+            @PathVariable String pacsSessionId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(handoffs.status(client(request), pacsSessionId));
+    }
+
+    @PostMapping("/v1/integrations/pacs/sessions/{pacsSessionId}/extend")
+    ResponseEntity<PacsIntegrationDtos.PacsSessionStatus> extendSession(HttpServletRequest request,
+            @PathVariable String pacsSessionId,
+            @RequestBody PacsIntegrationDtos.PacsSessionExtendRequest body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(handoffs.extend(client(request), pacsSessionId, body));
+    }
+
     @PostMapping("/v1/integrations/pacs/report-sign-requests")
     ResponseEntity<ReportSignRequestCreated> create(HttpServletRequest request,
             @RequestHeader(name = IdempotencyService.HEADER, required = false) String idempotencyKey,

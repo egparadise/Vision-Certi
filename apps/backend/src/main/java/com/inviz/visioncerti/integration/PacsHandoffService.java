@@ -37,12 +37,13 @@ public class PacsHandoffService {
     private static final Pattern CODE = Pattern.compile("[A-Za-z0-9_-]{43}");
     private static final Pattern CODE_HASH = Pattern.compile("[0-9a-f]{64}");
     private static final Pattern PACS_ID = Pattern.compile("[A-Za-z0-9_.@:-]{1,128}");
+    private static final Pattern PACS_SESSION_ID = Pattern.compile("[0-9]{1,20}");
     private static final int MAX_PENDING = 10_000;
 
     /** A pending handoff; only the SHA-256 of the code is stored. Consumed on the first redeem attempt. */
     record Handoff(UUID id, String codeHash, String clientId, String tenantId, IntegrationIdentity identity,
             Instant createdAt, Instant expiresAt, boolean consumed, Instant confirmedAt,
-            String pacsAccountId, String pacsLoginId) {
+            String pacsAccountId, String pacsLoginId, String pacsSessionId) {
     }
 
     static final Kind<Handoff> HANDOFFS = Kind.of("pacs_handoffs", Handoff.class)
@@ -109,7 +110,7 @@ public class PacsHandoffService {
                 throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "HANDOFF_CAPACITY", "잠시 후 다시 시도해 주세요.", true);
             }
             tx.insert(HANDOFFS, new Handoff(UUID.randomUUID(), Hashing.sha256Hex(code), client.clientId(),
-                    identity.tenantId(), identity, now, expiresAt, false, null, null, null));
+                    identity.tenantId(), identity, now, expiresAt, false, null, null, null, null));
             audit.record(identity.tenantId(), identity.doctorId().toString(), "PACS_HANDOFF_ISSUED", "DOCTOR",
                     identity.doctorId().toString(), AuditService.SUCCESS, Map.of("audience", client.clientId(),
                             "certificateEnrollmentId", identity.certificateEnrollmentId().toString()));
@@ -129,7 +130,7 @@ public class PacsHandoffService {
                 }
                 tx.update(HANDOFFS, new Handoff(found.id(), found.codeHash(), found.clientId(), found.tenantId(),
                         found.identity(), found.createdAt(), found.expiresAt(), true, found.confirmedAt(),
-                        found.pacsAccountId(), found.pacsLoginId()));
+                        found.pacsAccountId(), found.pacsLoginId(), found.pacsSessionId()));
                 return found;
             });
         }
@@ -165,7 +166,8 @@ public class PacsHandoffService {
         if (body == null || body.handoffCodeSha256() == null || !CODE_HASH.matcher(body.handoffCodeSha256()).matches()
                 || body.tenantId() == null || body.doctorId() == null || body.certificateEnrollmentId() == null
                 || body.pacsAccountId() == null || !PACS_ID.matcher(body.pacsAccountId()).matches()
-                || body.pacsLoginId() == null || !PACS_ID.matcher(body.pacsLoginId()).matches()) {
+                || body.pacsLoginId() == null || !PACS_ID.matcher(body.pacsLoginId()).matches()
+                || body.pacsSessionId() == null || !PACS_SESSION_ID.matcher(body.pacsSessionId()).matches()) {
             throw ApiException.unprocessable("LOGIN_CONFIRMATION_INVALID", "PACS certificate login confirmation is invalid");
         }
         Instant now = clock.instant();
@@ -181,22 +183,120 @@ public class PacsHandoffService {
             }
             if (handoff.confirmedAt() != null) {
                 if (!body.pacsAccountId().equals(handoff.pacsAccountId())
-                        || !body.pacsLoginId().equals(handoff.pacsLoginId())) {
+                        || !body.pacsLoginId().equals(handoff.pacsLoginId())
+                        || !body.pacsSessionId().equals(handoff.pacsSessionId())) {
                     throw ApiException.conflict("LOGIN_CONFIRMATION_CONFLICT", "PACS login was already confirmed for another account");
                 }
-                return new CertificateLoginConfirmationResponse(true, handoff.confirmedAt());
+                return new CertificateLoginConfirmationResponse(true, handoff.confirmedAt(),
+                        doctors.confirmIntegrationSession(body.doctorId(), handoff.identity().sessionId(),
+                                body.certificateEnrollmentId()).sessionExpiresAt());
             }
             tx.update(HANDOFFS, new Handoff(handoff.id(), handoff.codeHash(), handoff.clientId(), handoff.tenantId(),
                     handoff.identity(), handoff.createdAt(), handoff.expiresAt(), true, now,
-                    body.pacsAccountId(), body.pacsLoginId()));
+                    body.pacsAccountId(), body.pacsLoginId(), body.pacsSessionId()));
             audit.record(handoff.tenantId(), client.actorId(), "PACS_CERTIFICATE_LOGIN_COMPLETED", "DOCTOR",
                     body.doctorId().toString(), AuditService.SUCCESS,
                     Map.of("pacsAccountId", body.pacsAccountId(), "pacsLoginId", body.pacsLoginId(),
+                            "pacsSessionId", body.pacsSessionId(),
+                            "visionSessionId", handoff.identity().sessionId().toString(),
                             "certificateEnrollmentId", body.certificateEnrollmentId().toString(),
                             "certificateFingerprintSha256", handoff.identity().certificateFingerprint(),
+                            "expiresAt", handoff.identity().sessionExpiresAt().toString(),
                             "clientId", client.clientId()));
-            return new CertificateLoginConfirmationResponse(true, now);
+            return new CertificateLoginConfirmationResponse(true, now, handoff.identity().sessionExpiresAt());
         });
+    }
+
+    public PacsIntegrationDtos.PacsSessionStatus status(IntegrationClient client, String pacsSessionId) {
+        var login = findConfirmedLogin(client, pacsSessionId);
+        var identity = doctors.confirmIntegrationSession(UUID.fromString(login.targetId()),
+                UUID.fromString(login.details().get("visionSessionId")),
+                UUID.fromString(login.details().get("certificateEnrollmentId")));
+        int extended = (int) audit.list(identity.tenantId()).stream()
+                .filter(e -> "PACS_CERTIFICATE_SESSION_EXTENDED".equals(e.action())
+                        && pacsSessionId.equals(e.details().get("pacsSessionId")))
+                .count();
+        return new PacsIntegrationDtos.PacsSessionStatus(true, identity.tenantId(), identity.doctorId(),
+                pacsSessionId, identity.certificateFingerprint(), identity.sessionExpiresAt(), extended);
+    }
+
+    public PacsIntegrationDtos.PacsSessionStatus extend(IntegrationClient client, String pacsSessionId,
+            PacsIntegrationDtos.PacsSessionExtendRequest body) {
+        if (body == null || body.extendMinutes() == null || body.extendMinutes() != 60
+                || !pacsSessionId.equals(body.pacsSessionId())) {
+            throw ApiException.unprocessable("PACS_SESSION_EXTEND_INVALID", "Extension must be exactly 60 minutes");
+        }
+        var login = findConfirmedLogin(client, pacsSessionId);
+        if (!login.tenantId().equals(body.tenantId()) || !login.targetId().equals(String.valueOf(body.doctorId()))
+                || !body.pacsAccountId().equals(login.details().get("pacsAccountId"))
+                || !Hashing.constantTimeEquals(body.certificateFingerprintSha256(),
+                        login.details().get("certificateFingerprintSha256"))) {
+            throw ApiException.forbidden("PACS_SESSION_MISMATCH", "PACS session is not bound to this certificate");
+        }
+        var extended = doctors.extendIntegrationSession(body.doctorId(),
+                UUID.fromString(login.details().get("visionSessionId")),
+                UUID.fromString(login.details().get("certificateEnrollmentId")));
+        audit.record(extended.tenantId(), client.actorId(), "PACS_CERTIFICATE_SESSION_EXTENDED", "DOCTOR",
+                extended.doctorId().toString(), AuditService.SUCCESS,
+                Map.of("pacsSessionId", pacsSessionId, "certificateFingerprintSha256",
+                        extended.certificateFingerprint(), "expiresAt", extended.sessionExpiresAt().toString()));
+        return status(client, pacsSessionId);
+    }
+
+    private com.inviz.visioncerti.audit.AuditEvent findConfirmedLogin(IntegrationClient client, String pacsSessionId) {
+        if (pacsSessionId == null || !PACS_SESSION_ID.matcher(pacsSessionId).matches()) {
+            throw ApiException.notFound("PACS_SESSION_NOT_FOUND", "PACS certificate session not found");
+        }
+        for (String tenantId : client.tenantIds()) {
+            var event = audit.list(tenantId).stream()
+                    .filter(e -> "PACS_CERTIFICATE_LOGIN_COMPLETED".equals(e.action())
+                            && client.clientId().equals(e.details().get("clientId"))
+                            && pacsSessionId.equals(e.details().get("pacsSessionId")))
+                    .findFirst();
+            if (event.isPresent()) return event.get();
+        }
+        throw ApiException.notFound("PACS_SESSION_NOT_FOUND", "PACS certificate session not found");
+    }
+
+    /** Match a report request to a confirmed PACS login, then re-check the live INVIZ certificate session. */
+    public void confirmReportCertificate(IntegrationClient client, String tenantId, UUID doctorId,
+            String pacsSessionId, String certificateFingerprint) {
+        if (pacsSessionId == null || !PACS_SESSION_ID.matcher(pacsSessionId).matches()
+                || certificateFingerprint == null || !CODE_HASH.matcher(certificateFingerprint).matches()) {
+            throw ApiException.unprocessable("REPORT_CERTIFICATE_PROOF_REQUIRED",
+                    "PACS session and certificate SHA-256 fingerprint are required");
+        }
+        var login = audit.list(tenantId).stream()
+                .filter(e -> "PACS_CERTIFICATE_LOGIN_COMPLETED".equals(e.action())
+                        && doctorId.toString().equals(e.targetId())
+                        && client.clientId().equals(e.details().get("clientId"))
+                        && pacsSessionId.equals(e.details().get("pacsSessionId")))
+                .findFirst().orElse(null);
+        if (login == null || !Hashing.constantTimeEquals(certificateFingerprint,
+                login.details().get("certificateFingerprintSha256"))) {
+            audit.record(tenantId, client.actorId(), "PACS_REPORT_CERTIFICATE_CHECK", "DOCTOR",
+                    doctorId.toString(), AuditService.DENIED, Map.of("pacsSessionId", pacsSessionId,
+                            "reason", "LOGIN_OR_FINGERPRINT_MISMATCH"));
+            throw ApiException.forbidden("REPORT_CERTIFICATE_MISMATCH", "Certificate does not match the PACS login");
+        }
+        try {
+            var current = doctors.confirmIntegrationSession(doctorId,
+                    UUID.fromString(login.details().get("visionSessionId")),
+                    UUID.fromString(login.details().get("certificateEnrollmentId")));
+            doctors.requireCurrentIntegrationCertificate(current);
+            if (!tenantId.equals(current.tenantId()) || !Hashing.constantTimeEquals(certificateFingerprint,
+                    current.certificateFingerprint())) {
+                throw ApiException.forbidden("REPORT_CERTIFICATE_MISMATCH", "Certificate session changed");
+            }
+        } catch (RuntimeException e) {
+            audit.record(tenantId, client.actorId(), "PACS_REPORT_CERTIFICATE_CHECK", "DOCTOR",
+                    doctorId.toString(), AuditService.DENIED, Map.of("pacsSessionId", pacsSessionId,
+                            "reason", "SESSION_NOT_ACTIVE"));
+            throw ApiException.forbidden("REPORT_CERTIFICATE_SESSION_INVALID", "Certificate session is no longer active");
+        }
+        audit.record(tenantId, client.actorId(), "PACS_REPORT_CERTIFICATE_CHECK", "DOCTOR",
+                doctorId.toString(), AuditService.SUCCESS, Map.of("pacsSessionId", pacsSessionId,
+                        "certificateFingerprintSha256", certificateFingerprint));
     }
 
     private static ApiException handoffInvalid() {

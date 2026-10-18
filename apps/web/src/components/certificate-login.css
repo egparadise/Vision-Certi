@@ -34,3 +34,10 @@
   .certificate-login-tools { gap: 8px; }
   .certificate-login-tools button, .certificate-login-tools a { font-size: 14px; min-height: 72px; }
 }
+.certificate-login-admin-entry { position: absolute; top: 16px; right: 24px; }
+.certificate-login-admin-entry a { color: #173c78; font-weight: 700; text-decoration: none; }
+.local-admin-login { min-height: 100vh; padding: 24px; background: #f7f9fc; }
+.local-admin-login form { max-width: 420px; margin: 10vh auto; padding: 32px; background: white; border: 1px solid #d8e1ee; border-radius: 12px; display: grid; gap: 18px; }
+.local-admin-login label { display: grid; gap: 7px; font-weight: 700; }
+.local-admin-login input { padding: 12px; border: 1px solid #aabbd0; border-radius: 6px; }
+.local-admin-login button { padding: 12px; background: #087fc4; border: 0; border-radius: 6px; color: white; font-weight: 700; cursor: pointer; }

@@ -300,3 +300,6 @@
     grid-column: 2;
   }
 }
+.admin-certificate-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+.admin-certificate-table th, .admin-certificate-table td { padding: 9px 11px; border-bottom: 1px solid #dce5ef; text-align: left; vertical-align: top; }
+.admin-certificate-table th { background: #edf3fa; white-space: nowrap; }

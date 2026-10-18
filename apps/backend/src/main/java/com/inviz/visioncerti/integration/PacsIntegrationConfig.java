@@ -34,7 +34,7 @@ public class PacsIntegrationConfig {
 
     @Bean
     PacsReportSignService pacsReportSignService(DocumentService documents, SignRequestService signRequests,
-            IdempotencyService idempotency) {
-        return new PacsReportSignService(documents, signRequests, idempotency);
+            IdempotencyService idempotency, PacsHandoffService handoffs) {
+        return new PacsReportSignService(documents, signRequests, idempotency, handoffs);
     }
 }

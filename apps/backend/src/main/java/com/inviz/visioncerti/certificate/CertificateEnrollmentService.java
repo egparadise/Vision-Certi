@@ -660,17 +660,42 @@ public class CertificateEnrollmentService implements CertificateGate {
         if (!fingerprint.equals(selected)) {
             throw ApiException.unprocessable("FINGERPRINT_MISMATCH", "선택한 인증서 지문이 제출한 인증서와 일치하지 않습니다.");
         }
+        CertificateEnrollment active = activeByFingerprint(fingerprint, false);
+        if (active != null) {
+            long failures = audit.list(active.tenantId).stream()
+                    .filter(e -> "CERTIFICATE_LOGIN_DENIED".equals(e.action())
+                            && active.doctorId.toString().equals(e.targetId())
+                            && fingerprint.equals(e.details().get("fingerprintSha256"))
+                            && e.occurredAt().isAfter(clock.instant().minus(Duration.ofMinutes(10))))
+                    .count();
+            if (failures >= 10) {
+                throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "CERTIFICATE_LOGIN_LOCKED",
+                        "Too many failed certificate login attempts; try again in 10 minutes", false);
+            }
+            audit.record(active.tenantId, active.doctorId.toString(), "CERTIFICATE_LOGIN_ATTEMPTED", "DOCTOR",
+                    active.doctorId.toString(), AuditService.SUCCESS, Map.of("fingerprintSha256", fingerprint));
+        }
         List<X509Certificate> intermediates = validator.parseChain(request.chain());
         validator.checkLeafPolicy(leaf);
-        validator.verifySignature(leaf, request.signatureAlgorithm(), challenge.payload(), request.signature());
-        CertificateEnrollment active = activeByFingerprint(fingerprint, false);
+        try {
+            validator.verifySignature(leaf, request.signatureAlgorithm(), challenge.payload(), request.signature());
+        } catch (RuntimeException error) {
+            if (active != null) {
+                audit.record(active.tenantId, active.doctorId.toString(), "CERTIFICATE_LOGIN_DENIED", "DOCTOR",
+                        active.doctorId.toString(), AuditService.DENIED, Map.of("fingerprintSha256", fingerprint));
+            }
+            throw error;
+        }
         if (active == null) {
             throw ApiException.forbidden("CERTIFICATE_NOT_ENROLLED", "활성 등록된 인증서가 아닙니다. 인증서 등록을 먼저 진행해 주세요.");
         }
         Validation validation = validator.validate(leaf, intermediates);
         recordExternal(active.registrationId, validation.revocation(), validation.checkedAt());
         CertificateValidator.requireGood(validation.revocation());
-        return session(active, challenge.id(), PURPOSE_LOGIN);
+        CertificateSessionResponse result = session(active, challenge.id(), PURPOSE_LOGIN);
+        audit.record(active.tenantId, active.doctorId.toString(), "CERTIFICATE_LOGIN_SUCCEEDED", "DOCTOR",
+                active.doctorId.toString(), AuditService.SUCCESS, Map.of("fingerprintSha256", fingerprint));
+        return result;
     }
 
     private CertificateEnrollment activeByFingerprint(String fingerprint, boolean mobileKind) {

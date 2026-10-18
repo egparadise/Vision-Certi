@@ -53,9 +53,11 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
             "/v1/certificate-enrollment/enrollments/" + UUID_SEGMENT + "/medical-credentials");
 
     private final ActorDirectory directory;
+    private final DevAdminSessionService adminSessions;
 
-    public DevHeaderAuthFilter(ActorDirectory directory) {
+    public DevHeaderAuthFilter(ActorDirectory directory, DevAdminSessionService adminSessions) {
         this.directory = directory;
+        this.adminSessions = adminSessions;
     }
 
     /** Integration routes ({@link IntegrationAuthFilter#PREFIX}) are authenticated only by HMAC, never by dev headers. */
@@ -63,6 +65,7 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
         return !path.startsWith("/v1/") || path.equals("/v1/health") || path.equals("/v1/runtime/capabilities")
+                || (path.equals("/v1/dev-admin/sessions") && "POST".equals(request.getMethod()))
                 || isPublicEnrollmentRoute(request, path)
                 || isPhysicianRoute(request, path) || path.startsWith(IntegrationAuthFilter.PREFIX);
     }
@@ -103,6 +106,11 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
         if (member.isEmpty()) {
             reject(request, response, "DEV_IDENTITY_UNKNOWN",
                     "Unknown synthetic tenant or actor for the dev profile");
+            return;
+        }
+        if (member.get().role() == ActorRole.ADMIN && adminSessions.configured()
+                && !adminSessions.accepts(request.getHeader("Authorization"))) {
+            reject(request, response, "DEV_ADMIN_SESSION_REQUIRED", "Administrator login is required");
             return;
         }
         RequestActorResolver.bind(request, new RequestActor(tenantId, actorId, member.get().role()));

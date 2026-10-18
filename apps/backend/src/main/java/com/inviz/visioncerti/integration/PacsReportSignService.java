@@ -42,12 +42,14 @@ public class PacsReportSignService {
     private final DocumentService documents;
     private final SignRequestService signRequests;
     private final IdempotencyService idempotency;
+    private final PacsHandoffService handoffs;
 
     public PacsReportSignService(DocumentService documents, SignRequestService signRequests,
-            IdempotencyService idempotency) {
+            IdempotencyService idempotency, PacsHandoffService handoffs) {
         this.documents = documents;
         this.signRequests = signRequests;
         this.idempotency = idempotency;
+        this.handoffs = handoffs;
     }
 
     public ResponseEntity<ReportSignRequestCreated> create(IntegrationClient client, String idempotencyKey,
@@ -82,10 +84,12 @@ public class PacsReportSignService {
             throw ApiException.conflict("DOCUMENT_HASH_MISMATCH", "contentSha256 does not match the content bytes");
         }
         validateSnapshot(content, body, doctorId);
+        handoffs.confirmReportCertificate(client, body.tenantId(), doctorId,
+                body.pacsSessionId(), body.certificateFingerprintSha256());
         RequestActor actor = new RequestActor(body.tenantId(), client.actorId(), ActorRole.ADMIN);
         String fingerprint = Hashing.sha256Hex(String.join("\u0000", body.tenantId(), doctorId.toString(),
                 body.externalReportId(), body.externalStudyId(), body.revision().toString(), body.title(),
-                body.contentType(), sha256));
+                body.contentType(), sha256, body.pacsSessionId(), body.certificateFingerprintSha256()));
         return idempotency.execute(actor, "PACS_REPORT_SIGN_REQUEST", idempotencyKey, fingerprint, () -> {
             ArtifactRegistration registration = documents.registerArtifact(body.tenantId(), client.actorId(),
                     body.externalReportId(), body.externalStudyId(), body.title(), doctorId.toString(),

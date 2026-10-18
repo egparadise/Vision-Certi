@@ -30,6 +30,8 @@ interface AppContextType {
   resetTenantState: () => void;
   staffToken: string | null;
   setStaffToken: (token: string | null) => void;
+  localAdminToken: string | null;
+  setLocalAdminToken: (token: string | null) => void;
   staffProfile: StaffMeResponse | null;
   setStaffProfile: (profile: StaffMeResponse | null) => void;
   runtimeCapabilities: RuntimeCapabilities | null;
@@ -50,6 +52,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   
   // Production Staff OIDC Token (In-memory only, never persisted)
   const [staffToken, setStaffTokenState] = useState<string | null>(null);
+  const [localAdminToken, setLocalAdminToken] = useState<string | null>(null);
   const [staffProfile, setStaffProfile] = useState<StaffMeResponse | null>(null);
 
   // Runtime Capabilities
@@ -66,8 +69,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       tenantId,
       actorId,
       staffToken,
+      localAdminToken,
     });
-  }, [tenantId, actorId, staffToken]);
+  }, [tenantId, actorId, staffToken, localAdminToken]);
 
   const setStaffToken = useCallback((token: string | null) => {
     setStaffTokenState(token);
@@ -140,6 +144,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     resetTenantState,
     staffToken,
     setStaffToken,
+    localAdminToken,
+    setLocalAdminToken,
     staffProfile,
     setStaffProfile,
     runtimeCapabilities,

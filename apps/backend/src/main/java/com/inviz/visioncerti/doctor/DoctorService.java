@@ -1005,6 +1005,40 @@ public class DoctorService implements RegisteredSigners {
         return identity;
     }
 
+    /** Extend a still-live certificate session by one hour after the PACS HMAC caller and enrollment are checked. */
+    public IntegrationIdentity extendIntegrationSession(UUID doctorId, UUID sessionId, UUID enrollmentId) {
+        IntegrationIdentity existing = confirmIntegrationSession(doctorId, sessionId, enrollmentId);
+        requireCurrentIntegrationCertificate(existing);
+        store.run(tx -> {
+            Session current = tx.lockGet(SESSIONS, sessionId).orElse(null);
+            if (current == null || !current.doctorId().equals(doctorId)
+                    || !clock.instant().isBefore(current.expiresAt())
+                    || !Hashing.constantTimeEquals(current.certificateFingerprint(), existing.certificateFingerprint())) {
+                throw ApiException.forbidden("CERTIFICATE_SESSION_EXPIRED", "Certificate session expired");
+            }
+            tx.update(SESSIONS, new Session(current.sessionId(), current.tokenHash(), current.doctorId(),
+                    current.tenantId(), current.identityMode(), current.expiresAt().plus(Duration.ofHours(1)),
+                    current.certificateFingerprint(), current.authenticatedAt()));
+            audit.record(current.tenantId(), current.doctorId().toString(), "CERTIFICATE_SESSION_EXTENDED", "DOCTOR",
+                    doctorId.toString(), AuditService.SUCCESS, Map.of("certificateFingerprintSha256",
+                            current.certificateFingerprint(), "sessionId", sessionId.toString()));
+        });
+        return confirmIntegrationSession(doctorId, sessionId, enrollmentId);
+    }
+
+    /** Revalidate external status and expiry before PACS report approval or connection extension. */
+    public void requireCurrentIntegrationCertificate(IntegrationIdentity identity) {
+        CertificateGate gate = certificateGate;
+        if (gate == null) {
+            throw ApiException.forbidden("CERTIFICATE_ENROLLMENT_CHANGED", "Certificate enrollment is unavailable");
+        }
+        var current = gate.assertSigningAllowed(identity.doctorId());
+        if (!current.registrationId().equals(identity.certificateEnrollmentId())
+                || !Hashing.constantTimeEquals(current.fingerprintSha256(), identity.certificateFingerprint())) {
+            throw ApiException.forbidden("CERTIFICATE_ENROLLMENT_CHANGED", "Certificate enrollment changed");
+        }
+    }
+
     /**
      * The license number an administrator recorded, with license evidence, when pre-registering the doctor. For
      * integrations that cross-check their own account data; it is never an authenticator.
@@ -1302,7 +1336,8 @@ public class DoctorService implements RegisteredSigners {
         byte[] tokenBytes = new byte[32];
         random.nextBytes(tokenBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
-        Instant expiresAt = now.plus(policy().sessionTtl());
+        Instant expiresAt = now.plus(certificateFingerprint == null
+                ? policy().sessionTtl() : Duration.ofHours(2));
         tx.insert(SESSIONS, new Session(UUID.randomUUID(), Hashing.sha256Hex(token), doctor.id, doctor.tenantId,
                 identityMode, expiresAt, certificateFingerprint, now));
         return new SessionResponse(token, expiresAt, identityMode, toResponse(doctor));

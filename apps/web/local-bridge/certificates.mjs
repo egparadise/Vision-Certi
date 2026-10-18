@@ -105,7 +105,7 @@ function matchedCertificate(key, cert) {
     cert.publicKey.e.compareTo(key.e) !== 0) throw new Error('인증서와 개인키가 일치하지 않습니다.');
 }
 /** The private key opens only with the certificate's own password; any other password is reported this way. */
-const PASSWORD_MISMATCH = '인증서 비밀번호가 일치하지 않습니다. 선택한 인증서의 비밀번호를 다시 입력해 주세요.';
+export const PASSWORD_MISMATCH = '인증서 비밀번호가 일치하지 않습니다. 선택한 인증서의 비밀번호를 다시 입력해 주세요.';
 
 async function openCertificate(location, password) {
   if (location.kind === 'NPKI') {

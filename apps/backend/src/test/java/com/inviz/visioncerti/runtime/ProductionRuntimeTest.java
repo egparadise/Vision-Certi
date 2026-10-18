@@ -121,6 +121,7 @@ class ProductionRuntimeTest {
     private String consumedLoginChallenge;
     private String usedNonce;
     private String redeemedHandoff;
+    private static final String PACS_SESSION_ID = "98765";
     private String idempotencyKey;
     private String idempotentBody;
     private String idempotentResponse;
@@ -329,14 +330,15 @@ class ProductionRuntimeTest {
                 + "},\"schema\":\"saintview-pacs-report-snapshot/v1\",\"tenantId\":\"" + A + "\"}";
     }
 
-    private static String reportRequest(String doctorId, String reportId, int revision) {
+    private String reportRequest(String doctorId, String reportId, int revision) {
         String snapshot = snapshot(doctorId, reportId, revision);
         byte[] bytes = snapshot.getBytes(StandardCharsets.UTF_8);
         return "{\"tenantId\":\"" + A + "\",\"doctorId\":\"" + doctorId + "\",\"externalReportId\":\"" + reportId
                 + "\",\"externalStudyId\":\"pacs-sv70:study:1\",\"revision\":" + revision
                 + ",\"title\":\"CT report\",\"contentType\":\"application/vnd.saintview.pacs-report+json;version=1\","
                 + "\"contentBase64\":\"" + Base64.getEncoder().encodeToString(bytes) + "\",\"contentSha256\":\""
-                + Hashing.sha256Hex(bytes) + "\"}";
+                + Hashing.sha256Hex(bytes) + "\",\"pacsSessionId\":\"" + PACS_SESSION_ID
+                + "\",\"certificateFingerprintSha256\":\"" + doctor.leaf().fingerprint() + "\"}";
     }
 
     private static ResultActions createReport(MockMvc mvc, String key, String body) throws Exception {
@@ -555,6 +557,14 @@ class ProductionRuntimeTest {
         mvc.perform(signed(post(redeemPath), "POST", redeemPath, "{\"handoffCode\":\"" + handoff + "\"}", usedNonce))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.doctorId").value(doctor.id()));
         redeemedHandoff = handoff;
+        String confirmPath = "/v1/integrations/pacs/certificate-logins/confirm";
+        String confirm = "{\"handoffCodeSha256\":\"" + Hashing.sha256Hex(handoff)
+                + "\",\"tenantId\":\"" + A + "\",\"doctorId\":\"" + doctor.id()
+                + "\",\"certificateEnrollmentId\":\"" + doctor.registrationId()
+                + "\",\"pacsAccountId\":\"42\",\"pacsLoginId\":\"reader42\",\"pacsSessionId\":\""
+                + PACS_SESSION_ID + "\"}";
+        mvc.perform(signed(post(confirmPath), "POST", confirmPath, confirm, nonce()))
+                .andExpect(status().isOk());
 
         // Idempotent report registration.
         idempotencyKey = "pacs-approval-" + UUID.randomUUID();

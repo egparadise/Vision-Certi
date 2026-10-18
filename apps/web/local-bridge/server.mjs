@@ -1,7 +1,9 @@
 import http from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { discoverCertificates, signChallenge } from './certificates.mjs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { PASSWORD_MISMATCH, discoverCertificates, signChallenge } from './certificates.mjs';
 
 const PORT = 18187;
 const argumentsList = process.argv.slice(2);
@@ -26,7 +28,17 @@ const roots = [
   ...extraRoots,
 ];
 let privateLocations = new Map();
-const attempts = new Map();
+const lockFile = join(home, 'AppData', 'Local', 'Inviz', 'VisionCerti', 'certificate-lockout.json');
+let attempts;
+try { attempts = new Map(Object.entries(JSON.parse(readFileSync(lockFile, 'utf8')))); }
+catch { attempts = new Map(); }
+const attemptKey = id => createHash('sha256').update(id).digest('hex');
+function saveAttempts() {
+  mkdirSync(join(home, 'AppData', 'Local', 'Inviz', 'VisionCerti'), { recursive: true });
+  const pending = `${lockFile}.tmp`;
+  writeFileSync(pending, JSON.stringify(Object.fromEntries(attempts)), { mode: 0o600 });
+  renameSync(pending, lockFile);
+}
 function json(response, status, data) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -51,13 +63,22 @@ async function body(request) {
 }
 function rateLimited(id) {
   const now = Date.now();
-  const prior = attempts.get(id) ?? [];
-  const recent = prior.filter(time => now - time < 10 * 60 * 1000);
-  attempts.set(id, recent);
-  return recent.length >= 10;
+  const key = attemptKey(id);
+  const prior = attempts.get(key);
+  if (!prior) return false;
+  if (prior.lockedUntil && now < prior.lockedUntil) return true;
+  if (prior.lockedUntil && now >= prior.lockedUntil) {
+    attempts.delete(key); saveAttempts(); return false;
+  }
+  return false;
 }
 function recordFailure(id) {
-  attempts.set(id, [...(attempts.get(id) ?? []), Date.now()]);
+  const key = attemptKey(id);
+  const now = Date.now();
+  const prior = attempts.get(key) ?? { failures: [], lockedUntil: 0 };
+  const failures = [...prior.failures.filter(time => now - time < 10 * 60 * 1000), now];
+  attempts.set(key, { failures, lockedUntil: failures.length >= 10 ? now + 10 * 60 * 1000 : 0 });
+  saveAttempts();
 }
 
 const server = http.createServer(async (request, response) => {
@@ -80,10 +101,10 @@ const server = http.createServer(async (request, response) => {
         return json(response, 429, { error: '인증서 서명 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.' });
       try {
         const proof = await signChallenge(privateLocations, input.certificateId, input.password, input.payloadBase64);
-        attempts.delete(input.certificateId);
+        attempts.delete(attemptKey(input.certificateId)); saveAttempts();
         return json(response, 200, proof);
       } catch (error) {
-        recordFailure(input.certificateId);
+        if (error instanceof Error && error.message === PASSWORD_MISMATCH) recordFailure(input.certificateId);
         throw error;
       }
     }

@@ -4,7 +4,7 @@ import appPackage from '../../package.json';
 import { CertificateVirtualKeyboard } from './CertificateVirtualKeyboard';
 import type { CertificateChallenge } from '../types/api';
 import type { LocalSignResult } from '../services/localCertSdkAdapter';
-import { signWithCertificateFiles, type CertificateFiles } from '../services/certificateFileSigner';
+import { PASSWORD_MISMATCH, signWithCertificateFiles, type CertificateFiles } from '../services/certificateFileSigner';
 import { discoverBridgeCertificates, type BridgeCertificate } from '../services/localCertificateBridge';
 import { getRememberedDirectory, rememberDirectory, scanCertificateDirectory,
   type CertificateMedium, type DiscoveredCertificate, type ReadableDirectoryHandle } from '../services/localCertificateDiscovery';
@@ -43,6 +43,8 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   const [signing, setSigning] = useState(false);
   const [error, setError] = useState('');
   const [now, setNow] = useState(Date.now());
+  const [passwordFailures, setPasswordFailures] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState(0);
   const entries = discovered[medium] ?? [];
   const selected = entries.find(entry => entry.id === selectedId);
   const selectedExpired = Boolean(selected?.expiresAt && selected.expiresAt.getTime() <= now);
@@ -50,6 +52,10 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   /** The password belongs to one certificate: it can be typed only after a usable certificate is chosen. */
   const certificateChosen = selected ? !selectedExpired : manualMode && manualComplete;
   const chosenKey = selected ? selected.id : manualMode && manualComplete ? `manual:${kind}:${bundle?.name ?? ''}:${certificate?.name ?? ''}:${privateKey?.name ?? ''}` : '';
+  const passwordLockKey = `vision-certi:cert-password-attempts:${chosenKey}`;
+  const passwordLocked = lockedUntil > now;
+  const expiryWarning = selected?.expiresAt && selected.expiresAt.getTime() > now
+    && selected.expiresAt.getTime() - now <= 30 * 24 * 60 * 60 * 1000;
   const expires = Date.parse(challenge?.expiresAt ?? expiresAt ?? '');
   const expired = !Number.isFinite(expires) || now >= expires;
 
@@ -81,7 +87,13 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
 
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   // A password typed for one certificate is never reused for another.
-  useEffect(() => { setPassword(''); virtualCaret.current = null; if (!chosenKey) setKeyboardOpen(false); }, [chosenKey]);
+  useEffect(() => {
+    setPassword(''); virtualCaret.current = null; if (!chosenKey) setKeyboardOpen(false);
+    try {
+      const prior = JSON.parse(window.localStorage.getItem(passwordLockKey) || '{}') as { count?: number; until?: number };
+      setPasswordFailures(prior.count ?? 0); setLockedUntil(prior.until ?? 0);
+    } catch { setPasswordFailures(0); setLockedUntil(0); }
+  }, [chosenKey, passwordLockKey]);
   useEffect(() => {
     let cancelled = false;
     const generation = ++scanGeneration.current;
@@ -170,27 +182,45 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     } finally { if (generation === scanGeneration.current) setScanning(false); }
   }
 
+  function notePasswordFailure(cause: unknown): never {
+    const message = cause instanceof Error ? cause.message : '';
+    if (message === PASSWORD_MISMATCH || /비밀번호|암호|password|decrypt/i.test(message)) {
+      const count = lockedUntil && Date.now() >= lockedUntil ? 1 : passwordFailures + 1;
+      const until = count >= 10 ? Date.now() + 10 * 60 * 1000 : 0;
+      setPasswordFailures(count); setLockedUntil(until);
+      window.localStorage.setItem(passwordLockKey, JSON.stringify({ count, until }));
+      throw new Error(until ? '비밀번호 오류가 10회 발생하여 10분 동안 잠겼습니다.' : `${message} (${count}/10회)`);
+    }
+    throw cause;
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
     setError('');
     if (busy || signing || expired) return;
     try {
+      if (passwordLocked) throw new Error(`인증서 비밀번호 입력이 잠겼습니다. ${Math.ceil((lockedUntil - now) / 60000)}분 뒤 다시 시도해 주세요.`);
       if (selectedExpired) throw new Error('선택한 인증서가 만료되었습니다. 다른 인증서를 선택해 주세요.');
       if (!certificateChosen) throw new Error('먼저 인증서를 선택해 주세요.');
       setSigning(true);
       const toSign = challenge?.signedPayloadBase64 ?? payloadBase64;
       if (!toSign) throw new Error('서명할 인증 요청이 없습니다. 다시 시도해 주세요.');
+      let signed: LocalSignResult;
       if (selected && 'sign' in selected) {
-        await onProof(await selected.sign(password, toSign));
+        try { signed = await selected.sign(password, toSign); }
+        catch (cause) { notePasswordFailure(cause); }
       } else {
         let files: CertificateFiles;
         if (selected) files = await selected.getFiles();
         else if (manualMode && kind === 'PFX' && bundle) files = { kind, bundle };
         else if (manualMode && kind === 'NPKI' && certificate && privateKey) files = { kind, certificate, privateKey, chain };
         else throw new Error('목록에서 인증서를 선택하거나 인증서 파일을 직접 선택해 주세요.');
-        await onProof(await signWithCertificateFiles(files, password, toSign));
+        try { signed = await signWithCertificateFiles(files, password, toSign); }
+        catch (cause) { notePasswordFailure(cause); }
       }
+      window.localStorage.removeItem(passwordLockKey); setPasswordFailures(0); setLockedUntil(0);
+      await onProof(signed);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '인증서 서명에 실패했습니다.');
     } finally {
@@ -220,6 +250,8 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     </div>
     <p className="cert-dialog-instruction">인증서 저장위치를 선택해 주세요.</p>
     <p role="status" className="cert-dialog-timer">{expired ? '인증 요청이 만료되었습니다. 새 요청을 시작해 주세요.' : `남은 시간 ${Math.ceil((expires - now) / 1000)}초`}</p>
+    {expiryWarning && <p role="alert">선택한 공동인증서가 30일 이내에 만료됩니다. 만료일: {selected.expiresAt!.toLocaleDateString('ko-KR')}</p>}
+    {passwordLocked && <p role="alert">비밀번호 입력이 잠겼습니다. {Math.ceil((lockedUntil - now) / 60000)}분 뒤 다시 시도해 주세요.</p>}
     <form onSubmit={submit}>
       <fieldset disabled={busy || signing || expired} className="enroll-form-fields">
         <legend className="enroll-sr-only">공동인증서</legend>
@@ -281,7 +313,7 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
         {keyboardOpen && certificateChosen && <CertificateVirtualKeyboard onInsert={insertPassword} onBackspace={deletePasswordCharacter}
           onClose={() => setKeyboardOpen(false)} />}
         <div className="cert-dialog-buttons">
-          <button className="enroll-primary" disabled={!password || !certificateChosen || signing}>
+          <button className="enroll-primary" disabled={!password || !certificateChosen || signing || passwordLocked}>
             {signing ? '인증서 확인 중…' : actionLabel ?? '확인'}
           </button>
           <button type="button" className="cert-dialog-cancel" onClick={cancel}>취소</button>

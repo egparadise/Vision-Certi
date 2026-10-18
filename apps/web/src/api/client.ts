@@ -69,6 +69,7 @@ export interface ApiClientConfig {
   tenantId: DevTenantId;
   actorId: DevActorId;
   staffToken?: string | null;
+  localAdminToken?: string | null;
 }
 
 export class ApiClient {
@@ -76,12 +77,14 @@ export class ApiClient {
   private tenantId: DevTenantId;
   private actorId: DevActorId;
   private staffToken: string | null = null;
+  private localAdminToken: string | null = null;
 
   constructor(config: ApiClientConfig) {
     this.baseUrl = config.baseUrl || '/v1';
     this.tenantId = config.tenantId;
     this.actorId = config.actorId;
     this.staffToken = config.staffToken || null;
+    this.localAdminToken = config.localAdminToken || null;
   }
 
   setTenantId(tenantId: DevTenantId) {
@@ -118,6 +121,9 @@ export class ApiClient {
     } else if (isDemoEnabled()) {
       headers['X-Tenant-Id'] = this.tenantId;
       headers['X-Actor-Id'] = this.actorId;
+      if (this.actorId === 'admin-demo' && this.localAdminToken) {
+        headers['Authorization'] = `Bearer ${this.localAdminToken}`;
+      }
     }
     return headers;
   }
@@ -355,6 +361,19 @@ export class ApiClient {
       headers: this.getHeaders(),
     });
     return this.handleResponse<ListResponse<AuditEvent>>(res);
+  }
+
+  async getCertificateOperations(): Promise<Array<{
+    doctorId: string; name: string; pacsLoginId: string | null; licenseNumber: string | null;
+    specialistQualificationNumber: string | null; issuer: string | null; notAfter: string | null;
+    fingerprintSha256: string; registrationStatus: string; loginAttempts: number;
+    loginApproved: number; reportApprovalRequests: number; lastLoginAt: string | null;
+    pacsSessionId: string | null; connectionExpiresAt: string | null; extensionCount: number;
+  }>> {
+    const res = await fetch(`${this.baseUrl}/admin/certificate-operations`, {
+      method: 'GET', headers: this.getHeaders(),
+    });
+    return this.handleResponse(res);
   }
 
   // --- Admin mode (관리자 모드): operational settings, deployment configuration, staff accounts ---

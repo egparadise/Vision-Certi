@@ -20,6 +20,7 @@ import { PersonalCertificateRegistration } from './components/PersonalCertificat
 import { PacsCertificateEnrollment } from './components/PacsCertificateEnrollment';
 import { PacsCertificateLogin } from './components/PacsCertificateLogin';
 import { AdminConsole, adminSectionFromHash } from './components/admin/AdminConsole';
+import { LocalAdminLogin } from './components/admin/LocalAdminLogin';
 
 export const AppContent: React.FC = () => {
   const { activeTab, tenantId, actorId, isMockMode, runtimeCapabilities } = useApp();
@@ -121,6 +122,7 @@ export const App: React.FC = () => {
   if (hash === '#/physician/login') return <main className="personal-certificate-page"><a href="#/physician/register">의사 가입·가입 이어하기</a><CertificateEnrollmentView initialMode="PC_LOGIN" proofMethod="external" /></main>;
 
   if (hash === '#/login' || hash === '#/certificates/login') return <CertificateLoginView />;
+  if (hash === '#/admin/login') return <LocalAdminLogin />;
   if (hash === '#/certificates/register') return <PersonalCertificateRegistration />;
   if (hash.startsWith('#/certificates/pacs-enroll') || hash.startsWith('#/certificates/enroll')) return <main className="personal-certificate-page"><PacsCertificateEnrollment /></main>;
 

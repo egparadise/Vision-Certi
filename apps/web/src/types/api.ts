@@ -198,7 +198,7 @@ export interface DashboardSummary {
   tenantId: string;
   generatedAt: string;
   signatureMode: string;
-  persistence: 'IN_MEMORY';
+  persistence: 'IN_MEMORY' | 'POSTGRESQL';
   documents: number;
   documentVersions: number;
   signRequestsByStatus: Record<string, number>;

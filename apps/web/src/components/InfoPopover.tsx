@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Info, X, HelpCircle, ShieldCheck } from 'lucide-react';
+import { Info, X, HelpCircle } from 'lucide-react';
 
 export interface InfoPopoverProps {
   title: string;
@@ -85,7 +85,7 @@ export const InfoPopover: React.FC<InfoPopoverProps> = ({
         type="button"
         onClick={toggle}
         className={`info-trigger-btn ${isOpen ? 'active' : ''}`}
-        aria-label={ariaLabel || `${title} 도움말 및 설명 보기`}
+        aria-label={ariaLabel || `${buttonText || title} 도움말 보기`}
         aria-expanded={isOpen}
         title={ariaLabel || `${title} 상세 안내 보기`}
         data-testid={testId}
@@ -93,14 +93,13 @@ export const InfoPopover: React.FC<InfoPopoverProps> = ({
         <span className="info-icon-circle">
           <Info size={iconSize} strokeWidth={2.4} />
         </span>
-        {buttonText && <span className="info-btn-text">{buttonText}</span>}
       </button>
 
       {isOpen && (
         <div
           ref={popoverRef}
           role="dialog"
-          aria-modal="true"
+          aria-modal="false"
           aria-label={title}
           className={`info-popover-card align-${align}`}
         >
@@ -129,7 +128,7 @@ export const InfoPopover: React.FC<InfoPopoverProps> = ({
               <ul className="info-popover-bullets">
                 {(bullets || bulletPoints)!.map((b, idx) => (
                   <li key={idx}>
-                    <ShieldCheck size={13} className="info-bullet-icon" />
+                    <Info size={13} className="info-bullet-icon" />
                     <span>{b}</span>
                   </li>
                 ))}
@@ -137,16 +136,6 @@ export const InfoPopover: React.FC<InfoPopoverProps> = ({
             )}
           </div>
 
-          <div className="info-popover-footer">
-            <span className="info-popover-hint">확인 후 창 바깥이나 닫기 버튼을 누르면 닫힙니다.</span>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="info-popover-ok-btn"
-            >
-              확인
-            </button>
-          </div>
         </div>
       )}
     </div>

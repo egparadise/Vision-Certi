@@ -337,12 +337,14 @@ describe('SV70 PACS & Production Runtime Integration Tests', () => {
 
     await waitFor(() => {
       const bannerText = screen.getByTestId('runtime-banner-text');
-      expect(bannerText).toHaveTextContent('NON-CLINICAL VALIDATION: OPENBAO');
-      expect(bannerText).toHaveTextContent('LEGAL_APPROVAL_NOT_ASSERTED');
+      expect(bannerText).toHaveTextContent('임상 사용 전 검증 중');
     });
 
-    expect(screen.getByTestId('runtime-banner-badge')).toHaveTextContent('PROD | POSTGRESQL');
-    expect(screen.getByTestId('runtime-warnings-banner')).toHaveTextContent('PRIVATE_PKI_NOT_ACCREDITED | NO_TRUSTED_TIMESTAMP');
+    expect(screen.getByTestId('runtime-banner-badge')).toHaveTextContent('PROD · POSTGRESQL');
+    expect(screen.getByTestId('runtime-warnings-banner')).toHaveTextContent('보안 설정 확인 필요 · 2건');
+    expect(screen.getByTestId('runtime-warnings-banner')).not.toHaveTextContent('PRIVATE_PKI_NOT_ACCREDITED');
+    fireEvent.click(screen.getByRole('button', { name: '보안 설정 경고 상세 보기' }));
+    expect(screen.getByRole('dialog', { name: '보안 설정 상세' })).toHaveTextContent('PRIVATE_PKI_NOT_ACCREDITED');
   });
 
   it('handles absent / failed runtime capabilities by failing closed to UNAVAILABLE', async () => {
@@ -365,10 +367,10 @@ describe('SV70 PACS & Production Runtime Integration Tests', () => {
 
     await waitFor(() => {
       const bannerText = screen.getByTestId('runtime-banner-text');
-      expect(bannerText).toHaveTextContent('RUNTIME UNAVAILABLE: 백엔드 런타임 구성 확인 불가');
+      expect(bannerText).toHaveTextContent('서버 상태 확인 불가 · 임상 사용 중지');
     });
 
-    expect(screen.getByTestId('runtime-banner-badge')).toHaveTextContent('UNCONFIGURED / OFFLINE');
+    expect(screen.getByTestId('runtime-banner-badge')).toHaveTextContent('연결 확인 필요');
   });
 
   it('defines local certificate SDK adapter contract and reports unavailable when uninstalled', async () => {

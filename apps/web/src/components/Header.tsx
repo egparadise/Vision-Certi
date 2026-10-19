@@ -185,27 +185,25 @@ export const Header: React.FC = () => {
   };
 
   // Derive Banner details accurately from backend capabilities
-  let bannerText = 'DEV MOCK NOT FOR CLINICAL USE (개발 모의 환경 — 의료용/임상용 사용 불가)';
-  let bannerBadge = isMockMode ? 'STANDALONE MOCK MODE' : 'DEV PROFILE LIVE API';
+  let bannerText = '모의 환경 · 임상 사용 불가';
+  let bannerBadge = isMockMode ? 'MOCK' : 'DEV';
 
   if (!isMockMode) {
     if (capabilitiesLoading) {
-      bannerText = '런타임 기능 확인 중 (Querying Runtime Capabilities...)';
-      bannerBadge = 'CONNECTING';
+      bannerText = '서버 상태 확인 중';
+      bannerBadge = '연결 중';
     } else if (capabilitiesError || !runtimeCapabilities) {
-      bannerText = 'RUNTIME UNAVAILABLE: 백엔드 런타임 구성 확인 불가';
-      bannerBadge = 'UNCONFIGURED / OFFLINE';
+      bannerText = '서버 상태 확인 불가 · 임상 사용 중지';
+      bannerBadge = '연결 확인 필요';
     } else if (runtimeCapabilities.clinicalUseAllowed) {
-      bannerText = 'PRODUCTION CLINICAL USE (의료영상 판독 전자서명 임상 운영)';
-      bannerBadge = 'PRODUCTION OPERATIONAL';
+      bannerText = '임상 운영 중';
+      bannerBadge = '운영';
     } else if (runtimeCapabilities.profile === 'prod' || runtimeCapabilities.signing?.backend === 'OPENBAO_TRANSIT') {
-      const signer = runtimeCapabilities.signing?.backend || 'UNKNOWN';
-      const reason = runtimeCapabilities.clinicalUseReason || 'LEGAL_APPROVAL_NOT_ASSERTED';
-      bannerText = `운영 API NON-CLINICAL VALIDATION: ${signer} | 임상 전 검증 모드 (${reason})`;
-      bannerBadge = `${runtimeCapabilities.profile.toUpperCase()} | ${runtimeCapabilities.persistence.mode}`;
+      bannerText = '임상 사용 전 검증 중';
+      bannerBadge = `${runtimeCapabilities.profile.toUpperCase()} · ${runtimeCapabilities.persistence.mode}`;
     } else {
-      bannerText = 'DEV MOCK NOT FOR CLINICAL USE (개발 모의 환경 — 의료용/임상용 사용 불가)';
-      bannerBadge = 'DEV PROFILE LIVE API';
+      bannerText = '개발 환경 · 임상 사용 불가';
+      bannerBadge = `${runtimeCapabilities.profile.toUpperCase()} · ${runtimeCapabilities.persistence.mode}`;
     }
   }
 
@@ -220,6 +218,18 @@ export const Header: React.FC = () => {
         <span className="dev-mock-badge" data-testid="runtime-banner-badge">
           {bannerBadge}
         </span>
+        <InfoPopover
+          title="서버 운영 상태"
+          ariaLabel="서버 운영 상태 상세 보기"
+          align="right"
+          className="runtime-info"
+          description={isMockMode
+            ? '독립 모의 모드입니다. 이 화면의 기록은 임상 사용 증거가 아닙니다.'
+            : runtimeCapabilities
+              ? `서명 방식: ${runtimeCapabilities.signing.backend} · 저장소: ${runtimeCapabilities.persistence.mode} · 임상 사용: ${runtimeCapabilities.clinicalUseAllowed ? '허용' : '미허용'}`
+              : '서버 구성을 확인할 수 없습니다. 상태가 확인되기 전까지 임상 사용을 중지하세요.'}
+          bullets={runtimeCapabilities?.clinicalUseReason ? [`임상 사용 제한 사유: ${runtimeCapabilities.clinicalUseReason}`] : undefined}
+        />
       </div>
 
       {/* Warnings Banner if present in capabilities */}
@@ -237,8 +247,13 @@ export const Header: React.FC = () => {
             gap: '8px',
           }}
         >
-          <strong>⚠️ 런타임 보안 경고:</strong>
-          <span>{runtimeCapabilities.warnings.join(' | ')}</span>
+          <strong>보안 설정 확인 필요 · {runtimeCapabilities.warnings.length}건</strong>
+          <InfoPopover
+            title="보안 설정 상세"
+            ariaLabel="보안 설정 경고 상세 보기"
+            description="서버가 보고한 보안 설정 경고입니다. 운영 적용 전 각 항목을 확인하세요."
+            bullets={runtimeCapabilities.warnings}
+          />
         </div>
       )}
 

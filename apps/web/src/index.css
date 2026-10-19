@@ -324,6 +324,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 10px 20px -3px rgba(15, 23, 42, 0.04);
 }
 
+.card:focus-within {
+  position: relative;
+  z-index: 20;
+  overflow: visible;
+}
+
 .card-header {
   padding: 16px 22px;
   border-bottom: 1px solid #f1f5f9;
@@ -536,6 +542,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-color: #cbd5e1;
 }
 
+.metric-card:focus-within {
+  z-index: 20;
+  overflow: visible;
+}
+
 .metric-label {
   font-size: 0.775rem;
   color: #64748b;
@@ -709,8 +720,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .info-trigger-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 3px;
   background-color: #f0fdfa;
   color: #0f766e;
   border: 1px solid #99f6e4;
@@ -719,8 +732,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: var(--shadow-sm);
-  margin-left: 8px;
+  box-shadow: none;
+  margin-left: 0;
 }
 
 .info-trigger-btn:hover {
@@ -753,9 +766,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   color: #ffffff;
 }
 
-.info-btn-text {
-  font-size: 0.75rem;
-  letter-spacing: -0.01em;
+.runtime-info .info-trigger-btn {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.58);
+  color: #ffffff;
+}
+
+.runtime-info .info-icon-circle {
+  background: transparent;
+}
+
+.dashboard-runtime-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 5px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-pill);
+  color: #475569;
+  background: #f8fafc;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 /* Floating Info Popover Card */
@@ -885,36 +917,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   color: #0d9488;
   flex-shrink: 0;
   margin-top: 2px;
-}
-
-.info-popover-footer {
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px solid #f1f5f9;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.info-popover-hint {
-  font-size: 0.7rem;
-  color: #94a3b8;
-}
-
-.info-popover-ok-btn {
-  padding: 4px 12px;
-  background-color: #0f766e;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.info-popover-ok-btn:hover {
-  background-color: #115e59;
 }
 
 /* Responsive Overflows & Layout */

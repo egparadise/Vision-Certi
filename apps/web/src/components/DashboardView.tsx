@@ -4,7 +4,6 @@ import {
   FileCheck,
   Send,
   ShieldCheck,
-  AlertCircle,
   RefreshCw,
   Clock,
   Layers,
@@ -21,8 +20,21 @@ import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 import { InfoPopover } from './InfoPopover';
 
+const signRequestLabels: Record<string, string> = {
+  COMPLETED: '완료',
+  PENDING_APPROVAL: '승인 대기',
+  FAILED: '실패',
+  EXPIRED: '만료',
+};
+
+const deliveryLabels: Record<string, string> = {
+  ACKED: '전송 완료',
+  QUEUED: '전송 대기',
+  DEAD_LETTER: '전송 실패',
+};
+
 export const DashboardView: React.FC = () => {
-  const { tenantId, client, isMockMode, mockStore, setActiveTab } = useApp();
+  const { tenantId, client, isMockMode, mockStore, setActiveTab, runtimeCapabilities } = useApp();
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<unknown>(null);
@@ -64,20 +76,29 @@ export const DashboardView: React.FC = () => {
     return <LoadingSpinner message="대시보드 지표를 불러오는 중입니다..." />;
   }
 
+  const persistence = runtimeCapabilities?.persistence.mode ?? data?.persistence ?? '확인 불가';
+  const signing = runtimeCapabilities?.signing.backend ?? data?.signatureMode ?? '확인 불가';
+  const environmentLabel = isMockMode
+    ? '모의 데이터'
+    : runtimeCapabilities?.clinicalUseAllowed
+      ? '임상 운영'
+      : runtimeCapabilities
+        ? '임상 사용 전 검증 중'
+        : '서버 상태 확인 필요';
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
-              기관별 운영 대시보드
+              판독·서명 현황
             </h2>
             <InfoPopover
               title="운영 대시보드 및 지표 안내"
-              buttonText="대시보드 안내"
               description={
                 <span>
-                  현재 선택 기관(<strong>{tenantId}</strong>)의 원격 의료영상 판독문 등록, 의사 전자서명 승인, 병원 EMR/PACS 전송 큐 및 감사 로그의 실시간 운영 지표입니다.
+                  선택 기관(<strong>{tenantId}</strong>)의 판독문, 서명, 전송 및 감사 기록을 집계합니다. 검증 환경에는 시험 기록이 포함될 수 있습니다.
                 </span>
               }
               bullets={[
@@ -86,12 +107,9 @@ export const DashboardView: React.FC = () => {
                 "병원 전송 큐: 서명 완료 후 원격 의료기관 PACS/EMR로 전송 대기 또는 수신완료(ACK)된 작업",
                 "감사 이벤트: 위변조 방지 SHA-256 불변 해시 체인으로 누적 결속된 감사 트레일"
               ]}
-              badge="실시간 운영 지표"
+              badge="지표 안내"
             />
           </div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)', marginTop: '2px' }}>
-            현재 선택 기관: <strong style={{ color: 'var(--teal-700)' }}>{tenantId}</strong> 의 판독 및 서명 처리 현황 요약
-          </p>
         </div>
         <button
           type="button"
@@ -107,26 +125,17 @@ export const DashboardView: React.FC = () => {
 
       <ErrorBanner error={error as Error} onRetry={loadDashboard} />
 
-      {/* Security & Persistence Notice */}
-      <div className="alert alert-info" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <AlertCircle size={18} style={{ flexShrink: 0, color: 'var(--teal-700)' }} />
-          <div style={{ fontSize: '0.825rem' }}>
-            <strong>개발 슬라이스 환경 정보:</strong> 현재 백엔드는{' '}
-            <code>IN_MEMORY</code> 비영속 저장소 및 <code>MOCK-HMAC-SHA256</code> 임시 서명 모드로 구동 중입니다.
-            서버 재시작 시 데이터가 초기화됩니다. 실제 HSM/TSA는 연결되지 않았으며 의료용으로 사용할 수 없습니다.
-          </div>
-        </div>
+      <div className="dashboard-runtime-note" role="status">
+        <span>{environmentLabel}</span>
         <InfoPopover
-          title="개발 슬라이스 모의 환경 상세 규약"
-          buttonText="상세 규약"
-          description="현재 백엔드는 개발 및 기능 검증 전용 프로파일로 설정되어 있습니다."
+          title="현재 서버 구성"
+          ariaLabel="현재 서버 구성 상세 보기"
+          description={`저장소: ${persistence} · 서명 방식: ${signing}`}
           bullets={[
-            "비영속성: 인메모리 저장소로 구동되어 프로세스 재시작 시 데이터가 초기화됩니다.",
-            "임시 서명: HMAC-SHA256 모의 알고리즘으로 서명되며, 법적 전자서명 효력을 갖지 않습니다.",
-            "운영 배포: 실제 임상 적용 시에는 OpenBao Transit PKI 및 전자인증 연동 프로파일로 전환됩니다."
+            `임상 사용: ${runtimeCapabilities?.clinicalUseAllowed ? '허용' : '허용되지 않음'}`,
+            ...(runtimeCapabilities?.clinicalUseReason ? [`제한 사유: ${runtimeCapabilities.clinicalUseReason}`] : []),
+            ...(persistence === 'IN_MEMORY' ? ['서버를 다시 시작하면 인메모리 데이터가 사라집니다.'] : []),
           ]}
-          badge="보안 안내"
         />
       </div>
 
@@ -137,27 +146,29 @@ export const DashboardView: React.FC = () => {
             <div className="metric-card" tabIndex={0} aria-label={`등록 판독문 ${data.documents}건`}>
               <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <FileText size={16} style={{ color: 'var(--teal-600)' }} />
-                등록 판독문 (Documents)
+                등록 판독문
+                <InfoPopover title="등록 판독문" description="선택 기관에 등록된 판독문 수입니다. 버전 이력은 아래에 별도로 표시합니다." />
               </div>
               <div className="metric-value">{data.documents}</div>
-              <div className="metric-sub">총 버전: {data.documentVersions}개 (이력 보존)</div>
+              <div className="metric-sub">버전 {data.documentVersions}개</div>
             </div>
 
             <div className="metric-card" tabIndex={0} aria-label={`전자서명 완료 ${data.signatures}건`}>
               <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <FileCheck size={16} style={{ color: '#16a34a' }} />
-                전자서명 완료 (Signatures)
+                전자서명 완료
+                <InfoPopover title="전자서명 완료" description="서명 요청 중 전자서명 결과가 완료로 기록된 건수입니다. 검증 환경의 시험 기록이 포함될 수 있습니다." />
               </div>
               <div className="metric-value" style={{ color: '#16a34a' }}>
                 {data.signatures}
               </div>
-              <div className="metric-sub">모의 전자서명 완료 누적</div>
             </div>
 
             <div className="metric-card" tabIndex={0} aria-label={`병원 전송 큐 ${data.deliveriesByStatus['QUEUED'] || 0}건 대기`}>
               <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Send size={16} style={{ color: '#0284c7' }} />
-                전송 대기 (Delivery Queue)
+                전송 대기
+                <InfoPopover title="전송 대기" description="병원 PACS/EMR로 보낼 작업 중 대기 상태인 건수입니다." />
               </div>
               <div className="metric-value" style={{ color: '#0284c7' }}>
                 {data.deliveriesByStatus['QUEUED'] || 0}
@@ -170,10 +181,10 @@ export const DashboardView: React.FC = () => {
             <div className="metric-card" tabIndex={0} aria-label={`감사 로그 ${data.auditEvents}건`}>
               <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <ShieldCheck size={16} style={{ color: '#7c3aed' }} />
-                감사 이벤트 (Audit Trail)
+                감사 이벤트
+                <InfoPopover title="감사 이벤트" description="서버에 누적된 감사 기록 건수입니다. 각 기록은 해시 체인으로 연결됩니다." />
               </div>
               <div className="metric-value">{data.auditEvents}</div>
-              <div className="metric-sub">불변 해시 체인 연계</div>
             </div>
           </div>
 
@@ -184,7 +195,8 @@ export const DashboardView: React.FC = () => {
               <div className="card-header">
                 <span className="card-title">
                   <Clock size={18} style={{ color: 'var(--amber-600)' }} />
-                  서명 요청 상태 분포 (Sign Requests)
+                  서명 요청 상태
+                  <InfoPopover title="서명 요청 상태" description="판독문 승인 및 전자서명 요청의 처리 상태별 건수입니다." />
                 </span>
                 <button
                   type="button"
@@ -200,7 +212,7 @@ export const DashboardView: React.FC = () => {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>상태 (Status)</th>
+                      <th>상태</th>
                       <th style={{ textAlign: 'right' }}>건수</th>
                     </tr>
                   </thead>
@@ -228,7 +240,7 @@ export const DashboardView: React.FC = () => {
                             ) : (
                               <HelpCircle size={12} />
                             )}
-                            {status}
+                            {signRequestLabels[status] || status}
                           </span>
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 700 }}>{count}</td>
@@ -244,7 +256,8 @@ export const DashboardView: React.FC = () => {
               <div className="card-header">
                 <span className="card-title">
                   <Layers size={18} style={{ color: 'var(--teal-600)' }} />
-                  병원 전송 상태 분포 (Deliveries)
+                  병원 전송 상태
+                  <InfoPopover title="병원 전송 상태" description="PACS/EMR 전송 요청의 상태별 건수입니다." />
                 </span>
                 <button
                   type="button"
@@ -260,7 +273,7 @@ export const DashboardView: React.FC = () => {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>상태 (Status)</th>
+                      <th>상태</th>
                       <th style={{ textAlign: 'right' }}>건수</th>
                     </tr>
                   </thead>
@@ -288,7 +301,7 @@ export const DashboardView: React.FC = () => {
                             ) : (
                               <Send size={12} />
                             )}
-                            {status}
+                            {deliveryLabels[status] || status}
                           </span>
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 700 }}>{count}</td>

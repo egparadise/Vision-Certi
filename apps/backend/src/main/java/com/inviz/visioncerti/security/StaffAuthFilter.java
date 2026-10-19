@@ -40,10 +40,19 @@ public class StaffAuthFilter extends OncePerRequestFilter implements Ordered {
 
     private final StaffTokenVerifier verifier;
     private final StaffDirectory directory;
+    private final String initialAdminEmail;
+    private final String initialAdminTenantId;
 
     public StaffAuthFilter(StaffTokenVerifier verifier, StaffDirectory directory) {
+        this(verifier, directory, "", "");
+    }
+
+    public StaffAuthFilter(StaffTokenVerifier verifier, StaffDirectory directory,
+            String initialAdminEmail, String initialAdminTenantId) {
         this.verifier = verifier;
         this.directory = directory;
+        this.initialAdminEmail = initialAdminEmail;
+        this.initialAdminTenantId = initialAdminTenantId;
     }
 
     @Override
@@ -105,6 +114,10 @@ public class StaffAuthFilter extends OncePerRequestFilter implements Ordered {
             return;
         }
         StaffPrincipal principal = directory.resolve(verified.issuer(), verified.subject()).orElse(null);
+        if (principal == null) {
+            principal = directory.bootstrapInitialGoogleAdmin(verified, initialAdminEmail, initialAdminTenantId)
+                    .orElse(null);
+        }
         if (principal == null) {
             reject(request, response, HttpServletResponse.SC_FORBIDDEN, "STAFF_NOT_AUTHORIZED",
                     "This identity is not mapped to an active staff role");

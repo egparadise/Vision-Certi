@@ -48,6 +48,7 @@ import type {
   UpdateSystemSettingRequest,
 } from '../types/admin';
 import { isDemoEnabled } from '../utils/env';
+import { apiBaseUrl } from './baseUrl';
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -81,7 +82,7 @@ export class ApiClient {
   private localAdminToken: string | null = null;
 
   constructor(config: ApiClientConfig) {
-    this.baseUrl = config.baseUrl || '/v1';
+    this.baseUrl = config.baseUrl || apiBaseUrl();
     this.tenantId = config.tenantId;
     this.actorId = config.actorId;
     this.staffToken = config.staffToken || null;

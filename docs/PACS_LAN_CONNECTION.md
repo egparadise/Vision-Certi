@@ -1,10 +1,12 @@
 # 동일 네트워크 PACS 연결 정보
 
+> Current Tailscale endpoint: `https://100.68.224.44:5184` (HTTPS/TCP 5184). See [Tailscale PACS connection](TAILSCALE_PACS_CONNECTION.md) for the active network, CA, and firewall setup.
+
 기준: 2026-10-17, 내부 테스트 환경. 서버 IP가 바뀌면 URL과 TLS 인증서를 함께 갱신한다.
 
 | 항목 | 값 |
 |---|---|
-| INVIZ 서버 / 브라우저 기본 주소 | `https://192.168.45.160:5184` |
+| INVIZ 서버 / 브라우저 기본 주소 | `https://100.68.224.44:5184` |
 | 상태 확인 | `GET /v1/runtime/capabilities` |
 | 개인 인증서 로그인 | `/#/login` |
 | PACS 의사 인증 팝업 | `/#/certificates/pacs-login` |
@@ -34,7 +36,7 @@
 PACS 서버에서:
 
 ```sh
-curl --cacert /etc/vision-certi/vision-certi-lan-ca.cer https://192.168.45.160:5184/v1/runtime/capabilities
+curl --cacert /etc/vision-certi/vision-certi-lan-ca.cer https://100.68.224.44:5184/v1/runtime/capabilities
 ```
 
 PACS API의 `GET /api/vc/config`가 `state: ENABLED`를 반환하는지 확인한다. 최초 PACS ID·비밀번호 로그인 후 `GET /api/vc/auth/enrollment-status`로 등록 상태를 확인하고, 미등록 계정은 `POST /api/vc/auth/enrollment-start`로 공동인증서 등록을 시작한다. 성명·면허·소속은 PACS 서버 DB에서 읽는다. 사용자에게 초대코드를 요구하거나 관리자가 계정을 일괄 사전등록하지 않는다. 인증서 검증·동의·검토·활성화가 완료되면 `PACS user_idx ↔ INVIZ Doctor ID`가 자동 연결된다.

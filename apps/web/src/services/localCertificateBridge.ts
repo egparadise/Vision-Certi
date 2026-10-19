@@ -52,14 +52,14 @@ async function sign(id: string, password: string, payloadBase64: string): Promis
 
 /** A loopback-only companion discovers NPKI certificates without exposing private key files to the web page. */
 export async function discoverBridgeCertificates(medium: CertificateMedium): Promise<BridgeCertificate[]> {
-  if (medium !== 'hard-disk') return [];
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 4500);
+  const timeout = window.setTimeout(() => controller.abort(), 90000);
   try {
-    const response = await fetch(`${BRIDGE}/v1/certificates`, {
+    const path = medium === 'removable-disk' ? '/v1/certificates?medium=removable-disk' : '/v1/certificates';
+    const response = await fetch(`${BRIDGE}${path}`, {
       mode: 'cors', credentials: 'omit', cache: 'no-store', signal: controller.signal,
     });
-    if (!response.ok) return [];
+    if (!response.ok) throw new Error('PC 인증서 프로그램이 이 사이트의 요청을 허용하지 않습니다. 최신 버전으로 설치해 주세요.');
     const data: unknown = await response.json();
     const records = (data as { certificates?: unknown })?.certificates;
     if (!Array.isArray(records)) return [];

@@ -1,0 +1,44 @@
+{
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Vision-Certi",
+        "supportEmail": "egparadise@gmail.com",
+        "authorizedRedirectUris": [
+          "https://vision-certi.web.app",
+          "https://vision-certi.firebaseapp.com",
+          "https://hahattalk-vision-certi.web.app",
+          "https://hahattalk-vision-certi.firebaseapp.com"
+        ]
+      }
+    }
+  },
+  "hosting": [
+    {
+      "target": "vision-certi",
+      "public": "apps/web/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [{ "source": "/v1/**", "run": { "serviceId": "vision-certi-api", "region": "asia-northeast3" } }],
+      "headers": [
+        { "source": "/v1/**", "headers": [{ "key": "Cache-Control", "value": "no-store, private" }] },
+        { "source": "**", "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+        ] }
+      ]
+    },
+    {
+      "target": "vision-certi-legacy",
+      "public": "apps/web/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [{ "source": "/v1/**", "run": { "serviceId": "vision-certi-api", "region": "asia-northeast3" } }],
+      "headers": [
+        { "source": "/v1/**", "headers": [{ "key": "Cache-Control", "value": "no-store, private" }] },
+        { "source": "**", "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+        ] }
+      ]
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { PASSWORD_MISMATCH, discoverCertificates, signChallenge } from './certificates.mjs';
 
 const PORT = 18187;
@@ -17,7 +18,7 @@ for (let index = 0; index < argumentsList.length; index++) {
 if (!origins.size || [...origins].some(origin => !/^https:\/\/[^/]+$/.test(origin) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)))
   throw new Error('허용할 HTTPS 서버 주소를 --origin으로 지정해 주세요.');
 const home = process.env.USERPROFILE || homedir();
-const roots = [
+const userRoots = [
   join(home, 'AppData', 'LocalLow', 'NPKI'),
   join(home, 'AppData', 'Local', 'NPKI'),
   join(home, 'AppData', 'Roaming', 'NPKI'),
@@ -28,6 +29,16 @@ const roots = [
   ...extraRoots,
 ];
 let privateLocations = new Map();
+function windowsDriveRoots(medium) {
+  if (process.platform !== 'win32') return [];
+  try {
+    const script = '(Get-CimInstance Win32_LogicalDisk | Where-Object DriveType -eq ' +
+      (medium === 'removable-disk' ? '2' : '3') + ' | Select-Object -ExpandProperty DeviceID) -join "`n"';
+    return execFileSync('powershell.exe', ['-NoProfile', '-Command', script],
+      { encoding: 'utf8', timeout: 10000 }).split(/\r?\n/).map(item => item.trim())
+      .filter(item => /^[A-Z]:$/i.test(item)).map(item => `${item}\\`);
+  } catch { return []; }
+}
 const lockFile = join(home, 'AppData', 'Local', 'Inviz', 'VisionCerti', 'certificate-lockout.json');
 let attempts;
 try { attempts = new Map(Object.entries(JSON.parse(readFileSync(lockFile, 'utf8')))); }
@@ -89,9 +100,13 @@ const server = http.createServer(async (request, response) => {
   cors(response, origin);
   if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
   try {
-    if (request.method === 'GET' && request.url === '/v1/certificates') {
+    if (request.method === 'GET' && (request.url === '/v1/certificates' || request.url?.startsWith('/v1/certificates?'))) {
+      const medium = new URL(request.url, `http://127.0.0.1:${PORT}`).searchParams.get('medium') || 'hard-disk';
+      if (medium !== 'hard-disk' && medium !== 'removable-disk') return json(response, 400, { error: '저장매체가 올바르지 않습니다.' });
+      const roots = medium === 'hard-disk'
+        ? [...userRoots, ...windowsDriveRoots(medium)] : windowsDriveRoots(medium);
       const found = await discoverCertificates(roots);
-      privateLocations = found.privateLocations;
+      privateLocations = new Map([...privateLocations, ...found.privateLocations]);
       return json(response, 200, { certificates: found.records });
     }
     if (request.method === 'POST' && request.url === '/v1/sign') {

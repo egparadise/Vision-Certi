@@ -3,6 +3,7 @@ import { ShieldAlert, LogIn, UserPlus, KeyRound, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { isDemoEnabled } from '../utils/env';
 import { discoverOidc } from '../services/oidcDiscovery';
+import { signInGoogleStaff, signOutGoogleStaff } from '../services/firebaseStaffAuth';
 import { InfoPopover } from './InfoPopover';
 
 function generateRandomString(length: number): string {
@@ -57,6 +58,19 @@ export const Header: React.FC = () => {
     }
 
     try {
+      if (staffAuth.issuer === 'https://securetoken.google.com/hahattalk') {
+        const token = await signInGoogleStaff();
+        try {
+          const profile = await client.getStaffMe(token);
+          setStaffToken(token);
+          setStaffProfile(profile);
+          setShowStaffModal(false);
+        } catch (error) {
+          await signOutGoogleStaff();
+          throw error;
+        }
+        return;
+      }
       const metadata = await discoverOidc(staffAuth.issuer);
       const verifier = generateRandomString(32);
       const challenge = await generateCodeChallenge(verifier);
@@ -182,6 +196,7 @@ export const Header: React.FC = () => {
   const handleStaffLogout = () => {
     setStaffToken(null);
     setStaffProfile(null);
+    void signOutGoogleStaff();
   };
 
   // Derive Banner details accurately from backend capabilities
@@ -334,7 +349,7 @@ export const Header: React.FC = () => {
                 }}
               >
                 <LogIn size={13} />
-                <span>Staff OIDC 로그인</span>
+                <span>Google 관리자 로그인</span>
               </button>
             ) : null}
           </div>
@@ -366,10 +381,10 @@ export const Header: React.FC = () => {
             }}
           >
             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#0f172a' }}>
-              Staff OIDC 로그인 (Authorization Code + PKCE)
+              Google 관리자 로그인
             </h3>
             <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: '#64748b' }}>
-              운영 환경 IdP와 연동하여 안전하게 로그인합니다. 토큰은 브라우저 메모리에만 유지되며 디스크나 URL에 저장되지 않습니다.
+              등록된 Google 계정으로 로그인합니다. 인증 토큰은 브라우저 메모리에만 유지됩니다.
             </p>
 
             {staffLoginError && (
@@ -394,9 +409,8 @@ export const Header: React.FC = () => {
             runtimeCapabilities.staffAuth.clientId ? (
               <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
                 <div style={{ fontSize: '0.8rem', color: '#334155', marginBottom: '8px' }}>
-                  <div><strong>IdP Issuer:</strong> <code>{runtimeCapabilities.staffAuth.issuer}</code></div>
-                  <div style={{ marginTop: '2px' }}><strong>Client ID:</strong> <code>{runtimeCapabilities.staffAuth.clientId}</code></div>
-                  <div style={{ marginTop: '2px' }}><strong>보안 프로토콜:</strong> OAuth 2.0 PKCE (S256, State &amp; Nonce)</div>
+                  <div><strong>인증 제공자:</strong> Google</div>
+                  <div style={{ marginTop: '2px' }}>인증된 관리자 계정만 운영 정보를 조회할 수 있습니다.</div>
                 </div>
 
                 <button
@@ -417,7 +431,7 @@ export const Header: React.FC = () => {
                     marginTop: '8px',
                   }}
                 >
-                  {staffLoginLoading ? 'OIDC 로그인 처리 중...' : '운영 IdP 로그인 시작 (PKCE 팝업)'}
+                  {staffLoginLoading ? 'Google 로그인 처리 중...' : 'Google 계정으로 로그인'}
                 </button>
               </div>
             ) : (

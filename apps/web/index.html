@@ -5,6 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vision-Certi | 의료 전자의무기록 원격판독 전자서명 플랫폼</title>
+    <script>
+      const host = location.hostname;
+      if (host === 'vision-certi.firebaseapp.com' ||
+          host === 'hahattalk-vision-certi.web.app' ||
+          host === 'hahattalk-vision-certi.firebaseapp.com' ||
+          /^hahattalk-vision-certi--[a-z0-9-]+\.web\.app$/.test(host)) {
+        location.replace('https://vision-certi.web.app' + location.pathname + location.search + location.hash);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

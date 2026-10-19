@@ -9,12 +9,14 @@ cd C:\Project\Vision-Certi
 cd apps\web
 npm ci
 cd ..\..
-.\infra\start_local_certificate_bridge.ps1 -Origin 'https://192.168.45.160:5184'
+.\infra\start_local_certificate_bridge.ps1 -Origin 'https://100.68.224.44:5184'
 ```
 
 실제 운영 주소로 배포할 때는 `-Origin`에 그 HTTPS 주소를 정확히 지정하고, **각 판독의사 PC에서** 프로그램을 실행합니다. 브라우저는 `127.0.0.1:18187`에만 접속합니다. 사용자 인증서의 공개 정보와 서명값만 웹 화면으로 전달합니다. 암호화된 개인키 파일은 로컬 프로그램 밖으로 내보내지 않습니다. 비밀번호는 웹 화면에서 로컬 프로그램으로만 전송되며 PACS/INVIZ 서버로 전송하지 않습니다.
 
-기본 검색 범위는 해당 Windows 사용자 프로필의 `AppData\LocalLow\NPKI`, `AppData\Local\NPKI`, `AppData\Roaming\NPKI`, `Documents\NPKI`, `Documents`, `Desktop`, `Downloads`입니다. 다른 위치는 `node apps/web/local-bridge/server.mjs --origin <주소> --root <인증서폴더>`로 지정할 수 있습니다. 인증서 암호, 개인키, 공개 인증서 원문을 로그에 기록하지 않습니다.
+운영 사이트(`https://vision-certi.web.app`)는 인증서 화면에서 Windows 설치 ZIP을 제공합니다. **인증서가 저장된 각 PC에서** ZIP을 풀어 `Install.cmd`를 실행합니다. 설치기는 파일 SHA-256을 검사한 뒤 현재 사용자 계정의 `%LOCALAPPDATA%\Inviz\VisionCerti\Bridge`에 설치하고 Windows 로그인 시 자동 실행되게 합니다. 관리자 권한이나 PC의 인증서·개인키 복사는 필요하지 않습니다. 설치 후 화면의 **설치 후 다시 검색**을 누릅니다. 브라우저가 로컬 네트워크 접근을 요청하면 허용해야 합니다.
+
+로컬 프로그램은 요청된 저장매체에 맞춰 Windows의 고정식 또는 이동식 드라이브를 검색합니다. 표준 사용자 NPKI 위치를 먼저 검색하고 전체 드라이브도 탐색하며, 접근 권한이 없는 폴더와 심볼릭 링크는 건너뜁니다. 인증서가 너무 많거나 폴더 수 한도에 도달한 경우에는 해당 인증서의 상위 폴더를 `--root`로 지정할 수 있습니다. 인증서 암호와 개인키는 PC에서만 처리합니다.
 
 프로그램은 지정된 웹 Origin만 허용하고 루프백 주소에만 바인딩합니다. 브라우저가 로컬 네트워크 접속 권한을 요청하면 해당 인비즈 사이트에 대해 허용해야 합니다. 최초 목록 검색은 공개 인증서만 읽으며 개인키는 의사가 인증서를 선택하고 암호를 입력해 서명을 요청할 때만 엽니다. 실제 로그인과 판독문 서명 허용 여부, 인증서 신뢰체인 및 폐지 상태는 INVIZ 서버가 별도로 검증합니다.
 

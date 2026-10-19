@@ -11,6 +11,7 @@ import jakarta.servlet.FilterChain;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -60,6 +61,29 @@ class StaffTokenVerifierTest {
         assertThat(passed).isFalse();
         assertThat(response.getStatus()).isEqualTo(503);
         assertThat(response.getContentAsString()).contains("STAFF_AUTH_UNAVAILABLE").doesNotContain("subject-1");
+    }
+
+    @Test
+    void firstAdminBootstrapRequiresFreshVerifiedGoogleIdentityAndNeverReopens() {
+        StaffDirectory directory = new StaffDirectory(new MemoryStore(), new AuditService(clock), clock,
+                TestOidc.ISSUER);
+        var unverified = verifier.verify(oidc.sign(oidc.claims("other")
+                .claim("email", "egparadise@gmail.com").claim("email_verified", false)
+                .claim("firebase", Map.of("sign_in_provider", "google.com"))
+                .claim("auth_time", clock.instant().getEpochSecond()).build()));
+        assertThat(directory.bootstrapInitialGoogleAdmin(unverified, "egparadise@gmail.com", "inviz")).isEmpty();
+
+        var verified = verifier.verify(oidc.sign(oidc.claims("google-uid")
+                .claim("email", "egparadise@gmail.com").claim("email_verified", true)
+                .claim("firebase", Map.of("sign_in_provider", "google.com"))
+                .claim("auth_time", clock.instant().getEpochSecond()).build()));
+        assertThat(directory.bootstrapInitialGoogleAdmin(verified, "egparadise@gmail.com", "inviz")).isPresent();
+        assertThat(directory.resolve(TestOidc.ISSUER, "google-uid")).isPresent();
+        var second = verifier.verify(oidc.sign(oidc.claims("different-uid")
+                .claim("email", "egparadise@gmail.com").claim("email_verified", true)
+                .claim("firebase", Map.of("sign_in_provider", "google.com"))
+                .claim("auth_time", clock.instant().getEpochSecond()).build()));
+        assertThat(directory.bootstrapInitialGoogleAdmin(second, "egparadise@gmail.com", "inviz")).isEmpty();
     }
 
     private void assertRejected(String token) {

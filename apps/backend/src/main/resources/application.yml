@@ -19,6 +19,9 @@ server:
     include-message: never
 
 visioncerti:
+  web:
+    # Exact Firebase Hosting origin for a separately hosted web UI; empty disables cross-origin API access.
+    allowed-origin: ${VISIONCERTI_WEB_ALLOWED_ORIGIN:}
   physician-account:
     tenant-id: ${VISIONCERTI_PHYSICIAN_ACCOUNT_TENANT_ID:}
   # Runtime state (docs/PRODUCTION_RUNTIME.md). dev defaults to IN_MEMORY; prod requires POSTGRESQL.
@@ -34,6 +37,8 @@ visioncerti:
   staff-auth:
     mode: ${VISIONCERTI_STAFF_AUTH_MODE:DEV_HEADERS}
     bootstrap-file: ${VISIONCERTI_STAFF_BOOTSTRAP_FILE:}
+    initial-google-admin-email: ${VISIONCERTI_STAFF_INITIAL_GOOGLE_ADMIN_EMAIL:}
+    initial-google-admin-tenant-id: ${VISIONCERTI_STAFF_INITIAL_GOOGLE_ADMIN_TENANT_ID:}
     oidc:
       issuer: ${VISIONCERTI_STAFF_OIDC_ISSUER:}
       audience: ${VISIONCERTI_STAFF_OIDC_AUDIENCE:}

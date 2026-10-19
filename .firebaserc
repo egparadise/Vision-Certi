@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "hahattalk"
+  },
+  "targets": {
+    "hahattalk": {
+      "hosting": {
+        "vision-certi": [
+          "vision-certi"
+        ],
+        "vision-certi-legacy": [
+          "hahattalk-vision-certi"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

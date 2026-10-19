@@ -285,7 +285,9 @@ export const CertificateEnrollmentView: React.FC<{
       }
     } catch (err: unknown) {
       if (version !== operationVersion.current) return;
-      const msg = err instanceof Error ? err.message : '인증서 확인에 실패했습니다.';
+      const msg = err instanceof ApiClientError && err.code === 'CERTIFICATE_NOT_ENROLLED'
+        ? '이 인증서는 아직 PACS 계정에 등록되어 있지 않습니다. PACS 로그인 화면에서 병원 ID·개별 ID·비밀번호로 먼저 본인 계정을 확인하고, 이어지는 최초 인증서 등록 창에서 이 인증서를 등록해 주세요.'
+        : err instanceof Error ? err.message : '인증서 확인에 실패했습니다.';
       setError(msg);
       if (authMode === 'PC_LOGIN' && onLoginComplete) {
         onLoginFailed?.(err instanceof ApiClientError ? err.code : 'AUTHENTICATION_FAILED');

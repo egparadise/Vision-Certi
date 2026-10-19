@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, ShieldCheck, Smartphone, Stethoscope, UserRound } from 'lucide-react';
 import './registration.css';
+import { apiBaseUrl } from '../api/baseUrl';
 
 type AccountType = 'PERSONAL' | 'CLINICIAN';
 type Challenge = { challengeId: string; expiresAt: string; resendAfter: string; mode: string; devCode?: string };
@@ -15,7 +16,7 @@ const consentItems = [
 ] as const;
 
 async function enrollmentRequest<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`/v1/enrollment${path}`, {
+  const response = await fetch(`${apiBaseUrl()}/enrollment${path}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => null);

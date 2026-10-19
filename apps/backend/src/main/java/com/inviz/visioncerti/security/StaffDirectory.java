@@ -24,9 +24,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Explicit staff authorization: (OIDC issuer, subject) → (tenant, role). Durable ({@code certi_rt.staff_principals}),
- * never derived from token claims, e-mail or browser input. Managed by tenant administrators through authenticated
- * endpoints, or bootstrapped once from a protected local file read at startup ({@link #bootstrap}); there is no
- * unauthenticated way to create a mapping. Only role {@link ActorRole#ADMIN} is accepted: physicians act through the
+ * never derived from browser input. Managed by tenant administrators through authenticated endpoints, bootstrapped
+ * from a protected local file, or initialized exactly once from a fresh, verified Google sign-in for the configured
+ * account when no staff principal exists. Only role {@link ActorRole#ADMIN} is accepted: physicians act through the
  * certificate bearer, never through staff tokens.
  */
 public class StaffDirectory {
@@ -91,6 +91,28 @@ public class StaffDirectory {
     public Optional<StaffPrincipal> resolve(String tokenIssuer, String subject) {
         return store.tx(tx -> tx.findOne(PRINCIPALS, "subject_key", subjectKey(tokenIssuer, subject)))
                 .filter(p -> p.status() == Status.ACTIVE);
+    }
+
+    /** Bind the first administrator only after a fresh, verified Google sign-in for the configured account. */
+    public Optional<StaffPrincipal> bootstrapInitialGoogleAdmin(StaffTokenVerifier.VerifiedStaffToken token,
+            String expectedEmail, String tenantId) {
+        if (expectedEmail == null || expectedEmail.isBlank() || tenantId == null || tenantId.isBlank()
+                || !token.isRecentVerifiedGoogleAccount(expectedEmail, clock.instant())) {
+            return Optional.empty();
+        }
+        return store.tx(tx -> {
+            tx.lock("staff|initial-google-admin");
+            if (tx.countAll(PRINCIPALS) != 0) {
+                return Optional.<StaffPrincipal>empty();
+            }
+            StaffPrincipal principal = newPrincipal(tenantId, token.issuer(), token.subject(), "ADMIN",
+                    expectedEmail.strip(), "VERIFIED_GOOGLE_FIRST_ADMIN", "google-first-admin-bootstrap");
+            tx.insert(PRINCIPALS, principal);
+            audit.record(tenantId, principal.actorId(), "STAFF_PRINCIPAL_BOOTSTRAPPED", "STAFF_PRINCIPAL",
+                    principal.id().toString(), AuditService.SUCCESS,
+                    Map.of("method", "VERIFIED_GOOGLE_FIRST_ADMIN", "role", "ADMIN"));
+            return Optional.of(principal);
+        });
     }
 
     public Optional<StaffPrincipal> find(String tenantId, UUID id) {

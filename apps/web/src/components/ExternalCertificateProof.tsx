@@ -30,6 +30,8 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   const scanGeneration = useRef(0);
   const [selectedId, setSelectedId] = useState<string>();
   const [scanning, setScanning] = useState(false);
+  const [scanRetry, setScanRetry] = useState(0);
+  const [bridgeState, setBridgeState] = useState<'checking' | 'available' | 'unavailable'>('checking');
   const [manualMode, setManualMode] = useState(false);
   const [kind, setKind] = useState<'PFX' | 'NPKI'>('PFX');
   const [bundle, setBundle] = useState<File>();
@@ -99,17 +101,17 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     const generation = ++scanGeneration.current;
     void (async () => {
       setScanning(true);
-      for (const item of MEDIA) {
+      setBridgeState('checking');
+      for (const item of [medium]) {
         try {
-          if (item === 'hard-disk') {
-            const local = await discoverBridgeCertificates(item);
-            if (cancelled || generation !== scanGeneration.current) continue;
-            if (local.length) {
-              setDiscovered(previous => ({ ...previous, [item]: local }));
-              if (local.length === 1 && (!local[0].expiresAt || local[0].expiresAt.getTime() > Date.now()))
-                setSelectedId(local[0].id);
-              continue;
-            }
+          const local = await discoverBridgeCertificates(item);
+          if (cancelled || generation !== scanGeneration.current) continue;
+          setBridgeState('available');
+          if (local.length) {
+            setDiscovered(previous => ({ ...previous, [item]: local }));
+            if (item === 'hard-disk' && local.length === 1 && (!local[0].expiresAt || local[0].expiresAt.getTime() > Date.now()))
+              setSelectedId(local[0].id);
+            continue;
           }
           const directory = await getRememberedDirectory(item);
           if (!directory || cancelled || generation !== scanGeneration.current) continue;
@@ -131,13 +133,14 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
           });
           if (!cancelled && generation === scanGeneration.current) setDiscovered(previous => ({ ...previous, [item]: found }));
         } catch {
-          // Manual file selection remains available if a saved folder is inaccessible.
+          if (!cancelled && generation === scanGeneration.current) setBridgeState('unavailable');
+          // Manual file selection remains available if the local bridge or a saved folder is inaccessible.
         }
       }
       if (!cancelled && generation === scanGeneration.current) setScanning(false);
     })();
     return () => { cancelled = true; scanGeneration.current++; };
-  }, []);
+  }, [scanRetry, medium]);
 
   async function chooseDirectory(reusePermission: boolean) {
     setError('');
@@ -177,7 +180,9 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
       }
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
-        setError(cause instanceof Error ? cause.message : '인증서 폴더를 열 수 없습니다.');
+        setError(cause instanceof DOMException && (cause.name === 'SecurityError' || cause.name === 'NotAllowedError')
+          ? '브라우저가 시스템 인증서 폴더의 접근을 차단했습니다. 아래 PC 인증서 프로그램을 설치하면 폴더를 고르지 않고 자동 검색합니다.'
+          : cause instanceof Error ? cause.message : '인증서 폴더를 열 수 없습니다.');
       }
     } finally { if (generation === scanGeneration.current) setScanning(false); }
   }
@@ -281,9 +286,20 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
             })}</tbody>
           </table>
           {scanning && <p aria-live="polite">허용된 저장위치에서 인증서를 검색 중입니다…</p>}
-          {!scanning && entries.length === 0 && <p className="cert-empty">{permissionNeeded[medium] ? '저장된 폴더의 접근을 다시 허용해 주세요.' :
-            directories[medium] ? '선택한 폴더와 하위 폴더에서 인증서를 찾지 못했습니다.' : '처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.'}</p>}
+          {!scanning && entries.length === 0 && <p className="cert-empty">{bridgeState === 'unavailable'
+            ? '이 PC의 인증서 프로그램에 연결되지 않았습니다. 아래 안내에 따라 연결을 확인해 주세요.'
+            : permissionNeeded[medium] ? '저장된 폴더의 접근을 다시 허용해 주세요.' :
+            directories[medium] ? '선택한 폴더와 하위 폴더에서 인증서를 찾지 못했습니다.' :
+            bridgeState === 'available' ? `${medium === 'hard-disk' ? '하드디스크' : '이동식디스크'}에서 인증서를 찾지 못했습니다. 저장매체 연결과 인증서 위치를 확인해 주세요.`
+              : '처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.'}</p>}
         </div>
+        {bridgeState === 'unavailable' && <div className="cert-bridge-setup" role="status">
+          <strong>이 PC의 인증서 프로그램에 연결할 수 없습니다</strong>
+          <p>처음 사용하는 PC라면 설치 파일의 압축을 풀고 <code>Install.cmd</code>를 실행하세요. 이미 설치했다면 브라우저의 로컬 네트워크 접근을 허용한 뒤 다시 검색하세요.</p>
+          {import.meta.env.VITE_CERT_INSTALLER_URL && <a href={import.meta.env.VITE_CERT_INSTALLER_URL} download>Windows 인증서 프로그램 다운로드</a>}
+          <button type="button" onClick={() => { setError(''); setScanRetry(value => value + 1); }}>설치 후 다시 검색</button>
+          <small>인증서는 현재 사용 중인 PC에서만 검색됩니다. 브라우저가 막은 시스템 폴더를 강제로 열 수는 없습니다.</small>
+        </div>}
         {scanLimited[medium] && <p className="cert-scan-limit" role="alert">검색 범위가 너무 넓어 일부 폴더만 확인했습니다. NPKI 상위 폴더를 직접 선택해 다시 검색해 주세요.</p>}
         <div className="cert-location-actions">
           <button type="button" onClick={() => void chooseDirectory(false)} disabled={signing}><FolderSearch size={17} /> 인증서 찾기</button>

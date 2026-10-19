@@ -1,4 +1,4 @@
-"""Start opt-in HTTPS LAN UI on port 5184, proxying the loopback test backend on 18082.
+"""Start opt-in HTTPS LAN/Tailscale UI on port 5184, proxying the loopback test backend on 18082.
 
 Requires cryptography and apps/web/node_modules. Keeps all keys under ignored work/lan-test.
 The public CA certificate must be trusted separately on each test client. Never installs trust silently.
@@ -24,11 +24,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--address', required=True, help='This PC RFC1918 IPv4 address')
+    parser.add_argument('--address', required=True, help='This PC RFC1918 or Tailscale IPv4 address')
     args = parser.parse_args()
     address = ipaddress.IPv4Address(args.address)
-    if not any(address in ipaddress.ip_network(cidr) for cidr in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
-        parser.error('Use an RFC1918 LAN IPv4 address')
+    if not any(address in ipaddress.ip_network(cidr) for cidr in
+               ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10')):
+        parser.error('Use an RFC1918 LAN or Tailscale IPv4 address')
     with socket.socket() as probe:
         probe.bind((str(address), 5184))  # verify ownership and reject an occupied port
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

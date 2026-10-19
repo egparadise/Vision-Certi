@@ -1,0 +1,315 @@
+{
+  "labels": {
+    "app": "vision-certi",
+    "environment": "production"
+  },
+  "description": "Vision-Certi dedicated production authentication API",
+  "ingress": "INGRESS_TRAFFIC_ALL",
+  "invokerIamDisabled": true,
+  "scaling": {
+    "minInstanceCount": 1,
+    "maxInstanceCount": 3
+  },
+  "template": {
+    "serviceAccount": "vision-certi-api@hahattalk.iam.gserviceaccount.com",
+    "timeout": "60s",
+    "maxInstanceRequestConcurrency": 40,
+    "executionEnvironment": "EXECUTION_ENVIRONMENT_GEN2",
+    "vpcAccess": {
+      "egress": "PRIVATE_RANGES_ONLY",
+      "networkInterfaces": [
+        {
+          "network": "vision-certi-vpc",
+          "subnetwork": "vision-certi-seoul",
+          "tags": [
+            "vision-certi-api"
+          ]
+        }
+      ]
+    },
+    "containers": [
+      {
+        "name": "api",
+        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:d9c1b26435410d2ac8dc2f082cca4bbd17832483d5592912bcb28a74f5e42a1c",
+        "ports": [
+          {
+            "containerPort": 8080,
+            "name": "http1"
+          }
+        ],
+        "env": [
+          {
+            "name": "VISIONCERTI_DEPLOY_ID",
+            "value": "2026-10-19-google-admin"
+          },
+          {
+            "name": "VISIONCERTI_PERSISTENCE_MODE",
+            "value": "POSTGRESQL"
+          },
+          {
+            "name": "VISIONCERTI_DB_URL",
+            "value": "jdbc:postgresql://127.0.0.1:5432/vision_certi?sslmode=disable"
+          },
+          {
+            "name": "VISIONCERTI_DB_USERNAME",
+            "value": "vc_runtime"
+          },
+          {
+            "name": "VISIONCERTI_DB_PASSWORD_FILE",
+            "value": "/run/secrets/db-password/value"
+          },
+          {
+            "name": "VISIONCERTI_DB_POOL_SIZE",
+            "value": "5"
+          },
+          {
+            "name": "VISIONCERTI_STAFF_AUTH_MODE",
+            "value": "OIDC"
+          },
+          {
+            "name": "VISIONCERTI_STAFF_OIDC_ISSUER",
+            "value": "https://securetoken.google.com/hahattalk"
+          },
+          {
+            "name": "VISIONCERTI_STAFF_OIDC_AUDIENCE",
+            "value": "hahattalk"
+          },
+          {
+            "name": "VISIONCERTI_STAFF_OIDC_JWKS_URI",
+            "value": "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
+          },
+          {
+            "name": "VISIONCERTI_STAFF_OIDC_CLIENT_ID",
+            "value": "1:898541793848:web:077472cfd3687cab29accd"
+          },
+          {
+            "name": "VISIONCERTI_STAFF_INITIAL_GOOGLE_ADMIN_EMAIL",
+            "value": "egparadise@gmail.com"
+          },
+          {
+            "name": "VISIONCERTI_STAFF_INITIAL_GOOGLE_ADMIN_TENANT_ID",
+            "value": "inviz"
+          },
+          {
+            "name": "VISIONCERTI_SIGNING_BACKEND",
+            "value": "OPENBAO_TRANSIT"
+          },
+          {
+            "name": "VISIONCERTI_OPENBAO_ADDR",
+            "value": "https://10.71.0.10:8200"
+          },
+          {
+            "name": "VISIONCERTI_OPENBAO_CA_CERT_FILE",
+            "value": "/run/secrets/openbao-ca/value"
+          },
+          {
+            "name": "VISIONCERTI_OPENBAO_PROVISIONING_TOKEN_FILE",
+            "value": "/run/secrets/openbao-provision-token/value"
+          },
+          {
+            "name": "VISIONCERTI_OPENBAO_SIGNING_TOKEN_FILE",
+            "value": "/run/secrets/openbao-sign-token/value"
+          },
+          {
+            "name": "VISIONCERTI_CERT_TRUST_ANCHORS_FILE",
+            "value": "/run/secrets/pc-trust-ca/value"
+          },
+          {
+            "name": "VISIONCERTI_CERT_CRL_FILES",
+            "value": "/run/secrets/pc-crl/value"
+          },
+          {
+            "name": "VISIONCERTI_CERT_SERVICE_ID",
+            "value": "vision-certi-prod"
+          },
+          {
+            "name": "VISIONCERTI_PHYSICIAN_ACCOUNT_TENANT_ID",
+            "value": "inviz"
+          },
+          {
+            "name": "VISIONCERTI_PACS_CLIENT_ID",
+            "value": "vision-certi-pacs"
+          },
+          {
+            "name": "VISIONCERTI_PACS_CLIENT_SECRET_FILE",
+            "value": "/run/secrets/pacs-hmac/value"
+          },
+          {
+            "name": "VISIONCERTI_PACS_TENANT_IDS",
+            "value": "inviz"
+          },
+          {
+            "name": "VISIONCERTI_WEB_ALLOWED_ORIGIN",
+            "value": "https://vision-certi.web.app"
+          }
+        ],
+        "volumeMounts": [
+          {
+            "name": "db-password",
+            "mountPath": "/run/secrets/db-password"
+          },
+          {
+            "name": "openbao-ca",
+            "mountPath": "/run/secrets/openbao-ca"
+          },
+          {
+            "name": "openbao-provision-token",
+            "mountPath": "/run/secrets/openbao-provision-token"
+          },
+          {
+            "name": "openbao-sign-token",
+            "mountPath": "/run/secrets/openbao-sign-token"
+          },
+          {
+            "name": "pc-trust-ca",
+            "mountPath": "/run/secrets/pc-trust-ca"
+          },
+          {
+            "name": "pc-crl",
+            "mountPath": "/run/secrets/pc-crl"
+          },
+          {
+            "name": "pacs-hmac",
+            "mountPath": "/run/secrets/pacs-hmac"
+          }
+        ],
+        "resources": {
+          "limits": {
+            "cpu": "1",
+            "memory": "1536Mi"
+          }
+        },
+        "startupProbe": {
+          "httpGet": {
+            "path": "/v1/health",
+            "port": 8080
+          },
+          "initialDelaySeconds": 5,
+          "periodSeconds": 10,
+          "timeoutSeconds": 5,
+          "failureThreshold": 24
+        },
+        "dependsOn": [
+          "cloud-sql-proxy"
+        ]
+      },
+      {
+        "name": "cloud-sql-proxy",
+        "image": "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.26.2",
+        "args": [
+          "--address=127.0.0.1",
+          "--port=5432",
+          "--health-check",
+          "--http-address=0.0.0.0",
+          "--http-port=9090",
+          "hahattalk:asia-northeast3:vision-certi-postgres-seoul"
+        ],
+        "resources": {
+          "limits": {
+            "cpu": "0.25",
+            "memory": "256Mi"
+          }
+        },
+        "startupProbe": {
+          "httpGet": {
+            "path": "/startup",
+            "port": 9090
+          },
+          "periodSeconds": 5,
+          "timeoutSeconds": 2,
+          "failureThreshold": 24
+        }
+      }
+    ],
+    "volumes": [
+      {
+        "name": "db-password",
+        "secret": {
+          "secret": "vision-certi-db-runtime-password",
+          "items": [
+            {
+              "version": "latest",
+              "path": "value"
+            }
+          ]
+        }
+      },
+      {
+        "name": "openbao-ca",
+        "secret": {
+          "secret": "vision-certi-openbao-ca-cert",
+          "items": [
+            {
+              "version": "latest",
+              "path": "value"
+            }
+          ]
+        }
+      },
+      {
+        "name": "openbao-provision-token",
+        "secret": {
+          "secret": "vision-certi-openbao-provisioning-token",
+          "items": [
+            {
+              "version": "latest",
+              "path": "value"
+            }
+          ]
+        }
+      },
+      {
+        "name": "openbao-sign-token",
+        "secret": {
+          "secret": "vision-certi-openbao-signing-token",
+          "items": [
+            {
+              "version": "latest",
+              "path": "value"
+            }
+          ]
+        }
+      },
+      {
+        "name": "pc-trust-ca",
+        "secret": {
+          "secret": "vision-certi-pc-trust-yessign",
+          "items": [
+            {
+              "version": "latest",
+              "path": "value"
+            }
+          ]
+        }
+      },
+      {
+        "name": "pc-crl",
+        "secret": {
+          "secret": "vision-certi-pc-crl-yessign",
+          "items": [
+            {
+              "version": "latest",
+              "path": "value"
+            }
+          ]
+        }
+      },
+      {
+        "name": "pacs-hmac",
+        "secret": {
+          "secret": "vision-certi-pacs-hmac-secret",
+          "items": [
+            {
+              "version": "latest",
+              "path": "value"
+            }
+          ]
+        }
+      }
+    ],
+    "scaling": {
+      "minInstanceCount": 1,
+      "maxInstanceCount": 3
+    }
+  }
+}

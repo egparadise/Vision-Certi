@@ -23,12 +23,23 @@ import { AdminConsole, adminSectionFromHash } from './components/admin/AdminCons
 import { LocalAdminLogin } from './components/admin/LocalAdminLogin';
 
 export const AppContent: React.FC = () => {
-  const { activeTab, tenantId, actorId, isMockMode, runtimeCapabilities } = useApp();
+  const { activeTab, tenantId, actorId, isMockMode, runtimeCapabilities, staffProfile } = useApp();
 
   // Production Gate: In non-dev/production builds without explicit demo flag, disable demo UI.
   // Clinical features (enrollment, review) operate on dedicated routes or when live runtime capabilities are present.
   if (!isDemoEnabled() && (!runtimeCapabilities || isMockMode)) {
     return <ProductionDisabledScreen />;
+  }
+
+  if (runtimeCapabilities?.profile === 'prod' && !staffProfile) {
+    return <div className="app-container">
+      <Header />
+      <main className="main-content" id="main-content">
+        <h1>운영 대시보드</h1>
+        <p>운영 정보를 보려면 관리자 Google 계정으로 로그인해 주세요.</p>
+        <a href="#/admin/login">관리자 로그인</a>
+      </main>
+    </div>;
   }
 
   return (

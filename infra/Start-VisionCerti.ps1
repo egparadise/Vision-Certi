@@ -12,7 +12,9 @@
 #>
 param(
     [ValidatePattern('^\d{1,3}(\.\d{1,3}){3}$')]
-    [string]$Address = '192.168.45.160',
+    [string]$Address = '100.68.224.44',
+    [ValidatePattern('^$|^https://[^/]+$')]
+    [string]$FirebaseOrigin = '',
     [switch]$NoBrowser,
     [switch]$NoPause
 )
@@ -20,7 +22,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $workspace = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $origin = "https://${Address}:5184"
-$loginUrl = "$origin/#/login"
+$loginUrl = "$(if ($FirebaseOrigin) { $FirebaseOrigin } else { $origin })/#/login"
 try { $Host.UI.RawUI.WindowTitle = 'INVIZ Vision-Certi' } catch { }
 
 function Write-Step([string]$Text) {
@@ -83,7 +85,8 @@ function Start-CertificateBridge {
         $newest = Get-ChildItem -LiteralPath (Join-Path $workspace 'apps\web\local-bridge') -Filter *.mjs |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
         $sameOrigin = $process.CommandLine -match ('--origin\s+"?' + [regex]::Escape($origin) + '"?(\s|$)')
-        if ($sameOrigin -and $newest.LastWriteTime -le $process.CreationDate) {
+        $sameFirebaseOrigin = -not $FirebaseOrigin -or $process.CommandLine -match ('--origin\s+"?' + [regex]::Escape($FirebaseOrigin) + '"?(\s|$)')
+        if ($sameOrigin -and $sameFirebaseOrigin -and $newest.LastWriteTime -le $process.CreationDate) {
             Write-Host '  - PC 인증서 프로그램: 실행 중'
             return
         }
@@ -92,7 +95,7 @@ function Start-CertificateBridge {
         Stop-Process -Id $process.ProcessId -Force
         Wait-Until { -not (Get-BridgeListener) } 'PC 인증서 프로그램을 종료하지 못했습니다.'
     }
-    & (Join-Path $PSScriptRoot 'start_local_certificate_bridge.ps1') -Origin $origin | Out-Null
+    & (Join-Path $PSScriptRoot 'start_local_certificate_bridge.ps1') -Origin $origin -AdditionalOrigin $FirebaseOrigin | Out-Null
     Wait-Until { Get-BridgeListener } 'PC 인증서 프로그램이 127.0.0.1:18187에서 응답하지 않습니다.'
     Write-Host '  - PC 인증서 프로그램: 시작함'
 }
@@ -103,7 +106,7 @@ try {
     if (-not (Get-NetIPAddress -AddressFamily IPv4 -IPAddress $Address -ErrorAction SilentlyContinue)) {
         $current = @(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^(127|169\.254)\.' } |
             ForEach-Object { $_.IPAddress }) -join ', '
-        throw "이 PC에 INVIZ 서버 주소 $Address 가 없습니다(현재 주소: $current). Wi-Fi(네트워크) 연결을 확인해 주세요."
+        throw "이 PC에 INVIZ 서버 주소($Address)가 없습니다. 현재 주소: $current. Tailscale 또는 네트워크 연결을 확인해 주세요."
     }
     Write-Step '[1/3] INVIZ 서버를 확인하고 꺼진 구성 요소만 켭니다. 처음 켤 때는 몇 분 걸릴 수 있습니다.'
     Start-InvizServer

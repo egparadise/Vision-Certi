@@ -48,8 +48,10 @@ public class StaffAuthConfig {
 
     @Bean
     @ConditionalOnProperty(name = SyntheticActorsCondition.MODE_PROPERTY, havingValue = SyntheticActorsCondition.OIDC)
-    StaffAuthFilter staffAuthFilter(StaffTokenVerifier verifier, StaffDirectory directory) {
-        return new StaffAuthFilter(verifier, directory);
+    StaffAuthFilter staffAuthFilter(StaffTokenVerifier verifier, StaffDirectory directory,
+            @Value("${visioncerti.staff-auth.initial-google-admin-email:}") String initialAdminEmail,
+            @Value("${visioncerti.staff-auth.initial-google-admin-tenant-id:}") String initialAdminTenantId) {
+        return new StaffAuthFilter(verifier, directory, initialAdminEmail, initialAdminTenantId);
     }
 
     /** Validation of the server-side OIDC settings (names only in messages, never values). */

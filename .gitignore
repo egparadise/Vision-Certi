@@ -3,10 +3,12 @@
 **/dist/
 **/.gradle/
 **/.cache/
+.firebase/
 **/coverage/
 .env
 .env.*
 !.env.example
+!apps/web/.env.production
 work/
 *.log
 infra/data/

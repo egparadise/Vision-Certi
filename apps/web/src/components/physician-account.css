@@ -28,6 +28,11 @@
 .account-proof .cert-list input[type=radio] { width:auto; margin:0; }
 .cert-list td small { display:block; color:#60798c; overflow:hidden; text-overflow:ellipsis; max-width:220px; white-space:nowrap; }
 .account-proof .cert-empty { padding:20px; margin:0; text-align:center; color:#60798c; }
+.account-proof .cert-bridge-setup { display:grid; gap:8px; margin:12px 0; padding:14px; border:1px solid #bdd7ed; border-radius:8px; background:#f2f8fc; color:#153651; }
+.account-proof .cert-bridge-setup p { margin:0; line-height:1.5; }
+.account-proof .cert-bridge-setup a { color:#0369a1; font-weight:700; }
+.account-proof .cert-bridge-setup button { justify-self:start; padding:8px 12px; border:1px solid #0284c7; border-radius:6px; background:#fff; color:#075985; cursor:pointer; }
+.account-proof .cert-bridge-setup small { color:#536b7c; line-height:1.45; }
 .cert-manual { margin:16px 0 18px; border:1px solid #d9e4ed; border-radius:6px; padding:10px 14px; }
 .cert-manual summary { cursor:pointer; color:#075b8a; font-weight:600; }
 .cert-manual[open] summary { margin-bottom:16px; }

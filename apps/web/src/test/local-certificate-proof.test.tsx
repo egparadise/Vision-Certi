@@ -23,6 +23,31 @@ vi.mock('../services/certificateFileSigner', () => ({
 vi.mock('../services/localCertificateBridge', () => ({ discoverBridgeCertificates: mocks.discoverBridgeCertificates }));
 beforeEach(() => vi.clearAllMocks());
 
+it('offers local program setup and retry when the browser cannot reach this PC', async () => {
+  mocks.discoverBridgeCertificates.mockRejectedValue(new TypeError('Failed to fetch'));
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  render(<ExternalCertificateProof challenge={{ challengeId: 'setup', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() + 600000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
+  expect(await screen.findByText('이 PC의 인증서 프로그램에 연결할 수 없습니다')).toBeInTheDocument();
+  expect(screen.getByText(/로컬 네트워크 접근을 허용한 뒤 다시 검색하세요/)).toBeInTheDocument();
+  mocks.discoverBridgeCertificates.mockResolvedValue([]);
+  fireEvent.click(screen.getByRole('button', { name: '설치 후 다시 검색' }));
+  await waitFor(() => expect(screen.queryByText('이 PC의 인증서 프로그램에 연결할 수 없습니다')).not.toBeInTheDocument());
+});
+
+it('asks the PC program to scan removable drives when that storage medium is selected', async () => {
+  mocks.discoverBridgeCertificates.mockImplementation(async (medium: string) => medium === 'removable-disk' ? [{
+    id: 'bridge:usb', kind: 'NPKI', name: 'USB 인증서', issuer: '발급기관',
+    path: '이동식디스크의 NPKI', source: 'LOCAL_BRIDGE', sign: vi.fn(),
+  }] : []);
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  render(<ExternalCertificateProof challenge={{ challengeId: 'usb', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() + 600000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: '이동식디스크' }));
+  expect(await screen.findByRole('radio', { name: 'USB 인증서 인증서 선택' })).toBeInTheDocument();
+  expect(mocks.discoverBridgeCertificates).toHaveBeenCalledWith('removable-disk');
+});
+
 it('shows an authorized certificate automatically and signs only after selection and password', async () => {
   mocks.discoverBridgeCertificates.mockResolvedValue([]);
   const bundle = new File(['pfx bytes'], 'doctor.p12');
@@ -65,7 +90,7 @@ it('opens the on-screen keyboard and enters letters, digits and symbols into the
   });
   render(<ExternalCertificateProof challenge={{ challengeId: 'keyboard', signedPayloadBase64: btoa('challenge'),
     expiresAt: new Date(Date.now() + 600000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
-  await screen.findByText('처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.');
+  await screen.findByText('하드디스크에서 인증서를 찾지 못했습니다. 저장매체 연결과 인증서 위치를 확인해 주세요.');
   fireEvent.click(screen.getByText('목록에 없나요? 인증서 파일 직접 선택'));
   const bundle = new File(['bundle'], 'doctor.p12');
   fireEvent.change(screen.getByLabelText('PFX/P12 파일'), { target: { files: [bundle] } });

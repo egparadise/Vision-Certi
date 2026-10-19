@@ -1,0 +1,25 @@
+{
+  "hosting": {
+    "target": "vision-certi",
+    "public": "apps/web/dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "/v1/**",
+        "run": {
+          "serviceId": "vision-certi-api",
+          "region": "asia-northeast3"
+        }
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+        ]
+      }
+    ]
+  }
+}

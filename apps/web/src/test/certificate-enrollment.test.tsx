@@ -876,7 +876,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
     });
   });
 
-  it('11. DoctorAdminView: displays 403 ADMIN_ROLE_REQUIRED notice with explanation to select admin-demo', async () => {
+  it('11. DoctorAdminView: displays 403 ADMIN_ROLE_REQUIRED notice with administrator login guidance', async () => {
     globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
       if (url.includes('/admin/doctors')) {
         return new Response(
@@ -911,7 +911,7 @@ describe('Definitive Certificate Enrollment HTTP Contract Tests', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('admin-role-required-notice')).toBeInTheDocument();
-      expect(screen.getByTestId('admin-role-required-notice').textContent).toContain('admin-demo');
+      expect(screen.getByTestId('admin-role-required-notice').textContent).toContain('관리자 계정으로 로그인');
     });
   });
 

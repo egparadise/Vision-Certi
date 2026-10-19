@@ -17,7 +17,7 @@ export function CertificateLoginView() {
 
   return (
     <main className="certificate-login-page">
-      <nav className="certificate-login-admin-entry"><a href="#/admin/login">관리자 로그인</a></nav>
+      <nav className="certificate-login-admin-entry"><a href="#/admin/login">인증서별 판독 현황</a></nav>
       <section className="certificate-login-card" aria-labelledby="certificate-login-title">
         <h1 id="certificate-login-title">의료인 공동인증서 로그인</h1>
         <div className="certificate-login-primary">

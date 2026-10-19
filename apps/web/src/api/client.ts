@@ -39,6 +39,7 @@ import {
 } from '../types/api';
 import type {
   CreateStaffPrincipalRequest,
+  MedicalInstitution,
   ResetSystemSettingRequest,
   StaffPrincipal,
   SystemConfigurationResponse,
@@ -367,8 +368,9 @@ export class ApiClient {
     doctorId: string; name: string; pacsLoginId: string | null; licenseNumber: string | null;
     specialistQualificationNumber: string | null; issuer: string | null; notAfter: string | null;
     fingerprintSha256: string; registrationStatus: string; loginAttempts: number;
-    loginApproved: number; reportApprovalRequests: number; lastLoginAt: string | null;
+    loginApproved: number; reportApprovalRequests: number; signedReports: number; lastLoginAt: string | null;
     pacsSessionId: string | null; connectionExpiresAt: string | null; extensionCount: number;
+    institutionNames: string[];
   }>> {
     const res = await fetch(`${this.baseUrl}/admin/certificate-operations`, {
       method: 'GET', headers: this.getHeaders(),
@@ -709,6 +711,24 @@ export class ApiClient {
       if (controller.signal.aborted) throw new Error('인증 서버 응답 시간이 초과되었습니다. PACS에서 다시 로그인해 주세요.');
       throw error;
     } finally { window.clearTimeout(timeout); }
+  }
+
+  async getMedicalInstitutions(): Promise<MedicalInstitution[]> {
+    return this.adminJson<MedicalInstitution[]>('/admin/medical-institutions', 'GET');
+  }
+
+  async createMedicalInstitution(code: string, name: string): Promise<MedicalInstitution> {
+    return this.adminJson<MedicalInstitution>('/admin/medical-institutions', 'POST', { code, name });
+  }
+
+  async assignMedicalInstitutionDoctor(institutionId: string, doctorId: string): Promise<MedicalInstitution> {
+    return this.adminJson<MedicalInstitution>(
+      `/admin/medical-institutions/${encodeURIComponent(institutionId)}/doctors/${encodeURIComponent(doctorId)}`, 'POST');
+  }
+
+  async unassignMedicalInstitutionDoctor(institutionId: string, doctorId: string): Promise<MedicalInstitution> {
+    return this.adminJson<MedicalInstitution>(
+      `/admin/medical-institutions/${encodeURIComponent(institutionId)}/doctors/${encodeURIComponent(doctorId)}`, 'DELETE');
   }
 
   async getCertificateEnrollments(token: string): Promise<ListResponse<Enrollment>> {

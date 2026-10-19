@@ -36,6 +36,7 @@ function mockFetch(handler: Handler) {
     const handled = handler(url, init);
     if (handled) return handled;
     if (url.includes('/runtime/capabilities')) return json({ profile: 'dev', persistence: { mode: 'IN_MEMORY' }, staffAuth: { mode: 'DEV_HEADERS' }, doctorAuth: { pcCertificate: { configured: false, trustAnchors: 0, crlState: 'NOT_CONFIGURED' }, mobile: { configured: false, provider: null }, googleConfigured: false, devMockCertificate: false, devIdentity: false }, signing: { backend: 'DEV_SIMULATED', available: true }, clinicalUseAllowed: false, warnings: ['IN_MEMORY_PERSISTENCE_NOT_DURABLE'] });
+    if (url.includes('/admin/certificate-operations') || url.includes('/admin/medical-institutions')) return json([]);
     if (url.includes('/dashboard')) return json({ tenantId: 'demo-hospital-a', generatedAt: '', signatureMode: '', persistence: 'IN_MEMORY', documents: 1, documentVersions: 1, signRequestsByStatus: {}, signatures: 0, deliveriesByStatus: {}, auditEvents: 3 });
     return json({ items: [] });
   });
@@ -44,10 +45,11 @@ function mockFetch(handler: Handler) {
 }
 
 const AsActor: React.FC<{ actor: 'admin-demo' | 'doctor-demo'; section: AdminSection }> = ({ actor, section }) => {
-  const { setActorId, actorId } = useApp();
+  const { setActorId, setLocalAdminToken, actorId } = useApp();
   React.useEffect(() => {
     setActorId(actor);
-  }, [actor, setActorId]);
+    setLocalAdminToken(actor === 'admin-demo' ? 'test-admin-token' : null);
+  }, [actor, setActorId, setLocalAdminToken]);
   if (actorId !== actor) return null;
   return (
     <>
@@ -95,7 +97,7 @@ describe('Admin mode (관리자 모드)', () => {
     renderAs('admin-demo', 'overview');
     expect(await screen.findByTestId('nav-admin-mode')).toBeInTheDocument();
     expect(await screen.findByTestId('admin-overview')).toBeInTheDocument();
-    expect(await screen.findByText(/메모리 저장소 사용 중/)).toBeInTheDocument();
+    expect(await screen.findByText(/표시할 실제 공동인증서가 없습니다/)).toBeInTheDocument();
   });
 
   it('changes a setting with reason and expected revision, then shows the audited result', async () => {

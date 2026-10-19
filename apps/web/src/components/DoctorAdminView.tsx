@@ -28,6 +28,7 @@ import {
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 import { InfoPopover } from './InfoPopover';
+import { isSyntheticDoctor } from '../utils/realData';
 
 // Administrator invitation issuance is temporarily disabled; review and suspension remain available.
 const adminInvitationsEnabled = false;
@@ -112,12 +113,12 @@ export const DoctorAdminView: React.FC = () => {
       if (isMockMode) {
         const tenantDoctors = mockStore.doctors[tenantId] || [];
         if (currentGen === fetchGenRef.current) {
-          setDoctors(tenantDoctors);
+          setDoctors(tenantDoctors.filter(d => !isSyntheticDoctor(d)));
         }
       } else {
         const response = await client.getAdminDoctors();
         if (currentGen === fetchGenRef.current) {
-          const baseDocs = response.items || [];
+          const baseDocs = (response.items || []).filter(d => !isSyntheticDoctor(d));
           // Concurrently fetch certificate enrollments per doctor so real candidate certificates appear
           const docsWithEnrollments = await Promise.all(
             baseDocs.map(async (doc) => {
@@ -545,8 +546,8 @@ export const DoctorAdminView: React.FC = () => {
         <div>
           <strong>개발/검증 환경 가이드 (Dev-Header Authentication):</strong>
           <div style={{ fontSize: '0.8rem', marginTop: '2px', lineHeight: '1.4' }}>
-            본 화면은 <code>admin-demo</code> 관리자 헤더 및 선택된 기관(<code>{tenantId}</code>) 범위 내에서 동작합니다.
-            운영 환경에서는 Keycloak/IdP SSO 및 엄격한 관리자 다중인증(MFA)이 적용되며, 이 화면은 프로덕션 빌드에서 차단됩니다.
+            개발·검증 환경에서는 실제 발급기관 인증서로 확인된 의사만 운영 목록에 표시합니다.
+            합성 시험 기록은 화면에서 제외되지만 감사 기록에는 보존됩니다. 현재 관리자 인증 방식과 서버 운영 상태는 상단 경고를 확인해 주세요.
           </div>
         </div>
       </div>
@@ -571,10 +572,8 @@ export const DoctorAdminView: React.FC = () => {
             관리자 권한 필요 (ADMIN_ROLE_REQUIRED / 403 Forbidden)
           </div>
           <div style={{ marginTop: '8px', fontSize: '0.875rem', color: '#92400e', lineHeight: 1.5 }}>
-            현재 선택된 액터는 관리자 권한이 없는 의사 계정입니다.
-            의사 관리 및 인증서 심사는 <strong>관리자(ADMIN)</strong> 역할만 접근할 수 있습니다.<br />
-            상단 헤더의 Actor 전환 메뉴에서 <code>admin-demo</code>를 직접 선택하여 관리자 역할로 전환하십시오.
-            (시스템 보안 정책상 관리자 계정으로 자동 가장/전환되지 않습니다.)
+            의사 관리 및 인증서 심사는 <strong>관리자(ADMIN)</strong> 역할만 접근할 수 있습니다.
+            관리자 계정으로 로그인해 주세요.
           </div>
         </div>
       )}

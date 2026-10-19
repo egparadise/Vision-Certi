@@ -16,7 +16,10 @@ vi.mock('../services/localCertificateDiscovery', () => ({
   rememberDirectory: mocks.rememberDirectory,
   scanCertificateDirectory: mocks.scanCertificateDirectory,
 }));
-vi.mock('../services/certificateFileSigner', () => ({ signWithCertificateFiles: mocks.signWithCertificateFiles }));
+vi.mock('../services/certificateFileSigner', () => ({
+  signWithCertificateFiles: mocks.signWithCertificateFiles,
+  PASSWORD_MISMATCH: '인증서 비밀번호가 일치하지 않습니다. 선택한 인증서의 비밀번호를 다시 입력해 주세요.',
+}));
 vi.mock('../services/localCertificateBridge', () => ({ discoverBridgeCertificates: mocks.discoverBridgeCertificates }));
 beforeEach(() => vi.clearAllMocks());
 

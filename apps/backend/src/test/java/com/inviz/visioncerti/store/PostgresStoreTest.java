@@ -41,6 +41,19 @@ class PostgresStoreTest {
     static final Kind<Evidence> EVIDENCE = Kind.of("doctor_evidence", Evidence.class)
             .id(Evidence::id).tenant(Evidence::tenantId).column("doctor_id", Evidence::doctorId).immutable().build();
 
+    record MedicalInstitutionRow(UUID id, String tenantId, String codeKey, String name) { }
+    record InstitutionDoctorRow(UUID id, String tenantId, String assignmentKey, String doctorId) { }
+
+    static final Kind<MedicalInstitutionRow> MEDICAL_INSTITUTIONS =
+            Kind.of("medical_institutions", MedicalInstitutionRow.class)
+                    .id(MedicalInstitutionRow::id).tenant(MedicalInstitutionRow::tenantId)
+                    .unique("code_key", MedicalInstitutionRow::codeKey, null).build();
+    static final Kind<InstitutionDoctorRow> INSTITUTION_DOCTORS =
+            Kind.of("medical_institution_doctors", InstitutionDoctorRow.class)
+                    .id(InstitutionDoctorRow::id).tenant(InstitutionDoctorRow::tenantId)
+                    .unique("assignment_key", InstitutionDoctorRow::assignmentKey, null)
+                    .column("doctor_id", InstitutionDoctorRow::doctorId).build();
+
     private static PostgresTestDatabase.Database db;
     private static PostgresStore store;
 
@@ -74,6 +87,30 @@ class PostgresStoreTest {
 
     private static Item item(String key) {
         return new Item(UUID.randomUUID(), "tenant-a", key, 0, null);
+    }
+
+    @Test
+    void medicalInstitutionMigrationPersistsAndIndexesDoctorAssignments() throws Exception {
+        String key = "institution-" + UUID.randomUUID();
+        var institution = new MedicalInstitutionRow(UUID.randomUUID(), "tenant-a", key, "registered hospital");
+        var assignment = new InstitutionDoctorRow(UUID.randomUUID(), "tenant-a", "assignment-" + UUID.randomUUID(),
+                UUID.randomUUID().toString());
+        store.run(tx -> {
+            tx.insert(MEDICAL_INSTITUTIONS, institution);
+            tx.insert(INSTITUTION_DOCTORS, assignment);
+        });
+        try (PostgresStore restarted = db.store()) {
+            java.util.Optional<MedicalInstitutionRow> found = restarted.tx(
+                    tx -> tx.findOne(MEDICAL_INSTITUTIONS, "code_key", key));
+            List<InstitutionDoctorRow> assignments = restarted.tx(
+                    tx -> tx.find(INSTITUTION_DOCTORS, "doctor_id", assignment.doctorId()));
+            assertThat(found).contains(institution);
+            assertThat(assignments).containsExactly(assignment);
+        }
+        store.run(tx -> tx.delete(INSTITUTION_DOCTORS, assignment.id()));
+        List<InstitutionDoctorRow> afterRemoval = store.tx(
+                tx -> tx.find(INSTITUTION_DOCTORS, "doctor_id", assignment.doctorId()));
+        assertThat(afterRemoval).isEmpty();
     }
 
     @Test
@@ -283,7 +320,7 @@ class PostgresStoreTest {
                 PreparedStatement ps = c.prepareStatement("SELECT version FROM certi_rt.schema_info")) {
             ps.executeQuery().close();
         }
-        assertThat(PostgresStore.SCHEMA_VERSION).isEqualTo(8);
+        assertThat(PostgresStore.SCHEMA_VERSION).isEqualTo(9);
         assertThat(StoreConfig.problem("jdbc:postgresql://db.example:5432/x", "u", db.passwordFile(), true))
                 .contains("sslmode");
         assertThat(StoreConfig.problem("jdbc:postgresql://db.example:5432/x?sslmode=verify-full", "u",

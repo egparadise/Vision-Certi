@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useMemo, useCallback, useEf
 import { ApiClient } from '../api/client';
 import { DevActorId, DevRole, DevTenantId, RuntimeCapabilities, StaffMeResponse } from '../types/api';
 import { createInitialMockStore, MockStore } from '../mock/mockData';
+import { isDemoEnabled } from '../utils/env';
 
 export type NavTab =
   | 'dashboard'
@@ -62,7 +63,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const role: DevRole = staffProfile
     ? (staffProfile.role as DevRole)
-    : (actorId === 'doctor-demo' ? 'DOCTOR' : 'ADMIN');
+    : (localAdminToken || (isDemoEnabled() && actorId === 'admin-demo') ? 'ADMIN' : 'DOCTOR');
 
   const client = useMemo(() => {
     return new ApiClient({

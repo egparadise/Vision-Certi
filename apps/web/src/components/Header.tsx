@@ -1,7 +1,6 @@
 import React from 'react';
-import { ShieldAlert, Building2, UserCircle, Database, Server, LogIn, UserPlus, KeyRound, UserCheck, Users, LogOut } from 'lucide-react';
+import { ShieldAlert, LogIn, UserPlus, KeyRound, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { DevActorId, DevTenantId } from '../types/api';
 import { isDemoEnabled } from '../utils/env';
 import { discoverOidc } from '../services/oidcDiscovery';
 import { InfoPopover } from './InfoPopover';
@@ -29,13 +28,8 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 
 export const Header: React.FC = () => {
   const {
-    tenantId,
-    setTenantId,
-    actorId,
-    setActorId,
-    role,
     isMockMode,
-    setIsMockMode,
+    localAdminToken,
     runtimeCapabilities,
     capabilitiesLoading,
     capabilitiesError,
@@ -259,7 +253,7 @@ export const Header: React.FC = () => {
                 <InfoPopover
                   title="Vision-Certi 원격판독 전자서명 플랫폼"
                   buttonText="플랫폼 안내"
-                  description="의료법 및 전자서명법을 준수하는 의료영상(DICOM/PACS) 판독문 전자서명, 위변조 방지 SHA-256 감사 체인 및 OpenBao 기반 키 관리 시스템입니다."
+                  description="의료영상(DICOM/PACS) 판독문 전자서명, SHA-256 감사 체인 및 OpenBao 기반 키 관리 기능을 제공합니다. 임상 사용 가능 여부는 서버 상태를 확인해 주세요."
                   bullets={[
                     "의사 신원 확인과 판독문 서명키의 엄격한 분리 (이원화 아키텍처)",
                     "개인키/비밀번호 서버 미전송 원칙 준수 (클라이언트 사이드 검증)",
@@ -277,26 +271,15 @@ export const Header: React.FC = () => {
           <div className="header-controls">
             <a href="#/login" className="header-pill-link" style={{ color: '#7dd3fc' }}>
               <LogIn size={13} />
-              <span>개인 인증 로그인</span>
+              <span>공동인증서 로그인</span>
             </a>
-            <a href="#/admin/login" className="header-pill-link" style={{ color: '#fbbf24' }}>
-              관리자 로그인
-            </a>
-            <a href="#/signup" className="header-pill-link" style={{ color: '#5eead4' }}>
+            <a href="#/physician/account" className="header-pill-link" style={{ color: '#5eead4' }}>
               <UserPlus size={13} />
-              <span>개인·의료인 가입</span>
+              <span>의사 가입·인증서 등록</span>
             </a>
-            <a href="#/certificates/enroll" className="header-pill-link" style={{ color: '#34d399' }} data-testid="nav-certificate-enroll-btn">
+            <a href={localAdminToken || staffProfile?.role === 'ADMIN' ? '#/admin' : '#/admin/login'} className="header-pill-link" style={{ color: '#fbbf24' }} data-testid="nav-certificate-dashboard-btn">
               <KeyRound size={13} />
-              <span>공동/금융/모바일 인증</span>
-            </a>
-            <a href="#/activate" className="header-pill-link" style={{ color: '#38bdf8' }} data-testid="nav-activate-btn">
-              <UserCheck size={13} />
-              <span>의사 계정 활성화</span>
-            </a>
-            <a href="#/doctors" className="header-pill-link" style={{ color: '#f59e0b' }} data-testid="nav-doctors-btn">
-              <Users size={13} />
-              <span>의사 관리 (Admin)</span>
+              <span>인증서별 판독 현황</span>
             </a>
 
             {/* Staff OIDC Login Trigger / Status */}
@@ -322,7 +305,7 @@ export const Header: React.FC = () => {
                   로그아웃
                 </button>
               </div>
-            ) : (
+            ) : runtimeCapabilities?.staffAuth?.mode === 'OIDC' ? (
               <button
                 type="button"
                 data-testid="staff-oidc-login-btn"
@@ -338,72 +321,7 @@ export const Header: React.FC = () => {
                 <LogIn size={13} />
                 <span>Staff OIDC 로그인</span>
               </button>
-            )}
-            {/* Dev-only Institution, Actor, and Mode Switchers (Hidden in production without demo flag) */}
-            {(isDemoEnabled() || runtimeCapabilities?.profile !== 'prod') && (
-              <>
-                {/* Institution Switcher */}
-                <div className="control-group">
-                  <Building2 size={16} style={{ color: 'var(--teal-400)' }} />
-                  <label htmlFor="tenant-select" className="control-label">
-                    기관 선택:
-                  </label>
-                  <select
-                    id="tenant-select"
-                    className="control-select"
-                    value={tenantId}
-                    onChange={(e) => setTenantId(e.target.value as DevTenantId)}
-                    aria-label="의료기관 선택"
-                  >
-                    <option value="demo-hospital-a">A 의료원 (본원 / demo-hospital-a)</option>
-                    <option value="demo-hospital-b">B 병원 (분원 / demo-hospital-b)</option>
-                  </select>
-                </div>
-
-                {/* Actor / Role Switcher */}
-                <div className="control-group">
-                  <UserCircle
-                    size={16}
-                    style={{ color: role === 'DOCTOR' ? '#38bdf8' : '#f59e0b' }}
-                  />
-                  <label htmlFor="actor-select" className="control-label">
-                    접속 역할:
-                  </label>
-                  <select
-                    id="actor-select"
-                    className="control-select"
-                    value={actorId}
-                    onChange={(e) => setActorId(e.target.value as DevActorId)}
-                    aria-label="사용자 역할 선택"
-                  >
-                    <option value="doctor-demo">김판독 의사 (DOCTOR / 서명권한 있음)</option>
-                    <option value="admin-demo">박관리 관리자 (ADMIN / 서명버튼 제한)</option>
-                  </select>
-                </div>
-
-                {/* API Mode Selector */}
-                <div className="control-group">
-                  {isMockMode ? (
-                    <Database size={16} style={{ color: '#a78bfa' }} />
-                  ) : (
-                    <Server size={16} style={{ color: '#4ade80' }} />
-                  )}
-                  <label htmlFor="mode-select" className="control-label">
-                    연동 모드:
-                  </label>
-                  <select
-                    id="mode-select"
-                    className="control-select"
-                    value={isMockMode ? 'mock' : 'live'}
-                    onChange={(e) => setIsMockMode(e.target.value === 'mock')}
-                    aria-label="연동 모드 선택"
-                  >
-                    <option value="live">라이브 백엔드 (/v1 API Proxy)</option>
-                    <option value="mock">명시적 모의 모드 (Client Mock)</option>
-                  </select>
-                </div>
-              </>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

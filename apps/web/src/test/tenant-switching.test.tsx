@@ -6,7 +6,7 @@ import { Header } from '../components/Header';
 import { DocumentListView } from '../components/DocumentListView';
 
 const MockParentApp: React.FC = () => {
-  const { tenantId, selectedDocumentId, setSelectedDocumentId } = useApp();
+  const { tenantId, setTenantId, selectedDocumentId, setSelectedDocumentId } = useApp();
 
   return (
     <div>
@@ -19,6 +19,9 @@ const MockParentApp: React.FC = () => {
         onClick={() => setSelectedDocumentId('doc-secret-a-99')}
       >
         A병원 문서 선택
+      </button>
+      <button type="button" data-testid="switch-tenant-btn" onClick={() => setTenantId('demo-hospital-b')}>
+        시험용 기관 범위 전환
       </button>
       <DocumentListView />
     </div>
@@ -53,8 +56,8 @@ describe('Tenant Switching and State Reset Tests', () => {
     expect(screen.getByTestId('current-selected-doc')).toHaveTextContent('doc-secret-a-99');
 
     // Switch tenant to B 병원 (demo-hospital-b)
-    const tenantSelect = screen.getByLabelText('의료기관 선택');
-    fireEvent.change(tenantSelect, { target: { value: 'demo-hospital-b' } });
+    expect(screen.queryByLabelText('의료기관 선택')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('switch-tenant-btn'));
 
     // Assert: active selected document MUST BE CLEARED immediately
     await waitFor(() => {

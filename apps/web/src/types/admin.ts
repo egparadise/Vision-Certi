@@ -1,6 +1,14 @@
 // Admin mode (관리자 모드) API types: runtime operational settings, deployment configuration, staff principals.
 
 export type SettingGroup = 'DOCUMENTS' | 'SIGNING' | 'PACS' | 'DOCTORS' | 'RATE_LIMITS';
+
+export interface MedicalInstitution {
+  id: string;
+  code: string;
+  name: string;
+  doctorIds: string[];
+  createdAt: string;
+}
 export type SettingUnit = 'BYTES' | 'SECONDS' | 'COUNT';
 
 export interface SystemSettingView {

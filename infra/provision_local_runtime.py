@@ -30,7 +30,8 @@ with psycopg.connect(**owner,dbname='postgres',autocommit=True) as c:
     if not c.execute("SELECT 1 FROM pg_database WHERE datname='vision_certi_local'").fetchone():
         c.execute('CREATE DATABASE vision_certi_local')
 migrations=[ROOT/'database/migrations'/name for name in (
-    'V005__production_runtime.sql', 'V006__pacs_self_enrollment.sql', 'V007__physician_accounts.sql')]
+    'V005__production_runtime.sql', 'V006__pacs_self_enrollment.sql', 'V007__physician_accounts.sql',
+    'V008__admin_system_settings.sql', 'V009__medical_institutions.sql')]
 checksums={m.name:hashlib.sha256(m.read_bytes()).hexdigest() for m in migrations}
 with psycopg.connect(**owner,dbname='vision_certi_local') as c:
     c.execute('CREATE TABLE IF NOT EXISTS public.vc_local_migrations(name text PRIMARY KEY,sha256 text NOT NULL)')
@@ -40,7 +41,15 @@ with psycopg.connect(**owner,dbname='vision_certi_local') as c:
         if applied:
             assert applied[0]==checksum,'Applied runtime migration changed; deliberate upgrade required'
         else:
-            c.execute(migration.read_text(encoding='utf8'))
+            current=c.execute("SELECT version FROM certi_rt.schema_info WHERE component='runtime'").fetchone() if migration.name != 'V005__production_runtime.sql' else None
+            target=int(migration.name[1:4])
+            if current and current[0] >= target:
+                # A pre-ledger local upgrade may already have applied this migration. Check its unique table.
+                expected={8:'system_settings',9:'medical_institutions'}.get(target)
+                if not expected or not c.execute('SELECT to_regclass(%s)',(f'certi_rt.{expected}',)).fetchone()[0]:
+                    raise RuntimeError(f'Untracked migration {migration.name} needs manual review')
+            else:
+                c.execute(migration.read_text(encoding='utf8'))
             c.execute('INSERT INTO public.vc_local_migrations VALUES(%s,%s)',(migration.name,checksum))
     c.execute('REVOKE CREATE ON SCHEMA public FROM PUBLIC')
 result={'url':'jdbc:postgresql://127.0.0.1:15432/vision_certi_local','username':'vc_local_runtime',

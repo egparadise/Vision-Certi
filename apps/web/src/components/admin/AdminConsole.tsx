@@ -14,15 +14,17 @@ import { DoctorAdminView } from '../DoctorAdminView';
 import { AuditEventsView } from '../AuditEventsView';
 import { DeliveryQueueView } from '../DeliveryQueueView';
 import { AdminOverview } from './AdminOverview';
+import { AdminInstitutionsPanel } from './AdminInstitutionsPanel';
 import { AdminSettingsPanel } from './AdminSettingsPanel';
 import { AdminStaffPanel } from './AdminStaffPanel';
 import { AdminSystemPanel } from './AdminSystemPanel';
 import './admin.css';
 
-export type AdminSection = 'overview' | 'doctors' | 'staff' | 'settings' | 'system' | 'audit' | 'deliveries';
+export type AdminSection = 'overview' | 'institutions' | 'doctors' | 'staff' | 'settings' | 'system' | 'audit' | 'deliveries';
 
 const SECTIONS: { id: AdminSection; label: string; description: string; icon: React.ReactNode }[] = [
-  { id: 'overview', label: '개요', description: '운영 상태·구성 경고', icon: <LayoutDashboard size={16} /> },
+  { id: 'overview', label: '인증서별 판독 현황', description: '실제 인증서의 판독·로그인 집계', icon: <LayoutDashboard size={16} /> },
+  { id: 'institutions', label: '의료기관 관리', description: '실제 기관 등록·의사 배정', icon: <Stethoscope size={16} /> },
   { id: 'doctors', label: '의사 관리', description: '가입 현황·인증서 검토·정지/폐기', icon: <Stethoscope size={16} /> },
   { id: 'staff', label: '관리자 계정', description: 'OIDC 관리자 권한 연결', icon: <UserCog size={16} /> },
   { id: 'settings', label: '운영 정책', description: '유효 시간·한도 설정', icon: <SlidersHorizontal size={16} /> },
@@ -37,7 +39,7 @@ export function adminSectionFromHash(hash: string): AdminSection {
 }
 
 export const AdminConsole: React.FC<{ section: AdminSection }> = ({ section }) => {
-  const { role, isMockMode, tenantId } = useApp();
+  const { role, isMockMode } = useApp();
 
   const go = (next: AdminSection) => {
     window.location.hash = next === 'overview' ? '#/admin' : `#/admin/${next}`;
@@ -60,7 +62,7 @@ export const AdminConsole: React.FC<{ section: AdminSection }> = ({ section }) =
       <aside className="admin-sidebar" aria-label="관리자 메뉴">
         <div className="admin-sidebar-title">
           관리자 모드
-          <span>{tenantId}</span>
+          <span>등록 기관별 관리</span>
         </div>
         {SECTIONS.map((s) => (
           <button
@@ -87,6 +89,7 @@ export const AdminConsole: React.FC<{ section: AdminSection }> = ({ section }) =
         ) : (
           <>
             {section === 'overview' && <AdminOverview onNavigate={go} />}
+            {section === 'institutions' && <AdminInstitutionsPanel />}
             {section === 'doctors' && <DoctorAdminView />}
             {section === 'staff' && <AdminStaffPanel />}
             {section === 'settings' && <AdminSettingsPanel />}

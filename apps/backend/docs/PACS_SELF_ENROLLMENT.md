@@ -20,13 +20,13 @@ PACS가 기존 ID/비밀번호를 검증한 뒤, 서버 간 HMAC 인증으로 �
 - `POST /v1/integrations/pacs/enrollments/start`: `{tenantId,pacsUserId,name,licenseNumber,centerName}` → HTTP 201 `{doctorId,challenge}`. `challenge`는 기존 공동인증서 챌린지와 같은 형식이다.
 - `POST /v1/integrations/pacs/enrollments/status`: `{tenantId,pacsUserId}` → HTTP 200 `{doctorId,registrationStatus,certificateEnrollmentId,fingerprintSha256,doctorLicenseNumber}`.
 
-`registrationStatus`는 `NOT_REGISTERED`, `PENDING`, `ACTIVE`, `SUSPENDED`, `REVOKED` 중 하나다. 등록되지 않은 계정의 나머지 값은 null이다. `ACTIVE`는 의사 활성 상태와 현재 인증서의 신뢰체인·유효기간·폐지 상태를 다시 확인한 뒤 반환한다. 인증서 상태를 확인할 수 없으면 오류로 종료한다.
+`registrationStatus`는 `NOT_REGISTERED`, `PENDING`, `ACTIVE`, `SUSPENDED`, `REVOKED` 중 하나다. `NOT_REGISTERED`에는 최초 등록을 시작했지만 인증서 증명·면허정보·동의를 마치지 못한 PACS 계정도 포함된다. 이때 `doctorId`는 이미 발급되었을 수 있으며, 같은 PACS 계정으로 재시도하면 이어서 등록한다. `PENDING`은 동의까지 저장하고 의료인 자격 검토·승인을 기다리는 상태다. `ACTIVE`는 의사 활성 상태와 현재 인증서의 신뢰체인·유효기간·폐지 상태를 다시 확인한 뒤 반환한다. 인증서 상태를 확인할 수 없으면 오류로 종료한다.
 
 PACS 서버는 요청자 세션에서 계정과 면허 정보를 조회해야 한다. 브라우저가 제공한 사용자 ID나 면허번호를 그대로 전달해서는 안 된다. 이후 매 로그인 시 공동인증서 인증 결과를 확인하고 PACS 세션을 발급하는 절차는 PACS 서버가 담당한다.
 
 ## PACS 공동인증서 버튼의 화면 분기 (SDK 미연동)
 
-PACS 로그인 화면의 공동인증서 버튼에서 **최초 등록**을 시작할 때는 PACS ID와 비밀번호를 입력한다. PACS가 먼저 계정을 인증한 다음 `GET /api/vc/auth/enrollment-status`로 현재 계정의 서버 상태를 조회한다. 조회 결과가 `NOT_REGISTERED` 또는 `PENDING`이면 최초 등록 화면을 열고, 그 화면에서 `POST /api/vc/auth/enrollment-start`로 얻은 일회성 챌린지를 INVIZ 등록 창에 전달한다. `ACTIVE`이면 등록된 공동인증서 로그인 화면을 연다. `SUSPENDED`·`REVOKED` 또는 조회 실패 시에는 두 경로 모두 진행하지 않는다. 상태 기준은 요청 횟수가 아니라 서버가 검증한 등록 완료 여부다.
+PACS 로그인 화면의 공동인증서 버튼에서 **최초 등록**을 시작할 때는 PACS ID와 비밀번호를 입력한다. PACS가 먼저 의사 계정을 인증한 다음 `GET /api/vc/auth/pending/enrollment-status`로 현재 계정의 서버 상태를 조회한다. 조회 결과가 `NOT_REGISTERED`이면 추가 확인 버튼 없이 `POST /api/vc/auth/pending/enrollment-start`로 얻은 일회성 챌린지를 INVIZ 등록 창에 전달한다. `PENDING`이면 자격 검토 대기를 알리고 로그인을 허용하지 않는다. `ACTIVE`이면 등록된 공동인증서 로그인 화면을 연다. `SUSPENDED`·`REVOKED` 또는 조회 실패 시에는 두 경로 모두 진행하지 않는다. 상태 기준은 요청 횟수가 아니라 서버가 검증한 등록 완료 여부다.
 
 등록 창에서 인증서 소유 증명, 면허·자격 정보 제출, 필수 동의가 끝나면 창을 닫고 PACS가 상태를 다시 조회한다. 이때 `PENDING`이면 검토·활성화를 기다리며 로그인은 허용하지 않는다. 등록 창의 완료 신호는 계정 활성화 증명이 아니다.
 

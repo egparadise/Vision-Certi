@@ -42,6 +42,10 @@ public final class PacsEnrollmentService {
         if (ref.status().blocked()) {
             return new EnrollmentStatusResponse(ref.id(), ref.status().name(), null, null, license);
         }
+        if (ref.status() != DoctorStatus.ACTIVE && !certificates.hasConsentedPendingEnrollment(ref.id())) {
+            // A created PACS doctor or an interrupted proof is not a completed registration.
+            return new EnrollmentStatusResponse(ref.id(), "NOT_REGISTERED", null, null, license);
+        }
         if (ref.status() != DoctorStatus.ACTIVE || !certificates.hasActiveEnrollment(ref.id())) {
             return new EnrollmentStatusResponse(ref.id(), "PENDING", null, null, license);
         }

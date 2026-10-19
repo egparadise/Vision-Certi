@@ -743,6 +743,12 @@ public class CertificateEnrollmentService implements CertificateGate {
         return activeOf(doctorId) != null;
     }
 
+    /** An interrupted PACS first registration remains resumable until the physician has consented. */
+    public boolean hasConsentedPendingEnrollment(UUID doctorId) {
+        return store.tx(tx -> tx.find(ENROLLMENTS, "doctor_id", doctorId.toString()).stream()
+                .anyMatch(e -> e.registrationStatus == RegistrationStatus.PENDING && e.consentedAt != null));
+    }
+
     private CertificateEnrollment activeOf(UUID doctorId) {
         return store.tx(tx -> tx.findOne(ENROLLMENTS, "active_doctor_id", doctorId.toString())
                 .filter(e -> e.registrationStatus == RegistrationStatus.ACTIVE).orElse(null));

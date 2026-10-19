@@ -123,6 +123,9 @@ class PacsIntegrationApiTest {
         String start = servicePost(START, enrollmentBody(user, license)).andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         String doctorId = JsonPath.read(start, "$.doctorId");
+        servicePost(STATUS, query).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationStatus").value("NOT_REGISTERED"))
+                .andExpect(jsonPath("$.doctorId").value(doctorId));
         servicePost(START, enrollmentBody(user, license)).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.doctorId").value(doctorId));
         mvc.perform(admin(get("/v1/admin/doctors/" + doctorId + "/evidence")))
@@ -141,6 +144,9 @@ class PacsIntegrationApiTest {
                 .andExpect(status().isConflict());
         String token = JsonPath.read(verified, "$.activationToken");
         String registration = JsonPath.read(verified, "$.enrollment.registrationId");
+        // Proof without consent can be resumed by the same authenticated PACS account.
+        servicePost(STATUS, query).andExpect(status().isOk())
+                .andExpect(jsonPath("$.registrationStatus").value("NOT_REGISTERED"));
         mvc.perform(bearer(post("/v1/certificate-enrollment/enrollments/" + registration + "/consent"), token)
                 .contentType(MediaType.APPLICATION_JSON).content(CONSENT)).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MEDICAL_CREDENTIALS_REQUIRED"));

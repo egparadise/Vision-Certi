@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ExternalCertificateProof } from '../components/ExternalCertificateProof';
 import type { CertificateChallenge } from '../types/api';
 import appPackage from '../../package.json';
@@ -22,6 +22,22 @@ vi.mock('../services/certificateFileSigner', () => ({
 }));
 vi.mock('../services/localCertificateBridge', () => ({ discoverBridgeCertificates: mocks.discoverBridgeCertificates }));
 beforeEach(() => vi.clearAllMocks());
+afterEach(() => vi.unstubAllEnvs());
+
+it('keeps the Windows installer link usable after the certificate challenge expires', async () => {
+  const installerUrl = 'https://vision-certi.web.app/downloads/vision-certi-bridge-win-x64.zip';
+  vi.stubEnv('VITE_CERT_INSTALLER_URL', installerUrl);
+  mocks.discoverBridgeCertificates.mockRejectedValue(new TypeError('Failed to fetch'));
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  render(<ExternalCertificateProof challenge={{ challengeId: 'expired-setup', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() - 1000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
+  const link = await screen.findByRole('link', { name: 'Windows 인증서 프로그램 다운로드' });
+  expect(link).toHaveAttribute('href', installerUrl);
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(link).not.toHaveAttribute('download');
+  expect(link.closest('fieldset')).toBeNull();
+  expect(screen.getByText(installerUrl)).toBeInTheDocument();
+});
 
 it('offers local program setup and retry when the browser cannot reach this PC', async () => {
   mocks.discoverBridgeCertificates.mockRejectedValue(new TypeError('Failed to fetch'));

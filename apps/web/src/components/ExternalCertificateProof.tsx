@@ -257,6 +257,16 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     <p role="status" className="cert-dialog-timer">{expired ? '인증 요청이 만료되었습니다. 새 요청을 시작해 주세요.' : `남은 시간 ${Math.ceil((expires - now) / 1000)}초`}</p>
     {expiryWarning && <p role="alert">선택한 공동인증서가 30일 이내에 만료됩니다. 만료일: {selected.expiresAt!.toLocaleDateString('ko-KR')}</p>}
     {passwordLocked && <p role="alert">비밀번호 입력이 잠겼습니다. {Math.ceil((lockedUntil - now) / 60000)}분 뒤 다시 시도해 주세요.</p>}
+    {bridgeState === 'unavailable' && <div className="cert-bridge-setup" role="status">
+      <strong>이 PC의 인증서 프로그램에 연결할 수 없습니다</strong>
+      <p>처음 사용하는 PC라면 설치 파일의 압축을 풀고 <code>Install.cmd</code>를 실행하세요. 이미 설치했다면 브라우저의 로컬 네트워크 접근을 허용한 뒤 다시 검색하세요.</p>
+      {import.meta.env.VITE_CERT_INSTALLER_URL && <>
+        <a href={import.meta.env.VITE_CERT_INSTALLER_URL} target="_blank" rel="noopener noreferrer">Windows 인증서 프로그램 다운로드</a>
+        <small>새 창에서 다운로드가 시작되지 않으면 주소를 복사해 브라우저 주소창에 붙여넣으세요: <code>{import.meta.env.VITE_CERT_INSTALLER_URL}</code></small>
+      </>}
+      <button type="button" onClick={() => { setError(''); setScanRetry(value => value + 1); }}>설치 후 다시 검색</button>
+      <small>인증서는 현재 사용 중인 PC에서만 검색됩니다. 브라우저가 막은 시스템 폴더를 강제로 열 수는 없습니다.</small>
+    </div>}
     <form onSubmit={submit}>
       <fieldset disabled={busy || signing || expired} className="enroll-form-fields">
         <legend className="enroll-sr-only">공동인증서</legend>
@@ -293,13 +303,6 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
             bridgeState === 'available' ? `${medium === 'hard-disk' ? '하드디스크' : '이동식디스크'}에서 인증서를 찾지 못했습니다. 저장매체 연결과 인증서 위치를 확인해 주세요.`
               : '처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.'}</p>}
         </div>
-        {bridgeState === 'unavailable' && <div className="cert-bridge-setup" role="status">
-          <strong>이 PC의 인증서 프로그램에 연결할 수 없습니다</strong>
-          <p>처음 사용하는 PC라면 설치 파일의 압축을 풀고 <code>Install.cmd</code>를 실행하세요. 이미 설치했다면 브라우저의 로컬 네트워크 접근을 허용한 뒤 다시 검색하세요.</p>
-          {import.meta.env.VITE_CERT_INSTALLER_URL && <a href={import.meta.env.VITE_CERT_INSTALLER_URL} download>Windows 인증서 프로그램 다운로드</a>}
-          <button type="button" onClick={() => { setError(''); setScanRetry(value => value + 1); }}>설치 후 다시 검색</button>
-          <small>인증서는 현재 사용 중인 PC에서만 검색됩니다. 브라우저가 막은 시스템 폴더를 강제로 열 수는 없습니다.</small>
-        </div>}
         {scanLimited[medium] && <p className="cert-scan-limit" role="alert">검색 범위가 너무 넓어 일부 폴더만 확인했습니다. NPKI 상위 폴더를 직접 선택해 다시 검색해 주세요.</p>}
         <div className="cert-location-actions">
           <button type="button" onClick={() => void chooseDirectory(false)} disabled={signing}><FolderSearch size={17} /> 인증서 찾기</button>

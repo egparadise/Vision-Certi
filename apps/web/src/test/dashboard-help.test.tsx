@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AppProvider } from '../context/AppContext';
 import { DashboardView } from '../components/DashboardView';
+import { SignatureVerificationView } from '../components/SignatureVerificationView';
 
 describe('dashboard help and runtime status', () => {
   it('uses the reported backend mode and keeps technical details behind the i button', async () => {
@@ -36,5 +37,25 @@ describe('dashboard help and runtime status', () => {
     expect(details).toHaveTextContent('POSTGRESQL');
     expect(details).toHaveTextContent('OPENBAO_TRANSIT');
     expect(details).toHaveTextContent('LEGAL_APPROVAL_NOT_ASSERTED');
+  });
+
+  it('does not describe a live OpenBao verification screen as a mock-only slice', async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const body = String(input).includes('/runtime/capabilities')
+        ? {
+            profile: 'dev', persistence: { mode: 'POSTGRESQL' }, staffAuth: { mode: 'DEV_HEADERS' },
+            doctorAuth: { pcCertificate: { configured: true, trustAnchors: 1, crlState: 'FRESH' }, mobile: { configured: false, provider: null }, googleConfigured: false, devMockCertificate: false, devIdentity: false },
+            signing: { backend: 'OPENBAO_TRANSIT', available: true }, clinicalUseAllowed: false,
+            clinicalUseReason: 'LEGAL_APPROVAL_NOT_ASSERTED',
+          }
+        : { items: [] };
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof globalThis.fetch;
+
+    render(<AppProvider><SignatureVerificationView /></AppProvider>);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('임상 사용 전 검증 중'));
+    expect(screen.queryByText(/현재 모의 서명 슬라이스/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '검증 환경 상태 도움말 보기' }));
+    expect(screen.getByRole('dialog', { name: '검증 환경 상태' })).toHaveTextContent('OPENBAO_TRANSIT');
   });
 });

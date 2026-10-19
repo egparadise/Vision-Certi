@@ -17,7 +17,7 @@ import { EmptyState } from './EmptyState';
 import { InfoPopover } from './InfoPopover';
 
 export const SignatureVerificationView: React.FC = () => {
-  const { tenantId, client, isMockMode, mockStore } = useApp();
+  const { tenantId, client, isMockMode, mockStore, runtimeCapabilities } = useApp();
 
   const [signatures, setSignatures] = useState<Signature[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -110,21 +110,17 @@ export const SignatureVerificationView: React.FC = () => {
               서명 내역 및 유효성 검증 포털
             </h2>
             <InfoPopover
-              title="전자서명 유효성 검증 체계 (RFC 3161 / PKI)"
+              title="전자서명 검증 항목"
               buttonText="검증 원칙 안내"
-              description="판독문 전자서명의 3대 무결성(작성자 신원, 문서 변경 여부, 시점확인)을 독립적으로 검증하는 포털입니다."
+              description="서버가 제공하는 검증 결과를 항목별로 확인합니다. 제공되지 않는 인증체인·시점확인은 유효로 간주하지 않습니다."
               bullets={[
-                "원본 무결성: 원본 PDF 바이트의 SHA-256 해시와 서명에 결속된 해시의 일치 여부",
-                "전자서명 유효성: 의사 개인키로 생성된 암호 서명의 공개키 수학적 검증",
-                "시점확인 (TSA): RFC 3161 공인 시점확인 토큰의 위변조 검증",
-                "임시 모의 환경: 개발 슬라이스에서는 INDETERMINATE로 판정됨"
+                "원본 무결성: 서버가 보고한 문서 해시와 서명에 결속된 해시 비교",
+                "전자서명 유효성: 서버가 보고한 공개키 서명 검증 결과",
+                "시점확인: 신뢰할 수 있는 시각 증거가 제공되는지 별도로 확인",
               ]}
-              badge="3대 무결성 검증"
+              badge="검증 안내"
             />
           </div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)', marginTop: '2px' }}>
-            생성된 판독문 전자서명 원본 및 RFC 3161 시점확인·인증체인·원본 무결성 검증
-          </p>
         </div>
         <button
           type="button"
@@ -141,16 +137,14 @@ export const SignatureVerificationView: React.FC = () => {
       <ErrorBanner error={error as Error} onRetry={loadSignatures} />
       <ErrorBanner error={verifyError as Error} />
 
-      {/* Verification Notice */}
-      <div className="alert alert-warning" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <AlertTriangle size={20} style={{ flexShrink: 0, color: 'var(--amber-700)' }} />
-          <div>
-            <strong>개발 슬라이스 검증 안내:</strong> 현재 모의 서명 슬라이스에서 전체 상태는 결코 <code>VALID</code>가
-            될 수 없습니다 (정상 시 <code>INDETERMINATE</code> 판정). 원본 무결성 해시가 일치하더라도 실제 인증체인과
-            TSA 시점확인은 구현되지 않았습니다. 임상 사용이나 법적 적합성은 검증하지 않습니다.
-          </div>
-        </div>
+      <div className="dashboard-runtime-note" role="status">
+        <AlertTriangle size={14} aria-hidden="true" />
+        <span>{isMockMode ? '모의 검증 화면' : runtimeCapabilities?.clinicalUseAllowed ? '임상 운영' : '임상 사용 전 검증 중'}</span>
+        <InfoPopover
+          title="검증 환경 상태"
+          description={`서명 방식: ${runtimeCapabilities?.signing.backend ?? (isMockMode ? '모의' : '확인 불가')} · 임상 사용: ${runtimeCapabilities?.clinicalUseAllowed ? '허용' : '허용되지 않음'}`}
+          bullets={runtimeCapabilities?.clinicalUseReason ? [`제한 사유: ${runtimeCapabilities.clinicalUseReason}`] : undefined}
+        />
       </div>
 
       {loading && !signatures.length ? (

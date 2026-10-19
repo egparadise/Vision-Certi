@@ -781,6 +781,14 @@ export const DoctorAdminView: React.FC = () => {
             <span className="card-title">
               <Building2 size={18} />
               기관별 의사 등록 현황
+              <InfoPopover
+                title="의사 등록·인증서 보안 원칙"
+                description="판독의사가 PACS에서 본인의 공동인증서를 등록하고 로그인합니다."
+                bullets={[
+                  '관리자 사전등록·초대코드 발급은 비활성화되어 있습니다.',
+                  '의사 서명키는 인증서 검증, 본인 동의 및 신원·면허 연결 검토 후 생성됩니다.',
+                ]}
+              />
             </span>
           </div>
           <div className="card-body">
@@ -799,13 +807,8 @@ export const DoctorAdminView: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ fontSize: '0.8rem', color: 'var(--navy-600)', lineHeight: '1.5' }}>
-              <strong>보안 원칙 안내:</strong>
-              <ul style={{ paddingLeft: '20px', marginTop: '6px' }}>
-                <li data-testid="admin-invitations-disabled">관리자 사전등록·초대코드 발급은 비활성화되어 있습니다.</li>
-                <li>판독의사가 PACS에서 본인의 공동인증서를 직접 등록하고, 매번 공동인증서로 로그인합니다.</li>
-                <li>의사의 서명키는 인증서 검증, 본인 동의 및 신원·면허 연결 검토를 완료한 후 생성됩니다.</li>
-              </ul>
+            <div data-testid="admin-invitations-disabled" style={{ fontSize: '0.8rem', color: 'var(--navy-600)' }}>
+              관리자 초대코드 발급 비활성화
             </div>
           </div>
         </div>

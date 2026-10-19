@@ -1,5 +1,5 @@
 import React from 'react';
-import { Award, Lock, ShieldAlert, KeyRound, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Award, Lock, KeyRound, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ExternalCaStatus } from '../types/certificate';
 import { InfoPopover } from './InfoPopover';
@@ -29,23 +29,20 @@ export const CertificatesView: React.FC = () => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--navy-900)' }}>
-              의사 전자서명 및 신원 인증서 인프라 (CA / PKI / OpenBao)
+              인증서·서명키 현황
             </h2>
             <InfoPopover
-              title="이원화 전자서명 아키텍처 (Two-Tier Architecture)"
+              title="인증서와 판독문 서명키"
               buttonText="아키텍처 안내"
-              description="본 시스템은 의료법 및 전자서명법을 준수하기 위하여 의사 신원 확인(Doctor Authentication)과 판독문 전자서명(Medical Report Signing)을 엄격히 분리 운영합니다."
+              description="의사 신원 확인용 외부 인증서와 판독문 전자서명용 서버 키는 목적과 관리 주체가 다릅니다."
               bullets={[
-                "의사 외부 신원 인증서: 표준 X.509 공동/금융인증서 기반 단방향 챌린지 서명 검증 (개인키·비밀번호 서버 미전송)",
-                "판독문 전자서명 키: OpenBao Transit에 보관되는 의사별 비대칭 키 (ECDSA P-256)",
-                "명시적 3대 동의 및 관리자 면허 대조 완료 시에만 활성화"
+                "외부 인증서는 의사 PC에서 일회용 로그인 요청에 서명하며, 개인키·비밀번호는 서버로 전송하지 않습니다.",
+                "판독문 서명키는 서버에 연결된 OpenBao Transit에서 관리합니다.",
+                "임상 사용 적합성은 별도의 서버 운영 상태와 기관 검토 결과로 확인해야 합니다."
               ]}
-              badge="특허 암호화 체계"
+              badge="구조 안내"
             />
           </div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--navy-600)', marginTop: '2px' }}>
-            외부 공인/공동/금융/모바일 신원인증서 체계 및 판독문 전용 OpenBao Transit 서명키 아키텍처
-          </p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <a
@@ -62,39 +59,6 @@ export const CertificatesView: React.FC = () => {
           >
             <Award size={14} /> 관리자 인증서 대조·승인
           </a>
-        </div>
-      </div>
-
-      {/* Security Architecture Two-Tier Notice */}
-      <div
-        className="card"
-        style={{
-          marginBottom: '20px',
-          borderLeft: '4px solid var(--teal-600)',
-          backgroundColor: 'var(--teal-50)',
-        }}
-      >
-        <div className="card-body">
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <ShieldAlert size={24} style={{ color: 'var(--teal-700)', flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              <strong style={{ fontSize: '0.95rem', color: 'var(--teal-950)' }}>
-                이원화 전자서명 아키텍처 (Two-Tier Cryptographic Architecture):
-              </strong>
-              <div style={{ fontSize: '0.85rem', color: 'var(--navy-800)', marginTop: '4px', lineHeight: '1.5' }}>
-                본 시스템은 의료법 및 전자서명법을 준수하기 위하여 <strong>의사 신원 확인(Doctor Authentication)</strong>과
-                <strong> 판독문 전자서명(Medical Report Signing)</strong>을 엄격히 분리 운영합니다:
-                <ul style={{ margin: '8px 0 0 16px', padding: 0 }}>
-                  <li>
-                    <strong>1. 의사 외부 신원 인증서 (Doctor External Auth Certificate):</strong> 표준 X.509 공동/금융인증서 및 서버 연동 모바일 인증. 브라우저는 개인키나 비밀번호를 절대 요구하거나 수신하지 않으며, 단방향 서명 응답 검증 및 관리자 면허 대조 후 활성화됩니다.
-                  </li>
-                  <li>
-                    <strong>2. 판독문 전자서명 키 (INVIZ Report Signing Key):</strong> OpenBao Transit 소프트웨어 키 관리 엔진에 보관되는 의사별 비대칭 키(ECDSA P-256). 의사 본인의 인증서 검증 및 명시적 3대 위탁 동의 완료 시에만 발급되며, 판독 보고서 전자서명에 사용됩니다.
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 

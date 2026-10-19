@@ -120,9 +120,7 @@ export const PhysicianReviewView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <ShieldX size={20} style={{ flexShrink: 0, color: 'var(--amber-700)' }} />
             <div>
-              <strong>관리자 권한 안내:</strong> 현재 관리자(ADMIN) 계정으로 접속 중입니다.
-              의료법 및 전자서명 보안 원칙에 따라 <u>관리자는 의사 전자서명 승인 버튼을 사용할 수 없습니다.</u>
-              (서명 승인 테스트는 상단 역할 선택기에서 <code>doctor-demo</code> 로 전환하십시오.)
+              <strong>관리자는 의사 전자서명을 승인할 수 없습니다.</strong>
             </div>
           </div>
           <InfoPopover
@@ -142,8 +140,7 @@ export const PhysicianReviewView: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <ClipboardCheck size={20} style={{ flexShrink: 0, color: 'var(--teal-700)' }} />
             <div>
-              <strong>의사 전자서명 안내:</strong> 판독문을 열람하고 내용을 최종 확인한 후,
-              건별 1회 승인 버튼을 통해 모의 전자서명을 수행합니다.
+              <strong>판독문을 확인한 뒤 건별로 승인하세요.</strong>
             </div>
           </div>
           <InfoPopover

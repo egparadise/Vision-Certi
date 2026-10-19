@@ -14,6 +14,8 @@ PACS API 경로는 `https://vision-certi.web.app/v1`이다. Saintview PACS의 `V
 
 PACS는 의사 첫 로그인 시 병원 ID·개별 ID·비밀번호를 먼저 검사한 뒤 `POST /v1/integrations/pacs/enrollments/start`로 본인 등록을 시작하고, 인증서 등록 후 `POST /v1/integrations/pacs/enrollments/status`로 상태를 조회한다. Saintview PACS에서는 `VISION_CERTI_PASSWORD_LOGIN_REQUIRES_CERT=true`로 설정해야 이 단계가 열린다. 로그인 화면에 PACS ID/PW를 입력하고 **공동인증서로 로그인**을 누르면 처음에는 등록 창이 자동으로 열린다. 시스템 관리자처럼 의사 역할·면허번호가 없는 계정은 자동 등록 대상이 아니다. PACS 계정과 인증서의 연결은 서버에 저장되지만 의료인 자격 검토가 끝나기 전에는 `PENDING`이며 인증서 단독 로그인과 판독 권한은 열리지 않는다. 등록 승인 후 로그인에서는 의사 PC에서 인증서 선택·비밀번호 입력·일회용 challenge 서명을 진행하고 PACS가 `handoffs/redeem`, `certificate-logins/confirm`, `sessions/{pacsSessionId}`를 사용한다. 판독 승인 요청 시에는 등록된 인증서 지문과 현재 세션을 함께 검증한다. 인증서 비밀번호나 개인키는 PACS·클라우드로 보내지 않는다.
 
+`CERTIFICATE_NOT_ENROLLED`가 보이면 인증서 비밀번호가 틀렸다는 뜻이 아니라 **그 인증서가 현재 연결된 인증 서버의 의사 계정에 등록되지 않았다**는 뜻이다. PACS 화면에서 해당 의사 계정의 ID/PW를 넣고 같은 버튼을 누르면 서버 등록 상태를 확인한 뒤 최초 등록을 시작한다. `CERTIFICATE_ENROLLMENT_INCOMPLETE`는 면허정보·동의 단계 재개, `CERTIFICATE_ENROLLMENT_PENDING`은 관리자 자격 심사·활성화 대기다. 브라우저에 저장된 과거 로그인 흔적만으로 등록 여부를 판단하지 않는다. 인증서 로그인 팝업과 PACS 서버 간 API가 서로 다른 인증 서버·DB를 가리키면 등록 후에도 미등록 오류가 반복된다.
+
 각 판독의사 PC에는 로컬 인증서 프로그램이 필요하다. 프로그램은 해당 PC의 NPKI/PFX 인증서를 찾아 브라우저의 `http://127.0.0.1:18187` 호출에 응답한다. 사이트를 허용 origin으로 지정하여 실행한다.
 
 ```powershell

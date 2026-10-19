@@ -687,6 +687,17 @@ public class CertificateEnrollmentService implements CertificateGate {
             throw error;
         }
         if (active == null) {
+            CertificateEnrollment pending = store.tx(tx -> tx.find(ENROLLMENTS, "live_fingerprint", fingerprint)
+                    .stream().filter(e -> e.registrationStatus == RegistrationStatus.PENDING
+                            && e.kind != Kind.MOBILE_CERTIFICATE).findFirst().orElse(null));
+            if (pending != null) {
+                if (pending.consentedAt == null) {
+                    throw ApiException.forbidden("CERTIFICATE_ENROLLMENT_INCOMPLETE",
+                            "인증서 등록 증명은 확인되었으나 면허정보 제출 또는 필수 동의가 완료되지 않았습니다. PACS에서 최초 등록을 이어서 진행해 주세요.");
+                }
+                throw ApiException.forbidden("CERTIFICATE_ENROLLMENT_PENDING",
+                        "인증서 등록 신청이 접수되었으며 의사면허·전문의 자격 심사 또는 계정 활성화를 기다리고 있습니다.");
+            }
             throw ApiException.forbidden("CERTIFICATE_NOT_ENROLLED", "활성 등록된 인증서가 아닙니다. 인증서 등록을 먼저 진행해 주세요.");
         }
         Validation validation = validator.validate(leaf, intermediates);

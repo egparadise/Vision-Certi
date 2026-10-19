@@ -268,6 +268,8 @@ class CertificateEnrollmentServiceTest {
         assertThat(enrollment.keyAlgorithm()).isEqualTo("RSA-2048");
         assertThat(session.identityMode()).isEqualTo("PC_CERTIFICATE");
         assertThat(session.doctor().status()).isEqualTo(DoctorStatus.IDENTITY_VERIFIED);
+        assertThatThrownBy(() -> login(leaf))
+                .satisfies(t -> assertThat(code(t)).isEqualTo("CERTIFICATE_ENROLLMENT_INCOMPLETE"));
 
         DoctorPrincipal p = principal(session);
         // Neither the proof alone nor consent alone activates anything.
@@ -277,7 +279,7 @@ class CertificateEnrollmentServiceTest {
         assertThat(doctors.me(p).doctor().status()).isEqualTo(DoctorStatus.CONSENTED);
         assertThatThrownBy(() -> doctors.activate(p))
                 .satisfies(t -> assertThat(code(t)).isEqualTo("CERTIFICATE_ENROLLMENT_REQUIRED"));
-        assertThatThrownBy(() -> login(leaf)).satisfies(t -> assertThat(code(t)).isEqualTo("CERTIFICATE_NOT_ENROLLED"));
+        assertThatThrownBy(() -> login(leaf)).satisfies(t -> assertThat(code(t)).isEqualTo("CERTIFICATE_ENROLLMENT_PENDING"));
 
         // The admin must repeat the exact fingerprint compared with evidence.
         assertThatThrownBy(() -> service.review(ADMIN, doctorId, new ReviewRequest(

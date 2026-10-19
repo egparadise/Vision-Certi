@@ -1,0 +1,18 @@
+# Persistent OpenBao configuration for a dedicated signing service.
+# Copy after replacing the hostname/certificate files. Never use `bao server -dev` in production.
+ui = false
+api_addr = "https://bao.example.internal:8200"
+cluster_addr = "https://bao.example.internal:8201"
+storage "raft" {
+  path = "/var/lib/openbao"
+  node_id = "inviz-signing-01"
+}
+listener "tcp" {
+  address = "0.0.0.0:8200"
+  cluster_address = "0.0.0.0:8201"
+  tls_cert_file = "/etc/openbao/tls/fullchain.pem"
+  tls_key_file = "/etc/openbao/tls/server.key"
+  tls_min_version = "tls12"
+}
+# Configure an appropriate seal and additional Raft members for the deployment environment.
+# Keep unseal/recovery material outside the application server and its repository.

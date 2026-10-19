@@ -1,0 +1,47 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.inviz.visioncerti'
+version = '0.1.0-dev'
+description = 'Vision-Certi backend (dev: in-memory + mocks; prod: PostgreSQL, OIDC staff auth, OpenBao signing)'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // Google ID-token signature/claim verification (not managed by the Spring Boot 4.1 BOM).
+    implementation 'com.nimbusds:nimbus-jose-jwt:10.10'
+    // PKCS#10 CSR built around a remote (OpenBao Transit) ContentSigner; X.509 parsing in tests.
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.86'
+    // Durable runtime state: plain JDBC (no Spring DataSource auto-configuration) over HikariCP + PostgreSQL.
+    implementation 'com.zaxxer:HikariCP'
+    implementation 'org.postgresql:postgresql'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // Real PostgreSQL binaries for persistence tests (isolated temp data dir, loopback port).
+    testImplementation('io.zonky.test:embedded-postgres:2.1.0') {
+        exclude group: 'io.zonky.test.postgres'
+    }
+    testImplementation enforcedPlatform('io.zonky.test.postgres:embedded-postgres-binaries-bom:17.2.0')
+    testRuntimeOnly 'io.zonky.test.postgres:embedded-postgres-binaries-windows-amd64'
+    testRuntimeOnly 'io.zonky.test.postgres:embedded-postgres-binaries-linux-amd64'
+}
+
+// Built with whatever JDK runs Gradle (JDK 25 locally) but compiled for the Java 21 platform.
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

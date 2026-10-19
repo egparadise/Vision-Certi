@@ -1,0 +1,2043 @@
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -17,6 +17,7 @@
+ const ViewerLayout = lazy(() => import("@layout/ViewerLayout"));
+ const ModalLayout = lazy(() => import("@layout/ModalLayout"));
+ const Login = lazy(() => import("@pages/user/Login"));
++const CertificateEnrollment = lazy(() => import("@pages/user/CertificateEnrollment"));
+ const ViewerPage = lazy(() => import("@pages/viewer/Viewer"));
+ const ReportPage = lazy(() => import("@pages/report/Report"));
+ const PageNotFoundPage = lazy(() => import("@pages/error/PageNotFound"));
+@@ -40,6 +41,7 @@
+         {/* Phase 5C: 부팅 스플래시 — 메인창 초기 진입(#/updater), 확인 후 /login 으로 진행. 무인증. */}
+         <Route path="/updater" element={<Updater/>}/>
+         <Route path="/login" element={<LoginPage/>}/>
++        <Route path="/certificate-enrollment" element={<CertificateEnrollment/>}/>
+         <Route element={<LayoutPage/>}>
+           <Route path="/" element={<WorkListPage/>}/>
+         </Route>
+--- /dev/null
++++ b/src/components/setting/admin/VcDoctorLinks.tsx
+@@ -0,0 +1,457 @@
++import React, { useState, useEffect, useCallback } from 'react';
++import { VisionCertiService } from '@services/api/VisionCertiService';
++import { VcDoctorLink, CreateDoctorLinkRequest } from '@shared/types/visionCerti.types';
++import { useUserStore } from '@stores/useUserStore';
++import { Toast } from '@libs/Toast';
++
++export default function VcDoctorLinks() {
++  const userData = useUserStore((state) => state.userData);
++  const isAdmin = userData?.group_idx === 1 || (userData?.group_level ?? 0) >= 98;
++
++  const [links, setLinks] = useState<VcDoctorLink[]>([]);
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  // Form state
++  const [userIdx, setUserIdx] = useState<string>('');
++  const [vcTenantId, setVcTenantId] = useState<string>('hospital-a');
++  const [doctorId, setDoctorId] = useState<string>('');
++  const [evidenceRef, setEvidenceRef] = useState<string>('');
++  const [note, setNote] = useState<string>('');
++  const [evidenceConfirmed, setEvidenceConfirmed] = useState(false);
++  const [submitting, setSubmitting] = useState(false);
++
++  // Revoke state
++  const [revokingId, setRevokingId] = useState<number | null>(null);
++  const [revokeReason, setRevokeReason] = useState<string>('');
++
++  const fetchLinks = useCallback(async () => {
++    if (!isAdmin) return;
++    setLoading(true);
++    setError(null);
++    try {
++      const res = await VisionCertiService.listDoctorLinks();
++      setLinks(res.items || []);
++    } catch (err: any) {
++      setError(err?.message || '의사 계정 연동 목록을 불러오지 못했습니다.');
++    } finally {
++      setLoading(false);
++    }
++  }, [isAdmin]);
++
++  useEffect(() => {
++    fetchLinks();
++  }, [fetchLinks]);
++
++  const handleCreate = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (!evidenceConfirmed) {
++      Toast('증빙 확인 체크박스에 동의해야 등록할 수 있습니다.', 'warning');
++      return;
++    }
++    const parsedUserIdx = parseInt(userIdx, 10);
++    if (isNaN(parsedUserIdx) || parsedUserIdx <= 0) {
++      Toast('올바른 PACS 사용자 번호(user_idx)를 입력해주세요.', 'warning');
++      return;
++    }
++    if (!doctorId.trim() || !evidenceRef.trim()) {
++      Toast('모든 필수 항목을 입력해주세요.', 'warning');
++      return;
++    }
++
++    setSubmitting(true);
++    try {
++      const payload: CreateDoctorLinkRequest = {
++        user_idx: parsedUserIdx,
++        vc_tenant_id: vcTenantId.trim() || 'hospital-a',
++        vc_doctor_id: doctorId.trim(),
++        evidence_ref: evidenceRef.trim(),
++        note: note.trim() || undefined,
++      };
++      await VisionCertiService.createDoctorLink(payload);
++      Toast('의사 계정 연동이 성공적으로 등록되었습니다.', 'success');
++      setUserIdx('');
++      setDoctorId('');
++      setEvidenceRef('');
++      setNote('');
++      setEvidenceConfirmed(false);
++      await fetchLinks();
++    } catch (err: any) {
++      Toast(err?.message || '연동 등록에 실패했습니다.', 'error');
++    } finally {
++      setSubmitting(false);
++    }
++  };
++
++  const handleRevoke = async (linkIdx: number) => {
++    if (!revokeReason.trim()) {
++      Toast('연동 해제 사유를 입력해주세요.', 'warning');
++      return;
++    }
++    try {
++      await VisionCertiService.revokeDoctorLink(linkIdx, revokeReason.trim());
++      Toast('의사 계정 연동이 해제되었습니다.', 'success');
++      setRevokingId(null);
++      setRevokeReason('');
++      await fetchLinks();
++    } catch (err: any) {
++      Toast(err?.message || '연동 해제 처리에 실패했습니다.', 'error');
++    }
++  };
++
++  if (!isAdmin) {
++    return (
++      <div style={{ padding: '24px', color: '#f87171' }} data-testid="vc-doctor-links-403">
++        <h3>권한 오류: 관리자 권한 필요 (403 ADMIN_ROLE_REQUIRED)</h3>
++        <p>이 기능은 시스템 관리자(group_idx=1 또는 group_level&gt;=98)만 접근할 수 있습니다.</p>
++      </div>
++    );
++  }
++
++  return (
++    <div style={{ padding: '24px', color: '#e2e8f0', maxWidth: '1000px' }} data-testid="vc-doctor-links-admin">
++      <div style={{ marginBottom: '24px' }}>
++        <h2 style={{ fontSize: '20px', fontWeight: 600, color: '#f8fafc', marginBottom: '8px' }}>
++          🛡️ Vision-Certi 의사 계정 연동 관리
++        </h2>
++        <p style={{ color: '#94a3b8', fontSize: '13px' }}>
++          PACS 판독의사와 Vision-Certi 공인전자서명 의사 계정 간의 1:1 매핑을 관리합니다.
++          보안 정책상 이메일 자동 바인딩은 금지되며, 관리자의 공식 증빙 번호(Evidence Ref)가 필수입니다.
++        </p>
++      </div>
++
++      {/* 등록 폼 */}
++      <div
++        style={{
++          background: '#1e293b',
++          border: '1px solid #334155',
++          borderRadius: '8px',
++          padding: '20px',
++          marginBottom: '28px',
++        }}
++      >
++        <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#38bdf8', marginBottom: '16px' }}>
++          새 의사 계정 연동 등록
++        </h3>
++        <form onSubmit={handleCreate}>
++          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '16px' }}>
++            <div>
++              <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>
++                PACS 사용자 번호 (user_idx) *
++              </label>
++              <input
++                type="number"
++                value={userIdx}
++                onChange={(e) => setUserIdx(e.target.value)}
++                placeholder="예: 101"
++                required
++                style={{
++                  width: '100%',
++                  padding: '8px 12px',
++                  background: '#0f172a',
++                  border: '1px solid #475569',
++                  borderRadius: '4px',
++                  color: '#fff',
++                }}
++              />
++            </div>
++            <div>
++              <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>
++                Vision-Certi 의사 식별자 (Doctor ID / UUID) *
++              </label>
++              <input
++                type="text"
++                value={doctorId}
++                onChange={(e) => setDoctorId(e.target.value)}
++                placeholder="예: doc-uuid-1"
++                required
++                style={{
++                  width: '100%',
++                  padding: '8px 12px',
++                  background: '#0f172a',
++                  border: '1px solid #475569',
++                  borderRadius: '4px',
++                  color: '#fff',
++                }}
++              />
++            </div>
++            <div>
++              <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>
++                Vision-Certi 테넌트 ID (Tenant ID) *
++              </label>
++              <input
++                type="text"
++                value={vcTenantId}
++                onChange={(e) => setVcTenantId(e.target.value)}
++                placeholder="예: hospital-a"
++                required
++                style={{
++                  width: '100%',
++                  padding: '8px 12px',
++                  background: '#0f172a',
++                  border: '1px solid #475569',
++                  borderRadius: '4px',
++                  color: '#fff',
++                }}
++              />
++            </div>
++            <div>
++              <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>
++                대면/인증 확인 증빙 번호 (Evidence Ref) *
++              </label>
++              <input
++                type="text"
++                value={evidenceRef}
++                onChange={(e) => setEvidenceRef(e.target.value)}
++                placeholder="예: HR-2026-MED-042"
++                required
++                style={{
++                  width: '100%',
++                  padding: '8px 12px',
++                  background: '#0f172a',
++                  border: '1px solid #475569',
++                  borderRadius: '4px',
++                  color: '#fff',
++                }}
++              />
++            </div>
++            <div style={{ gridColumn: 'span 2' }}>
++              <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '4px' }}>
++                비고 및 사유 (Note, 선택)
++              </label>
++              <input
++                type="text"
++                value={note}
++                onChange={(e) => setNote(e.target.value)}
++                placeholder="연동 등록 참고사항"
++                style={{
++                  width: '100%',
++                  padding: '8px 12px',
++                  background: '#0f172a',
++                  border: '1px solid #475569',
++                  borderRadius: '4px',
++                  color: '#fff',
++                }}
++              />
++            </div>
++          </div>
++
++          <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
++            <input
++              type="checkbox"
++              id="evidence_checkbox"
++              checked={evidenceConfirmed}
++              onChange={(e) => setEvidenceConfirmed(e.target.checked)}
++              style={{ cursor: 'pointer' }}
++            />
++            <label htmlFor="evidence_checkbox" style={{ fontSize: '12px', color: '#cbd5e1', cursor: 'pointer' }}>
++              본 관리자는 해당 의사의 의사면허증 원본 및 신원 확인 서류를 검토하였음을 서약합니다 (필수).
++            </label>
++          </div>
++
++          <button
++            type="submit"
++            disabled={!evidenceConfirmed || submitting}
++            style={{
++              padding: '8px 20px',
++              background: evidenceConfirmed ? '#0284c7' : '#334155',
++              border: 'none',
++              borderRadius: '4px',
++              color: '#fff',
++              cursor: evidenceConfirmed ? 'pointer' : 'not-allowed',
++              fontWeight: 600,
++              fontSize: '13px',
++            }}
++          >
++            {submitting ? '등록 중...' : '연동 등록'}
++          </button>
++        </form>
++      </div>
++
++      {/* 목록 테이블 */}
++      <div
++        style={{
++          background: '#1e293b',
++          border: '1px solid #334155',
++          borderRadius: '8px',
++          padding: '20px',
++        }}
++      >
++        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
++          <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#f8fafc' }}>
++            연동된 의사 목록 ({links.length}건)
++          </h3>
++          <button
++            onClick={fetchLinks}
++            style={{
++              padding: '4px 12px',
++              background: '#334155',
++              border: 'none',
++              borderRadius: '4px',
++              color: '#cbd5e1',
++              cursor: 'pointer',
++              fontSize: '12px',
++            }}
++          >
++            새로고침
++          </button>
++        </div>
++
++        {error && <div style={{ color: '#f87171', marginBottom: '12px', fontSize: '13px' }}>{error}</div>}
++
++        {loading ? (
++          <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>불러오는 중...</div>
++        ) : links.length === 0 ? (
++          <div style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>
++            등록된 의사 연동 정보가 없습니다.
++          </div>
++        ) : (
++          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
++            <thead>
++              <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8', textAlign: 'left' }}>
++                <th style={{ padding: '8px' }}>링크 ID</th>
++                <th style={{ padding: '8px' }}>PACS User</th>
++                <th style={{ padding: '8px' }}>VC 테넌트</th>
++                <th style={{ padding: '8px' }}>VC 의사 ID</th>
++                <th style={{ padding: '8px' }}>증빙 번호</th>
++                <th style={{ padding: '8px' }}>상태</th>
++                <th style={{ padding: '8px' }}>등록일시</th>
++                <th style={{ padding: '8px', textAlign: 'right' }}>관리</th>
++              </tr>
++            </thead>
++            <tbody>
++              {links.map((link) => (
++                <tr key={link.linkIdx} style={{ borderBottom: '1px solid #1e293b' }}>
++                  <td style={{ padding: '8px', fontFamily: 'monospace' }}>#{link.linkIdx}</td>
++                  <td style={{ padding: '8px' }}>
++                    {link.userId ? `${link.userName || ''} (${link.userId})` : `Idx: ${link.userIdx}`}
++                  </td>
++                  <td style={{ padding: '8px', color: '#94a3b8' }}>{link.vcTenantId}</td>
++                  <td style={{ padding: '8px', fontFamily: 'monospace' }}>{link.vcDoctorId}</td>
++                  <td style={{ padding: '8px', fontFamily: 'monospace', color: '#38bdf8' }}>{link.evidenceRef}</td>
++                  <td style={{ padding: '8px' }}>
++                    <span
++                      style={{
++                        padding: '2px 8px',
++                        borderRadius: '4px',
++                        fontSize: '11px',
++                        fontWeight: 600,
++                        backgroundColor: link.status === 'ACTIVE' ? '#14532d' : '#7f1d1d',
++                        color: link.status === 'ACTIVE' ? '#86efac' : '#fca5a5',
++                      }}
++                    >
++                      {link.status}
++                    </span>
++                  </td>
++                  <td style={{ padding: '8px', color: '#94a3b8', fontSize: '12px' }}>
++                    {link.createdAt ? new Date(link.createdAt).toLocaleString() : '-'}
++                  </td>
++                  <td style={{ padding: '8px', textAlign: 'right' }}>
++                    {link.status === 'ACTIVE' && (
++                      <button
++                        onClick={() => {
++                          setRevokingId(link.linkIdx);
++                          setRevokeReason('');
++                        }}
++                        style={{
++                          padding: '4px 10px',
++                          background: '#7f1d1d',
++                          border: 'none',
++                          borderRadius: '4px',
++                          color: '#fecaca',
++                          cursor: 'pointer',
++                          fontSize: '11px',
++                        }}
++                      >
++                        연동 해제
++                      </button>
++                    )}
++                  </td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
++        )}
++      </div>
++
++      {/* 해제 사유 입력 모달 */}
++      {revokingId !== null && (
++        <div
++          style={{
++            position: 'fixed',
++            inset: 0,
++            backgroundColor: 'rgba(0,0,0,0.6)',
++            display: 'flex',
++            alignItems: 'center',
++            justifyContent: 'center',
++            zIndex: 9999,
++          }}
++        >
++          <div
++            style={{
++              background: '#1e293b',
++              border: '1px solid #475569',
++              borderRadius: '8px',
++              padding: '24px',
++              width: '450px',
++              color: '#fff',
++            }}
++          >
++            <h4 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px' }}>
++              의사 계정 연동 해제 (Link #{revokingId})
++            </h4>
++            <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>
++              연동을 해제하면 해당 의사는 더 이상 이 PACS 계정으로 전자서명을 진행할 수 없습니다. 해제 사유를 입력해주세요.
++            </p>
++            <input
++              type="text"
++              value={revokeReason}
++              onChange={(e) => setRevokeReason(e.target.value)}
++              placeholder="해제 사유 (예: 퇴사, 부서 이동, 면허 변경 등)"
++              style={{
++                width: '100%',
++                padding: '8px 12px',
++                background: '#0f172a',
++                border: '1px solid #475569',
++                borderRadius: '4px',
++                color: '#fff',
++                marginBottom: '16px',
++              }}
++            />
++            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
++              <button
++                type="button"
++                onClick={() => setRevokingId(null)}
++                style={{
++                  padding: '6px 14px',
++                  background: '#334155',
++                  border: 'none',
++                  borderRadius: '4px',
++                  color: '#cbd5e1',
++                  cursor: 'pointer',
++                }}
++              >
++                취소
++              </button>
++              <button
++                type="button"
++                onClick={() => handleRevoke(revokingId)}
++                style={{
++                  padding: '6px 14px',
++                  background: '#dc2626',
++                  border: 'none',
++                  borderRadius: '4px',
++                  color: '#fff',
++                  cursor: 'pointer',
++                  fontWeight: 600,
++                }}
++              >
++                해제 확인
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
+--- a/src/components/user/LoginForm.tsx
++++ b/src/components/user/LoginForm.tsx
+@@ -9,6 +9,9 @@
+ import {useSettingStore} from "@stores/useSettingStore";
+ import {measureAsync} from "@libs/PerformanceLogger";
+ import ReleaseNotesModal from "@components/modal/ReleaseNotesModal";
++import { VisionCertiService } from "@services/api/VisionCertiService";
++import { requestCertificateHandoff } from "@services/api/certificateHandoff";
++import { VcConfig } from "@shared/types/visionCerti.types";
+ 
+ export default function LoginForm() {
+   const {t} = useTranslation();
+@@ -71,11 +74,58 @@
+   useEffect(() => {
+     // 이미 로그인된 경우
+     if (userData && userToken) {
+-      navigate("/", { replace: true }); // 메인으로 리다이렉트
++      navigate("/certificate-enrollment", { replace: true });
+     }
+   }, [userData, userToken]);
+ 
+-  const { mutate: userLogin } = useUserLogin();
++  const { mutate: userLogin, isPending: pacsLoginPending } = useUserLogin();
++
++  const [vcConfig, setVcConfig] = useState<VcConfig | null>(null);
++  const [vcError, setVcError] = useState<string | null>(null);
++  const [vcLoading, setVcLoading] = useState(false);
++
++  useEffect(() => {
++    let active = true;
++    VisionCertiService.getConfig()
++      .then((cfg) => {
++        if (active) setVcConfig(cfg);
++      })
++      .catch((err) => {
++        console.warn('[LoginForm] Failed to load VC config:', err);
++      });
++    return () => {
++      active = false;
++    };
++  }, []);
++
++  const handleCertificateLogin = async () => {
++    if (!vcConfig || vcLoading || pacsLoginPending) return;
++    setVcError(null);
++    const pacsUserId = getValues('user_id')?.trim();
++    const pacsPassword = getValues('user_passwd');
++    if (pacsUserId || pacsPassword) {
++      if (!pacsUserId || !pacsPassword) {
++        setVcError('처음 등록할 때는 PACS ID와 비밀번호를 모두 입력해 주세요.');
++        return;
++      }
++      // Only PACS can identify an unregistered doctor. Its authenticated session
++      // opens /certificate-enrollment, which checks the server-side status.
++      userLogin({ user_id: pacsUserId, user_passwd: pacsPassword, user_overwrite: true });
++      return;
++    }
++    // Returning doctors can prove the registered certificate without a PACS password.
++    setVcLoading(true);
++    try {
++      const code = await requestCertificateHandoff(vcConfig);
++      const loginRes = await VisionCertiService.certificateLogin(code);
++      await userActions.loginWithCertificate(loginRes);
++      navigate('/', { replace: true });
++    } catch (err: unknown) {
++      setVcError(err instanceof Error ? err.message : '공동인증서 로그인에 실패했습니다.');
++    } finally {
++      setVcLoading(false);
++    }
++  };
+ 
+   const onSubmit = handleSubmit((data)=>{
+     if (remember) {
+@@ -132,6 +182,47 @@
+         />
+         <label htmlFor="rmb">Remember</label>
+         <button className="btn_login">{t("login.submitButton")}</button>
++
++        {vcConfig?.enabled && (
++          <div style={{ marginTop: '16px', width: '100%' }}>
++            <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0' }}>
++              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.2)' }} />
++              <span style={{ margin: '0 10px', fontSize: '12px', color: '#888' }}>또는</span>
++              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.2)' }} />
++            </div>
++            <button
++              type="button"
++              className="btn_login"
++              data-testid="pacs-certificate-login-btn"
++              onClick={handleCertificateLogin}
++              disabled={vcLoading || pacsLoginPending}
++              style={{
++                backgroundColor: '#1e3a5f',
++                border: '1px solid #3b82f6',
++                color: '#93c5fd',
++                cursor: vcLoading ? 'not-allowed' : 'pointer',
++                display: 'flex',
++                alignItems: 'center',
++                justifyContent: 'center',
++                gap: '8px',
++                marginTop: 0,
++              }}
++            >
++              {vcLoading || pacsLoginPending ? '인증 진행 중...' : '공동인증서 등록 · 로그인 (Vision-Certi)'}
++            </button>
++            <p style={{ color: '#93c5fd', fontSize: '12px', lineHeight: 1.5, marginTop: '8px' }}>
++              처음 등록: PACS ID와 비밀번호 입력 후 선택 · 등록 완료: 입력 없이 공동인증서로 로그인
++            </p>
++            {vcError && (
++              <div
++                data-testid="pacs-certificate-login-error"
++                style={{ marginTop: '8px', color: '#f87171', fontSize: '12px', textAlign: 'center' }}
++              >
++                {vcError}
++              </div>
++            )}
++          </div>
++        )}
+         <div
+           style={{
+             marginTop: 20,
+--- a/src/pages/report/ReportViewer.tsx
++++ b/src/pages/report/ReportViewer.tsx
+@@ -14,6 +14,9 @@
+ import { MdNavigateBefore, MdNavigateNext } from "react-icons/md";
+ import { useUserAllUiQuery, useUpdateUserUIMutation } from "@queries/useUI";
+ import { UpdateUiRequest } from "@userTypes/ui.types";
++import { requestCertificateHandoff } from "@services/api/certificateHandoff";
++import { VisionCertiService } from "@services/api/VisionCertiService";
++import { VcConfig, VcApproval } from "@shared/types/visionCerti.types";
+ 
+ import { RendererLogger } from '@libs/RendererLogger';
+ 
+@@ -46,6 +49,50 @@
+   const basic = useSettingStore(state => state.basic);
+   const workList = useSettingStore(state => state.workList);
+   const userData = useUserStore(state => state.userData);
++  const vcSession = useUserStore(state => state.vcSession);
++
++  const stepUpPending = useRef(false);
++
++  // Vision-Certi state
++  const [vcConfig, setVcConfig] = useState<VcConfig | null>(null);
++  const [vcApprovals, setVcApprovals] = useState<VcApproval[]>([]);
++  const [showApprovalsModal, setShowApprovalsModal] = useState(false);
++  const [isFinalizing, setIsFinalizing] = useState(false);
++  const [activeApprovalId, setActiveApprovalId] = useState<string | null>(null);
++  const [snapshotPreview, setSnapshotPreview] = useState<{
++    snapshot: string;
++    snapshotSha256: string;
++    approvalId: string;
++    signRequestId: string;
++  } | null>(null);
++
++  useEffect(() => {
++    let unmounted = false;
++    VisionCertiService.getConfig()
++      .then((cfg) => {
++        if (!unmounted) setVcConfig(cfg);
++      })
++      .catch((err) => {
++        console.warn('[ReportViewer] Failed to load VC config:', err);
++      });
++    return () => {
++      unmounted = true;
++    };
++  }, []);
++
++  const loadStudyApprovals = useCallback(async () => {
++    if (!currentStudyIdx) return;
++    try {
++      const res = await VisionCertiService.listStudyApprovals(currentStudyIdx);
++      setVcApprovals(res.items || []);
++    } catch (err) {
++      console.warn('[ReportViewer] Failed to load study approvals:', err);
++    }
++  }, [currentStudyIdx]);
++
++  useEffect(() => {
++    loadStudyApprovals();
++  }, [loadStudyApprovals]);
+ 
+   // 설정값
+   const autoCommitEnabled = basic?.autoCommitEnabled || false;
+@@ -56,7 +103,7 @@
+   const useReportUpdateRefresh = workList?.useReportUpdateRefresh !== undefined ? workList.useReportUpdateRefresh : false;
+   const comparisonAutoInsert = basic?.comparisonAutoInsert ?? false;
+ 
+-  const { mutate: useAddReport } = useAddReportMutation();
++  const { mutate: useAddReport, mutateAsync: addReportAsync } = useAddReportMutation();
+ 
+   // DB에서 UI 설정 불러오기
+   const { data: uiData } = useUserAllUiQuery({ ui_page: "report" });
+@@ -456,7 +503,7 @@
+     (errors) => {
+       for (const item of Object.values(errors)) {
+         if (item) {
+-          Toast(item.message, "warning");
++          Toast((item as any)?.message, "warning");
+           ((item as any)?.ref as HTMLInputElement)?.focus();
+           break;
+         }
+@@ -501,6 +548,242 @@
+     });
+   }, [isRefStudy, isOtherUserReport, setValue, t, revertStatus]);
+ 
++  // 이전/다음 검사 이동 (Main 프로세스에 위임)
++  const handleChangeReport = useCallback(async (direction: 'prev' | 'next') => {
++    if (!currentStudyIdx) {
++      Toast(t('toast.currentStudyNotFound'), "warning");
++      return;
++    }
++
++    // Main 프로세스에 네비게이션 요청 (URL params에서 직접 가져온 최신 값 사용)
++    window.electron.ipcRenderer.send('study:navigate-prev-next', {
++      direction,
++      currentStudyIdx, // studyData 대신 URL params 사용 (항상 최신)
++      reportAutoOpen: true, // 레포트 윈도우는 이미 열려 있으므로 true
++      focusWindowAfterOpen: basic?.focusWindowAfterOpen || 'report',
++    });
++  }, [currentStudyIdx, basic, t]);
++
++  // 로컬 초안 저장 (VC 전자서명 준비 전 DB 상태 동기화)
++  const saveDraftLocally = useCallback(async (): Promise<boolean> => {
++    const study_status = getValues("study_status");
++    const reading = getValues("report_reading");
++    const conclusion = getValues("report_conclusion");
++    if (!reading && !conclusion) {
++      Toast(t('toast.enterReadingOrConclusion'), "warning");
++      return false;
++    }
++    const draftStatus = (study_status === "RR" || study_status === "RE" || study_status === "RA") ? "RR" : "R";
++    setValue("report_status", draftStatus);
++
++    const formData = getValues();
++    const submitData = {
++      ...formData,
++      report_status: draftStatus,
++      report_cvr_send: formData.report_cvr_send ? "Y" : "N",
++      report_open_edit: formData.report_open_edit ? "Y" : "N",
++    };
++
++    try {
++      await addReportAsync(submitData as any);
++      hasCalledRIRef.current = false;
++      if (useReportUpdateRefresh) setBroadcastReportUpdate();
++      return true;
++    } catch (err: any) {
++      const detail = err?.detail || err?.response?.data?.detail;
++      Toast(detail || t('toast.saveFailed'), "error");
++      return false;
++    }
++  }, [getValues, setValue, addReportAsync, useReportUpdateRefresh, t]);
++
++  // Vision-Certi 서명 팝업 시작 및 권한 있는 최종 확정(Finalize) 처리
++  const startSigningPopup = useCallback((approvalId: string, signRequestId: string) => {
++    if (!vcConfig) return;
++    setSnapshotPreview(null);
++    setIsFinalizing(true);
++
++    const origin = window.location.origin;
++    const popupUrl = `${vcConfig.visionCertiBaseUrl}/#/doctor/sign-requests/${signRequestId}?audience=sv70-pacs&origin=${encodeURIComponent(origin)}`;
++    const popup = window.open(popupUrl, 'VisionCertiSignPopup', 'width=700,height=880');
++    if (!popup) {
++      Toast("서명 팝업이 차단되었습니다. 브라우저 팝업을 허용해주세요.", "warning");
++      setIsFinalizing(false);
++      return;
++    }
++
++    let finalized = false;
++    const doFinalize = async () => {
++      if (finalized) return;
++      finalized = true;
++      try {
++        const finalRes = await VisionCertiService.finalizeReport(approvalId);
++        if (finalRes.approval.state === 'APPROVED') {
++          const study_status = getValues("study_status");
++          const finalStatus = (study_status === "RR" || study_status === "RE" || study_status === "RA") ? "RA" : "A";
++          setValue("report_status", finalStatus);
++          setValue("study_status", finalStatus);
++          const hashShort = (finalRes.approval.contentSha256 || finalRes.approval.snapshotSha256)?.substring(0, 10) || '';
++          Toast(`공동인증서 전자서명 및 최종 승인이 완료되었습니다. (해시: ${hashShort}...)`, "success");
++          hasCalledRIRef.current = false;
++          if (useReportUpdateRefresh) setBroadcastReportUpdate();
++          await loadStudyApprovals();
++
++          const navigatedToNext = reportUseNext;
++          if (navigatedToNext) {
++            await handleChangeReport('next');
++          }
++          if (reportAutoClose && !navigatedToNext) {
++            window.electron.ipcRenderer.send('win:invoke', 'close');
++          }
++        } else {
++          Toast(`전자서명이 완료되지 않았습니다 (상태: ${finalRes.approval.state}). 리포트는 임시저장(R) 상태로 유지됩니다.`, "warning");
++          await loadStudyApprovals();
++        }
++      } catch (err: any) {
++        Toast(err?.message || "최종 서명 검증 및 확정에 실패했습니다. 리포트는 임시저장 상태로 유지됩니다.", "error");
++        await loadStudyApprovals();
++      } finally {
++        setIsFinalizing(false);
++        setActiveApprovalId(null);
++      }
++    };
++
++    const handleMsg = async (event: MessageEvent) => {
++      let expectedOrigin = '';
++      try {
++        expectedOrigin = new URL(vcConfig.visionCertiBaseUrl).origin.toLowerCase();
++      } catch (e) {}
++      if (expectedOrigin && event.origin.toLowerCase() !== expectedOrigin) {
++        return;
++      }
++      if (event.source !== popup) {
++        return;
++      }
++      if (event.data?.type === 'VC_SIGN_COMPLETED' && event.data?.signRequestId === signRequestId) {
++        window.removeEventListener('message', handleMsg);
++        clearInterval(pollClosed);
++        try { if (popup && !popup.closed) popup.close(); } catch(e){}
++        await doFinalize();
++      }
++    };
++    window.addEventListener('message', handleMsg);
++
++    const pollClosed = setInterval(() => {
++      if (popup.closed) {
++        clearInterval(pollClosed);
++        window.removeEventListener('message', handleMsg);
++        doFinalize();
++      }
++    }, 1000);
++  }, [vcConfig, getValues, setValue, useReportUpdateRefresh, loadStudyApprovals, reportUseNext, handleChangeReport, reportAutoClose]);
++
++  // {t('viewer.approve')}
++  const handleApprove = useCallback(async () => {
++    if (isRefStudy) {
++      Toast(t('toast.cannotApproveRef'), "warning");
++      return;
++    }
++    if (isOtherUserReport) {
++      Toast(t('toast.cannotEditOtherUserReport'), "warning");
++      return;
++    }
++
++    const study_status = getValues("study_status");
++    const reading = getValues("report_reading");
++    const conclusion = getValues("report_conclusion");
++
++    if (!reading && !conclusion) {
++      Toast(t('toast.enterBothReadingAndConclusion'), "warning");
++      return;
++    }
++
++    // Vision-Certi 공동인증서 전자서명 게이트
++    if (vcConfig?.enabled) {
++      if (!vcSession || Date.parse(vcSession.sessionExpiresAt) <= Date.now()) {
++        if (stepUpPending.current) return;
++        stepUpPending.current = true;
++        const before = useUserStore.getState();
++        const originalUser = before.userData?.user_idx;
++        const originalToken = before.token;
++        try {
++          const code = await requestCertificateHandoff(vcConfig);
++          const current = useUserStore.getState();
++          if (current.token !== originalToken || current.userData?.user_idx !== originalUser) {
++            throw new Error('로그인 상태가 변경되었습니다. 다시 로그인한 뒤 시도해 주세요.');
++          }
++          const result = vcSession
++            ? await VisionCertiService.certificateLogin(code)
++            : await VisionCertiService.certificateStepUp(code);
++          if (useUserStore.getState().token !== originalToken || result.user_data.user_idx !== originalUser) {
++            throw new Error('PACS 로그인 사용자와 인증서 소유자가 일치하지 않습니다.');
++          }
++          await useUserStore.getState().actions.loginWithCertificate(result);
++          Toast('본인확인이 완료되었습니다. 판독문을 확인한 뒤 승인 버튼을 다시 눌러 주세요.', 'info');
++        } catch (err: unknown) {
++          Toast(err instanceof Error ? err.message : '판독 승인에 필요한 본인확인에 실패했습니다.', 'error');
++        } finally {
++          stepUpPending.current = false;
++        }
++        return;
++      }
++
++      Toast("판독문 초안을 저장하고 공동인증서 서명 스냅샷을 생성합니다...", "info");
++      const saved = await saveDraftLocally();
++      if (!saved) {
++        return;
++      }
++
++      let currentRep;
++      try {
++        currentRep = await VisionCertiService.getCurrentReport(currentStudyIdx);
++      } catch (err: any) {
++        Toast(err?.message || "현재 판독문 해시 조회에 실패했습니다.", "error");
++        return;
++      }
++
++      let prepRes;
++      try {
++        prepRes = await VisionCertiService.prepareReport(currentStudyIdx, currentRep.contentSha256);
++      } catch (err: any) {
++        Toast(err?.message || "전자서명 준비 요청에 실패했습니다.", "error");
++        await loadStudyApprovals();
++        return;
++      }
++
++      setActiveApprovalId(prepRes.approval.approvalId);
++      // 의사가 실제 서명될 스냅샷 내용과 해시를 직접 확인하도록 모달 팝업 표시
++      setSnapshotPreview({
++        snapshot: prepRes.snapshot,
++        snapshotSha256: prepRes.snapshotSha256,
++        approvalId: prepRes.approval.approvalId,
++        signRequestId: prepRes.visionCertiSignRequestId,
++      });
++      return;
++    }
++
++    const doApprove = async () => {
++      setValue("report_status", (study_status === "RR" || study_status === "RE") ? "RA" : "A");
++      await onSubmit();
++    };
++
++    if (reportAlterUse) {
++      CustomConfirm(
++        {
++          title: t('confirm.approve.title'),
++          text: t('confirm.approve.text'),
++          icon: "info",
++        },
++        async (result) => {
++          if (result.isConfirmed) {
++            await doApprove();
++          }
++        }
++      );
++    } else {
++      await doApprove();
++    }
++  }, [isRefStudy, isOtherUserReport, getValues, setValue, onSubmit, reportAlterUse, t, vcConfig, vcSession, saveDraftLocally, currentStudyIdx, loadStudyApprovals]);
++
+   // {t('viewer.save')}
+   const handleSave = useCallback(async () => {
+     if (isRefStudy) {
+@@ -522,11 +805,15 @@
+     }
+ 
+     const doSave = async () => {
+-      // autoCommitEnabled가 true이면 {t('viewer.approve')} 로직 사용
++      // autoCommitEnabled가 true이고 VC가 활성화된 경우: 암묵적 우회 금지 -> VC 전자서명 승인으로 전달
++      if (autoCommitEnabled && vcConfig?.enabled) {
++        await handleApprove();
++        return;
++      }
+       if (autoCommitEnabled) {
+         setValue("report_status", (study_status === "RR" || study_status === "RE") ? "RA" : "A");
+       } else {
+-        setValue("report_status", study_status === "RE" ? "RR" : "R");
++        setValue("report_status", (study_status === "RE" || study_status === "RR" || study_status === "RA") ? "RR" : "R");
+       }
+       await onSubmit();
+     };
+@@ -548,68 +835,7 @@
+     } else {
+       await doSave();
+     }
+-  }, [isRefStudy, isOtherUserReport, getValues, setValue, onSubmit, autoCommitEnabled, t]);
+-
+-  // {t('viewer.approve')}
+-  const handleApprove = useCallback(async () => {
+-    if (isRefStudy) {
+-      Toast(t('toast.cannotApproveRef'), "warning");
+-      return;
+-    }
+-    if (isOtherUserReport) {
+-      Toast(t('toast.cannotEditOtherUserReport'), "warning");
+-      return;
+-    }
+-
+-    const study_status = getValues("study_status");
+-    const reading = getValues("report_reading");
+-    const conclusion = getValues("report_conclusion");
+-
+-    if (!reading && !conclusion) {
+-      Toast(t('toast.enterBothReadingAndConclusion'), "warning");
+-      return;
+-    }
+-
+-    const doApprove = async () => {
+-      // study_status가 'RR' 또는 'RE'인 경우 report_status를 'RA'로, 아니면 'A'로 설정
+-      setValue("report_status", (study_status === "RR" || study_status === "RE") ? "RA" : "A");
+-      await onSubmit();
+-    };
+-
+-    // reportAlterUse가 true이면 confirm 사용, false이면 바로 {t('viewer.approve')}
+-    if (reportAlterUse) {
+-      CustomConfirm(
+-        {
+-          title: t('confirm.approve.title'),
+-          text: t('confirm.approve.text'),
+-          icon: "info",
+-        },
+-        async (result) => {
+-          if (result.isConfirmed) {
+-            await doApprove();
+-          }
+-        }
+-      );
+-    } else {
+-      await doApprove();
+-    }
+-  }, [isRefStudy, isOtherUserReport, getValues, setValue, onSubmit, reportAlterUse, t]);
+-
+-  // 이전/다음 검사 이동 (Main 프로세스에 위임)
+-  const handleChangeReport = useCallback(async (direction: 'prev' | 'next') => {
+-    if (!currentStudyIdx) {
+-      Toast(t('toast.currentStudyNotFound'), "warning");
+-      return;
+-    }
+-
+-    // Main 프로세스에 네비게이션 요청 (URL params에서 직접 가져온 최신 값 사용)
+-    window.electron.ipcRenderer.send('study:navigate-prev-next', {
+-      direction,
+-      currentStudyIdx, // studyData 대신 URL params 사용 (항상 최신)
+-      reportAutoOpen: true, // 레포트 윈도우는 이미 열려 있으므로 true
+-      focusWindowAfterOpen: basic?.focusWindowAfterOpen || 'report',
+-    });
+-  }, [currentStudyIdx, basic, t]);
++  }, [isRefStudy, isOtherUserReport, getValues, setValue, onSubmit, autoCommitEnabled, vcConfig, handleApprove, t]);
+ 
+   // Expose functions to parent component via ref
+   useImperativeHandle(ref, () => ({
+@@ -681,17 +907,37 @@
+               <button
+                 className="btn_save"
+                 onClick={handleSave}
+-                disabled={isEditDisabled}
++                disabled={isEditDisabled || isFinalizing}
+               >
+                 {t('viewer.save')}
+               </button>
++              {vcConfig?.enabled && (
++                <button
++                  type="button"
++                  className="btn_save"
++                  data-testid="pacs-report-approvals-history-btn"
++                  onClick={() => setShowApprovalsModal(true)}
++                  style={{
++                    backgroundColor: '#1e293b',
++                    borderColor: '#38bdf8',
++                    color: '#38bdf8',
++                    cursor: 'pointer',
++                    fontSize: '12px',
++                    padding: '6px 12px',
++                  }}
++                  title="Vision-Certi 전자서명 및 승인 이력 조회"
++                >
++                  📜 서명 이력 ({vcApprovals.length})
++                </button>
++              )}
+               {!autoCommitEnabled && (
+                 <button
+                   className="btn_approve"
+                   onClick={handleApprove}
+-                  disabled={isEditDisabled}
++                  disabled={isEditDisabled || isFinalizing}
++                  style={isFinalizing ? { opacity: 0.6, cursor: 'wait' } : undefined}
+                 >
+-                  {t('viewer.approve')}
++                  {isFinalizing ? '서명 검증 중...' : t('viewer.approve')}
+                 </button>
+               )}
+             </div>
+@@ -835,6 +1081,275 @@
+           </div>
+         </div>
+       </div>
++      {/* Vision-Certi 판독문 전자서명 스냅샷 사전 검토 모달 (Defect 1) */}
++      {snapshotPreview && (
++        <div
++          data-testid="pacs-report-snapshot-preview-modal"
++          style={{
++            position: 'fixed',
++            inset: 0,
++            backgroundColor: 'rgba(0,0,0,0.75)',
++            display: 'flex',
++            alignItems: 'center',
++            justifyContent: 'center',
++            zIndex: 9999,
++          }}
++        >
++          <div
++            style={{
++              background: '#0f172a',
++              border: '1px solid #0284c7',
++              borderRadius: '8px',
++              padding: '24px',
++              width: '800px',
++              maxHeight: '85vh',
++              overflowY: 'auto',
++              color: '#f8fafc',
++            }}
++          >
++            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
++              <div>
++                <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#38bdf8', margin: 0 }}>
++                  🔍 전자서명 원본 스냅샷 검토 (Signing Snapshot Verification)
++                </h3>
++                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', marginBottom: 0 }}>
++                  승인 전 생성된 암호학적 판독문 스냅샷과 SHA-256 해시를 확인한 후 의사 전자서명을 진행하십시오.
++                </p>
++              </div>
++              <button
++                type="button"
++                onClick={() => setSnapshotPreview(null)}
++                style={{
++                  background: 'none',
++                  border: 'none',
++                  color: '#94a3b8',
++                  fontSize: '20px',
++                  cursor: 'pointer',
++                }}
++              >
++                ✕
++              </button>
++            </div>
++
++            <div style={{ marginBottom: '12px', padding: '10px 14px', background: '#1e293b', borderRadius: '6px', fontSize: '12px' }}>
++              <div><strong>스냅샷 SHA-256 해시:</strong> <code style={{ color: '#38bdf8', wordBreak: 'break-all' }}>{snapshotPreview.snapshotSha256}</code></div>
++              <div style={{ marginTop: '4px', color: '#94a3b8' }}>
++                승인 ID: <code>{snapshotPreview.approvalId}</code> | 서명 요청 ID: <code>{snapshotPreview.signRequestId}</code>
++              </div>
++            </div>
++
++            <div style={{ marginBottom: '16px' }}>
++              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
++                서명 대상 스냅샷 본문 (Authoritative Snapshot Body):
++              </label>
++              <pre
++                style={{
++                  background: '#020617',
++                  border: '1px solid #334155',
++                  borderRadius: '6px',
++                  padding: '12px',
++                  fontSize: '12px',
++                  fontFamily: 'monospace',
++                  whiteSpace: 'pre-wrap',
++                  maxHeight: '320px',
++                  overflowY: 'auto',
++                  color: '#e2e8f0',
++                }}
++              >
++                {snapshotPreview.snapshot}
++              </pre>
++            </div>
++
++            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
++              <button
++                type="button"
++                onClick={() => setSnapshotPreview(null)}
++                style={{
++                  padding: '8px 18px',
++                  background: '#334155',
++                  border: 'none',
++                  borderRadius: '4px',
++                  color: '#cbd5e1',
++                  cursor: 'pointer',
++                  fontSize: '13px',
++                }}
++              >
++                취소
++              </button>
++              <button
++                type="button"
++                data-testid="pacs-confirm-sign-popup-btn"
++                onClick={() => startSigningPopup(snapshotPreview.approvalId, snapshotPreview.signRequestId)}
++                style={{
++                  padding: '8px 20px',
++                  background: '#0284c7',
++                  border: 'none',
++                  borderRadius: '4px',
++                  color: '#fff',
++                  fontWeight: 600,
++                  cursor: 'pointer',
++                  fontSize: '13px',
++                }}
++              >
++                확인 및 전자서명 진행 (Sign via Vision-Certi)
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
++
++      {/* Vision-Certi Approvals History Modal */}
++      {showApprovalsModal && (
++        <div
++          data-testid="pacs-report-approvals-modal"
++          style={{
++            position: 'fixed',
++            inset: 0,
++            backgroundColor: 'rgba(0,0,0,0.7)',
++            display: 'flex',
++            alignItems: 'center',
++            justifyContent: 'center',
++            zIndex: 9999,
++          }}
++        >
++          <div
++            style={{
++              background: '#0f172a',
++              border: '1px solid #334155',
++              borderRadius: '8px',
++              padding: '24px',
++              width: '850px',
++              maxHeight: '85vh',
++              overflowY: 'auto',
++              color: '#f8fafc',
++            }}
++          >
++            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
++              <div>
++                <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#38bdf8', marginBottom: '4px' }}>
++                  📜 공동인증서 전자서명 및 승인 이력 (Vision-Certi Approvals)
++                </h3>
++                <p style={{ fontSize: '12px', color: '#94a3b8' }}>
++                  검사 번호: #{currentStudyIdx} | 환자: {studyData?.patient_name} ({studyData?.patient_id})
++                </p>
++              </div>
++              <button
++                type="button"
++                onClick={() => setShowApprovalsModal(false)}
++                style={{
++                  background: 'none',
++                  border: 'none',
++                  color: '#94a3b8',
++                  fontSize: '20px',
++                  cursor: 'pointer',
++                }}
++              >
++                ✕
++              </button>
++            </div>
++
++            {vcApprovals.length === 0 ? (
++              <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>
++                기록된 공동인증서 전자서명 승인 이력이 없습니다.
++              </div>
++            ) : (
++              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
++                <thead>
++                  <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8', textAlign: 'left' }}>
++                    <th style={{ padding: '8px' }}>개정 차수</th>
++                    <th style={{ padding: '8px' }}>서명 상태</th>
++                    <th style={{ padding: '8px' }}>문서 해시 (SHA-256)</th>
++                    <th style={{ padding: '8px' }}>서명의사 식별자</th>
++                    <th style={{ padding: '8px' }}>등록/서명일시</th>
++                    <th style={{ padding: '8px', textAlign: 'right' }}>작업</th>
++                  </tr>
++                </thead>
++                <tbody>
++                  {vcApprovals.map((appr) => {
++                    const stateColor =
++                      appr.state === 'APPROVED'
++                        ? '#22c55e'
++                        : (appr.state === 'PENDING_SIGNATURE' || appr.state === 'PREPARING')
++                        ? '#eab308'
++                        : (appr.state === 'REMOTE_FAILED' || appr.state === 'COMMIT_REFUSED')
++                        ? '#ef4444'
++                        : '#94a3b8';
++                    const hashVal = appr.contentSha256 || appr.snapshotSha256 || '';
++                    return (
++                      <tr key={appr.approvalId} style={{ borderBottom: '1px solid #1e293b' }}>
++                        <td style={{ padding: '8px', fontWeight: 600 }}>Rev #{appr.revision}</td>
++                        <td style={{ padding: '8px' }}>
++                          <span
++                            style={{
++                              padding: '2px 8px',
++                              borderRadius: '4px',
++                              fontSize: '11px',
++                              fontWeight: 600,
++                              color: stateColor,
++                              border: `1px solid ${stateColor}`,
++                            }}
++                          >
++                            {appr.state}
++                          </span>
++                        </td>
++                        <td style={{ padding: '8px', fontFamily: 'monospace', fontSize: '11px', color: '#cbd5e1' }} title={hashVal}>
++                          {hashVal ? `${hashVal.substring(0, 16)}...` : '-'}
++                        </td>
++                        <td style={{ padding: '8px' }}>
++                          {appr.vcDoctorId ? `Doctor: ${appr.vcDoctorId}` : (appr.signerUserIdx ? `User #${appr.signerUserIdx}` : '-')}
++                        </td>
++                        <td style={{ padding: '8px', color: '#94a3b8' }}>
++                          {appr.createdAt ? new Date(appr.createdAt).toLocaleString() : '-'}
++                        </td>
++                        <td style={{ padding: '8px', textAlign: 'right' }}>
++                          {appr.state === 'PENDING_SIGNATURE' && appr.visionCertiSignRequestId && (
++                            <button
++                              type="button"
++                              onClick={() => {
++                                setShowApprovalsModal(false);
++                                startSigningPopup(appr.approvalId, appr.visionCertiSignRequestId);
++                              }}
++                              style={{
++                                padding: '3px 8px',
++                                background: '#0284c7',
++                                border: 'none',
++                                borderRadius: '4px',
++                                color: '#fff',
++                                cursor: 'pointer',
++                                fontSize: '11px',
++                              }}
++                            >
++                              서명 재시도
++                            </button>
++                          )}
++                        </td>
++                      </tr>
++                    );
++                  })}
++                </tbody>
++              </table>
++            )}
++
++            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
++              <button
++                type="button"
++                onClick={() => setShowApprovalsModal(false)}
++                style={{
++                  padding: '6px 16px',
++                  background: '#334155',
++                  border: 'none',
++                  borderRadius: '4px',
++                  color: '#fff',
++                  cursor: 'pointer',
++                  fontSize: '12px',
++                }}
++              >
++                닫기
++              </button>
++            </div>
++          </div>
++        </div>
++      )}
+     </div>
+   );
+ });
+--- a/src/pages/setting/GlobalSetting.tsx
++++ b/src/pages/setting/GlobalSetting.tsx
+@@ -57,18 +57,21 @@
+   },
+   REPORT_PERMISSION: {
+     key: "reportPermission",
++  },
++  VC_DOCTOR_LINKS: {
++    key: "vcDoctorLinks",
+   }
+ } as const;
+ 
+ const RAIL_GROUPS: { id: string; label: string; tabKeys: string[] }[] = [
+   { id: 'env',    label: '환경설정', tabKeys: ['basic', 'workList', 'viewer', 'report', 'display'] },
+   { id: 'preset', label: '프리셋',   tabKeys: ['basicLayoutManager', 'wwlManager', 'hanging'] },
+-  { id: 'system', label: '시스템',   tabKeys: ['admin', 'reportPermission'] },
++  { id: 'system', label: '시스템',   tabKeys: ['admin', 'reportPermission', 'vcDoctorLinks'] },
+ ];
+ 
+ // 관리자 전용 탭 — 관리자 그룹(group_idx==1) 또는 관리자급(group_level>=98)에게만 노출.
+ // (서버 엔드포인트도 동일 조건 + 슈퍼관리자로 게이트하므로 노출은 편의, 차단은 서버가 보장)
+-const ADMIN_ONLY_TAB_KEYS = new Set<string>(['reportPermission']);
++const ADMIN_ONLY_TAB_KEYS = new Set<string>(['reportPermission', 'vcDoctorLinks']);
+ 
+ 
+ export default function GlobalSetting() {
+@@ -159,6 +162,12 @@
+         key: TABS.REPORT_PERMISSION.key,
+         title: globalSettingT('reportPermission'),
+         component: lazy(() => import("@components/setting/reportPermission")),
++        complete: true,
++      },
++      {
++        key: TABS.VC_DOCTOR_LINKS.key,
++        title: '의사 계정 연동 (Vision-Certi)',
++        component: lazy(() => import("@components/setting/admin/VcDoctorLinks")),
+         complete: true,
+       },
+     ],
+--- /dev/null
++++ b/src/pages/user/CertificateEnrollment.tsx
+@@ -0,0 +1,115 @@
++import { useCallback, useEffect, useRef, useState } from 'react';
++import { useNavigate } from 'react-router-dom';
++import { useUserStore } from '@stores/useUserStore';
++import { VisionCertiService } from '@services/api/VisionCertiService';
++import { enrollPacsCertificate } from '@services/api/pacsCertificateEnrollment';
++import { requestCertificateHandoff } from '@services/api/certificateHandoff';
++import type { VcConfig } from '@shared/types/visionCerti.types';
++
++export default function CertificateEnrollmentPage() {
++  const navigate = useNavigate();
++  const token = useUserStore(s => s.token);
++  const userIdx = useUserStore(s => s.userData?.user_idx);
++  const [config, setConfig] = useState<VcConfig | null>(null);
++  const [status, setStatus] = useState('CHECKING');
++  const [error, setError] = useState<string | null>(null);
++  const [busy, setBusy] = useState(false);
++  const checking = useRef<string | null>(null);
++  const operation = useRef(false);
++  const sameAccount = useCallback(() => {
++    const current = useUserStore.getState();
++    return current.token === token && current.userData?.user_idx === userIdx;
++  }, [token, userIdx]);
++  const refresh = useCallback(async () => {
++    if (!token || checking.current === token) return;
++    checking.current = token;
++    setError(null);
++    setStatus('CHECKING');
++    try {
++      const cfg = await VisionCertiService.getConfig();
++      if (!sameAccount()) return;
++      setConfig(cfg);
++      if (cfg.state === 'DISABLED') { navigate('/', { replace: true }); return; }
++      if (token.startsWith('vc1.')) {
++        // The server checks the live session and current certificate enrollment before answering.
++        const session = await VisionCertiService.getSession();
++        if (!sameAccount()) return;
++        if (session.userIdx !== userIdx || !session.expiresAt ||
++            !Number.isFinite(Date.parse(session.expiresAt)) || Date.parse(session.expiresAt) <= Date.now()) {
++          throw new Error('공동인증서 로그인 세션을 다시 확인해 주세요.');
++        }
++        setStatus('ACTIVE');
++        navigate('/', { replace: true });
++        return;
++      }
++      const result = await VisionCertiService.getEnrollmentStatus();
++      if (!sameAccount()) return;
++      setStatus(result.registrationStatus);
++      if (result.registrationStatus === 'NOT_REQUIRED') navigate('/', { replace: true });
++      // ACTIVE enrollment alone does not authenticate this login: explicit certificate step-up follows.
++    } catch (e) {
++      if (sameAccount()) setError(e instanceof Error ? e.message : '인증서 로그인 상태를 확인하지 못했습니다. 다시 확인해 주세요.');
++    } finally { if (checking.current === token) checking.current = null; }
++  }, [token, userIdx, navigate, sameAccount]);
++  useEffect(() => { if (token) void refresh(); }, [token, refresh]);
++
++  const begin = async () => {
++    if (!config || operation.current || !token || !sameAccount()) return;
++    operation.current = true;
++    setBusy(true); setError(null);
++    try {
++      await enrollPacsCertificate(config, async () => {
++        if (!sameAccount()) throw new Error('로그인 계정이 변경되었습니다.');
++        const result = await VisionCertiService.startEnrollment();
++        if (!sameAccount()) throw new Error('로그인 계정이 변경되었습니다.');
++        return result;
++      });
++      if (sameAccount()) await refresh();
++    } catch (e) { if (sameAccount()) setError(e instanceof Error ? e.message : '인증서 등록을 진행하지 못했습니다.'); }
++    finally { operation.current = false; setBusy(false); }
++  };
++
++  const certificateLogin = async () => {
++    if (!config || operation.current || !token || token.startsWith('vc1.') ||
++        userIdx == null || status !== 'ACTIVE' || !sameAccount()) return;
++    operation.current = true;
++    setBusy(true); setError(null);
++    try {
++      const code = await requestCertificateHandoff(config);
++      if (!sameAccount()) throw new Error('로그인 계정이 변경되었습니다.');
++      const result = await VisionCertiService.certificateStepUp(code);
++      if (!sameAccount()) throw new Error('로그인 계정이 변경되었습니다.');
++      if (result.user_data.user_idx !== userIdx || !result.token.startsWith('vc1.')) {
++        throw new Error('현재 PACS 계정과 인증서 소유자가 일치하지 않습니다.');
++      }
++      await useUserStore.getState().actions.loginWithCertificate(result);
++      const current = useUserStore.getState();
++      if (current.token === result.token && current.userData?.user_idx === userIdx) {
++        navigate('/', { replace: true });
++      }
++    } catch (e) { if (sameAccount()) setError(e instanceof Error ? e.message : '공동인증서 로그인에 실패했습니다.'); }
++    finally { operation.current = false; setBusy(false); }
++  };
++
++  const blocked = status === 'SUSPENDED' || status === 'REVOKED';
++  const returningDoctor = status === 'ACTIVE';
++  return <main style={{ maxWidth: 720, margin: '80px auto', padding: 32 }}>
++    <h1>{returningDoctor ? '등록된 공동인증서 로그인' : '최초 공동인증서 등록'}</h1>
++    {returningDoctor
++      ? <p>이 PACS 계정에 등록된 공동인증서로 본인확인을 완료해야 로그인할 수 있습니다.</p>
++      : <p>최초 접속 시 본인의 공동인증서를 PACS 계정에 등록합니다. 인증서와 의사면허·전문의 자격을 확인하고 전자서명 이용에 동의해 주세요.</p>}
++    {!returningDoctor && <p>초대코드 입력이나 관리자 일괄 등록은 필요하지 않습니다. 등록이 완료되기 전에는 PACS 판독 화면에 접근할 수 없습니다.</p>}
++    {!token && <p role="status">PACS 계정 확인이 필요합니다. <button onClick={() => navigate('/login')}>로그인 화면</button></p>}
++    {blocked && <p role="alert">계정 또는 인증서 연결이 정지·해제되어 있습니다. 관리자에게 문의해 주세요.</p>}
++    {status === 'PENDING' && <p>인증서 검증·동의·활성화가 완료되면 공동인증서 로그인을 진행할 수 있습니다.</p>}
++    {status === 'ACTIVE' && !token?.startsWith('vc1.') && <p role="status">인증서 등록이 완료되었습니다. 공동인증서로 로그인해 주세요.</p>}
++    {error && <p role="alert">{error}</p>}
++    {status === 'ACTIVE' && !token?.startsWith('vc1.') ?
++      <button disabled={!token || busy} onClick={certificateLogin}>{busy ? '공동인증서 로그인 중' : '공동인증서 로그인'}</button> :
++      <button disabled={!token || busy || blocked || !['PENDING', 'NOT_REGISTERED'].includes(status)} onClick={begin}>
++        {busy ? '인증서 등록 진행 중' : '공동인증서 최초 등록'}
++      </button>}
++    <button disabled={!token || busy} onClick={() => void refresh()}>인증 상태 다시 확인</button>
++    <button onClick={() => { useUserStore.getState().actions.logout(); navigate('/login', { replace: true }); }}>로그아웃</button>
++  </main>;
++}
+--- a/src/queries/useUsers.ts
++++ b/src/queries/useUsers.ts
+@@ -48,7 +48,7 @@
+           }
+         );
+       } else if (data.status === 200) {
+-        navigate("/");
++        navigate("/certificate-enrollment", { replace: true });
+         await userActions.login(data);
+         await queryClient.invalidateQueries({queryKey: ["setting"]});
+ 
+--- /dev/null
++++ b/src/services/api/certificateHandoff.ts
+@@ -0,0 +1,39 @@
++import type { VcConfig } from '@shared/types/visionCerti.types';
++
++/** Correlate exactly one response from the configured INVIZ popup. No bearer enters URLs/storage. */
++export function requestCertificateHandoff(config: VcConfig): Promise<string> {
++  if (config.state !== 'ENABLED' || !config.visionCertiBaseUrl || !config.audience) {
++    return Promise.reject(new Error('인증 서버 연결 설정이 준비되지 않았습니다.'));
++  }
++  const base = new URL(config.visionCertiBaseUrl);
++  if (base.username || base.password || !(base.protocol === 'https:' ||
++      (base.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(base.hostname)))) {
++    return Promise.reject(new Error('인증 서버 주소를 사용할 수 없습니다.'));
++  }
++  const bytes = crypto.getRandomValues(new Uint8Array(32));
++  const nonce = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
++  const query = new URLSearchParams({nonce, audience: config.audience, origin: window.location.origin});
++  base.hash = '/certificates/pacs-login?' + query.toString();
++  const popup = window.open(base.href, 'VisionCertiAuthPopup', 'width=720,height=850');
++  if (!popup) return Promise.reject(new Error('브라우저 팝업을 허용해 주세요.'));
++  return new Promise((resolve, reject) => {
++    let completed = false;
++    const finish = (code?: string, error?: string) => {
++      if (completed) return;
++      completed = true;
++      window.removeEventListener('message', receive);
++      clearInterval(poll); clearTimeout(timeout);
++      if (!popup.closed) popup.close();
++      if (code) resolve(code); else reject(new Error(error || '본인확인이 취소되었습니다.'));
++    };
++    const receive = (event: MessageEvent) => {
++      if (event.origin !== base.origin || event.source !== popup || event.data?.type !== 'VC_HANDOFF_CODE') return;
++      if (event.data.nonce !== nonce || event.data.audience !== config.audience) return;
++      if (typeof event.data.handoffCode !== 'string' || !event.data.handoffCode || event.data.handoffCode.length > 512) return;
++      finish(event.data.handoffCode);
++    };
++    window.addEventListener('message', receive);
++    const poll = window.setInterval(() => { if (popup.closed) finish(); }, 500);
++    const timeout = window.setTimeout(() => finish(undefined, '본인확인 시간이 만료되었습니다. 다시 시도해 주세요.'), 300000);
++  });
++}
+--- /dev/null
++++ b/src/services/api/pacsCertificateEnrollment.ts
+@@ -0,0 +1,57 @@
++import type { VcConfig } from '@shared/types/visionCerti.types';
++
++/** Only correlated messages from the configured INVIZ popup are accepted. No credentials in URLs. */
++export function enrollPacsCertificate(
++  config: VcConfig,
++  begin: () => Promise<{ challenge: Record<string, unknown> }>,
++): Promise<void> {
++  if (config.state !== 'ENABLED' || !config.visionCertiBaseUrl || !config.audience) {
++    return Promise.reject(new Error('인증서 등록 서버가 준비되지 않았습니다.'));
++  }
++  const target = new URL(config.visionCertiBaseUrl);
++  if (target.username || target.password || !(target.protocol === 'https:' ||
++      (target.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(target.hostname)))) {
++    return Promise.reject(new Error('인증서 등록 서버 주소가 올바르지 않습니다.'));
++  }
++  if (window.location.origin === 'null') {
++    return Promise.reject(new Error('이 PACS 데스크톱 환경에는 인증기관 창과 연결하는 검증된 브리지가 필요합니다.'));
++  }
++  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
++  target.hash = '/certificates/pacs-enroll?' + new URLSearchParams({
++    nonce, audience: config.audience, origin: window.location.origin,
++  }).toString();
++  const popup = window.open(target.href, 'VisionCertiEnrollment', 'width=900,height=900');
++  if (!popup) return Promise.reject(new Error('브라우저 팝업을 허용해주세요.'));
++  return new Promise((resolve, reject) => {
++    let done = false;
++    let ready = false;
++    let challenge: Record<string, unknown> | null = null;
++    const send = () => {
++      if (!done && ready && challenge) popup.postMessage({
++        type: 'VC_ENROLLMENT_CHALLENGE', nonce, audience: config.audience, challenge,
++      }, target.origin);
++    };
++    const finish = (error?: Error) => {
++      if (done) return;
++      done = true;
++      window.removeEventListener('message', receive);
++      window.clearInterval(poll);
++      window.clearTimeout(timeout);
++      if (!popup.closed) popup.close();
++      if (error) reject(error); else resolve();
++    };
++    const receive = (event: MessageEvent) => {
++      if (done || event.origin !== target.origin || event.source !== popup ||
++          event.data?.nonce !== nonce || event.data?.audience !== config.audience) return;
++      if (event.data.type === 'VC_ENROLLMENT_READY') { ready = true; send(); }
++      if (event.data.type === 'VC_ENROLLMENT_COMPLETE' && ready && challenge) finish();
++    };
++    window.addEventListener('message', receive);
++    const poll = window.setInterval(() => {
++      if (popup.closed) finish(new Error('인증서 등록 창을 닫았습니다. 등록 상태를 확인하거나 다시 진행해주세요.'));
++    }, 500);
++    const timeout = window.setTimeout(() => finish(new Error('등록 시간이 지났습니다. 다시 진행해주세요.')), 900000);
++    begin().then(result => { if (!done) { challenge = result.challenge; send(); } })
++      .catch(() => finish(new Error('PACS 계정의 인증서 등록 요청에 실패했습니다. 계정·면허·소속 정보를 확인해주세요.')));
++  });
++}
+--- /dev/null
++++ b/src/services/api/VisionCertiService.ts
+@@ -0,0 +1,183 @@
++import client from "@libs/axios";
++import {
++  VcConfig,
++  VcCertificateLoginResponse,
++  VcPrepareResponse,
++  VcFinalizeResponse,
++  VcApproval,
++  VcDoctorLink,
++  CreateDoctorLinkRequest,
++  VcCurrentReportResponse,
++} from "@shared/types/visionCerti.types";
++
++export default class VisionCertiService {
++  public static async getEnrollmentStatus(): Promise<{
++    registrationStatus: 'NOT_REQUIRED' | 'NOT_REGISTERED' | 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REVOKED';
++    doctorId: string | null;
++  }> {
++    return (await client.get('/vc/auth/enrollment-status')).data;
++  }
++
++  public static async startEnrollment(): Promise<{ doctorId: string; challenge: Record<string, unknown> }> {
++    return (await client.post('/vc/auth/enrollment-start', {})).data;
++  }
++
++  /**
++   * Vision-Certi 연동 설정 조회 (공개 엔드포인트)
++   */
++  public static async getConfig(): Promise<VcConfig> {
++    try {
++      const response = await client.get("/vc/config");
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 현재 저장된 판독문 내용 및 contentSha256 조회
++   */
++  public static async getCurrentReport(studyIdx: number): Promise<VcCurrentReportResponse> {
++    try {
++      const response = await client.get(`/vc/study/${studyIdx}/report/current`);
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * VC Handoff 코드를 통한 의사 인증서 로그인
++   */
++  public static async certificateStepUp(handoffCode: string): Promise<VcCertificateLoginResponse> {
++    const response = await client.post('/vc/auth/certificate-step-up', { handoffCode });
++    return response.data;
++  }
++
++  public static async certificateLogin(handoffCode: string): Promise<VcCertificateLoginResponse> {
++    try {
++      const response = await client.post("/vc/auth/certificate-login", { handoffCode });
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 인증서 세션 정보 조회
++   */
++  public static async getSession(): Promise<any> {
++    try {
++      const response = await client.get("/vc/auth/session");
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 인증서 세션 로그아웃
++   */
++  public static async logout(): Promise<{ loggedOut: boolean }> {
++    try {
++      const response = await client.post("/vc/auth/logout");
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 판독문 전자서명 스냅샷 생성 및 서명 요청 준비 (Prepare)
++   */
++  public static async prepareReport(
++    studyIdx: number,
++    expectedContentSha256?: string | null
++  ): Promise<VcPrepareResponse> {
++    try {
++      const response = await client.post(`/vc/study/${studyIdx}/report/prepare`, {
++        expected_content_sha256: expectedContentSha256 || undefined,
++      });
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * Vision-Certi 서명 증적 수집 및 판독문 최종 승인 확정 (Finalize)
++   */
++  public static async finalizeReport(approvalId: string): Promise<VcFinalizeResponse> {
++    try {
++      const response = await client.post(`/vc/report-approvals/${approvalId}/finalize`);
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 서명 승인 상태 단건 조회
++   */
++  public static async getApproval(approvalId: string): Promise<VcApproval> {
++    try {
++      const response = await client.get(`/vc/report-approvals/${approvalId}`);
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 해당 검사의 전자서명 승인 이력 목록 조회
++   */
++  public static async listStudyApprovals(studyIdx: number): Promise<{ items: VcApproval[] }> {
++    try {
++      const response = await client.get(`/vc/study/${studyIdx}/report/approvals`);
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 관리자: 의사-VisionCerti 계정 연동 매핑 목록 조회
++   */
++  public static async listDoctorLinks(): Promise<{ items: VcDoctorLink[] }> {
++    try {
++      const response = await client.get("/vc/admin/doctor-links");
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 관리자: 의사-VisionCerti 계정 연동 생성
++   */
++  public static async createDoctorLink(body: CreateDoctorLinkRequest): Promise<VcDoctorLink> {
++    try {
++      const response = await client.post("/vc/admin/doctor-links", body);
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++
++  /**
++   * 관리자: 의사-VisionCerti 계정 연동 철회(Revoke)
++   */
++  public static async revokeDoctorLink(
++    linkIdx: number,
++    reason: string
++  ): Promise<VcDoctorLink> {
++    try {
++      const response = await client.post(`/vc/admin/doctor-links/${linkIdx}/revoke`, { reason });
++      return response.data;
++    } catch (error: any) {
++      throw error.response ? { status: error.response.status, ...(error.response.data ?? {}) } : error.message;
++    }
++  }
++}
++
++export { VisionCertiService };
+--- a/src/shared/types/user.types.ts
++++ b/src/shared/types/user.types.ts
+@@ -52,18 +52,22 @@
+   message: string;
+ }
+ 
++import { VcSessionData, VcCertificateLoginResponse } from "./visionCerti.types";
++
+ export interface UserState{
+   userData: User,
+   token: string | null;
+   refreshToken: string | null;
+   userAuthProfile: UserAuthProfile;
+   licenseStatus: LicenseStatus | null;
++  vcSession?: VcSessionData | null;
+ }
+ 
+ 
+ export interface UserActions{
+   userRemember: (userAuthProfile:UserAuthProfile) => void,
+   login: (userData: UserResponse) => Promise<void>;
++  loginWithCertificate: (data: VcCertificateLoginResponse) => Promise<void>;
+   logout: () => void;
+   setInitialState: (userData: Partial<UserState>) => void;
+   refreshAccessToken: (newToken: string) => void;
+--- /dev/null
++++ b/src/shared/types/visionCerti.types.ts
+@@ -0,0 +1,126 @@
++export type VcApprovalState =
++  | 'PREPARING'
++  | 'PREPARE_RETRY'
++  | 'PENDING_SIGNATURE'
++  | 'SIGNED_REMOTE'
++  | 'APPROVED'
++  | 'EXPIRED'
++  | 'REMOTE_FAILED'
++  | 'SUPERSEDED'
++  | 'SUPERSEDED_AFTER_SIGNATURE'
++  | 'COMMIT_REFUSED';
++
++export interface VcConfig {
++  enabled: boolean;
++  state: 'DISABLED' | 'ENABLED' | 'MISCONFIGURED';
++  visionCertiBaseUrl: string | null;
++  audience: string | null;
++  tenantId: string | null;
++}
++
++export interface VcSessionData {
++  tenantId: string;
++  doctorId: string;
++  certificateEnrollmentId: string;
++  certificateFingerprintSha256: string;
++  identityMode: string;
++  sessionExpiresAt: string;
++}
++
++export interface VcCertificateLoginResponse {
++  token: string;
++  expiresAt: string;
++  user_data: {
++    user_idx: number;
++    user_id: string;
++    user_name: string;
++    group_level: number;
++    doctor_license_number: string | null;
++  };
++  vc: VcSessionData;
++}
++
++export interface VcApprovalSignature {
++  signatureId: string;
++  algorithm: string;
++  signatureMode: string;
++  signatureValueBase64: string;
++  signedAt: string | null;
++  certificateEnrollmentId: string;
++  certificateFingerprintSha256: string;
++  certificateSerial: string;
++  keyName: string;
++  keyVersion: number;
++  publicKeySpki: string;
++}
++
++export interface VcApproval {
++  approvalId: string;
++  studyIdx: number;
++  reportIdx: number;
++  revision: number;
++  targetStatus: 'A' | 'RA';
++  state: VcApprovalState;
++  stateReason: string | null;
++  approved: boolean;
++  retryable: boolean;
++  userIdx: number;
++  vcTenantId: string;
++  vcDoctorId: string;
++  contentSha256: string;
++  snapshotSha256: string;
++  supersedesApprovalId: string | null;
++  attemptCount: number;
++  lastErrorCode: string | null;
++  visionCertiSignRequestId: string | null;
++  visionCertiDocumentVersionId: string | null;
++  signRequestExpiresAt: string | null;
++  signature: VcApprovalSignature | null;
++  createdAt: string;
++  updatedAt: string;
++  committedAt: string | null;
++}
++
++export interface VcCurrentReportResponse {
++  contentSha256: string;
++  report: {
++    reportId: number;
++    studyId: number;
++    reading: string;
++    conclusion: string;
++  };
++}
++
++export interface VcPrepareResponse {
++  approval: VcApproval;
++  snapshot: string;
++  snapshotSha256: string;
++  visionCertiSignRequestId: string;
++}
++
++export interface VcFinalizeResponse {
++  approval: VcApproval;
++}
++
++export interface VcDoctorLink {
++  linkIdx: number;
++  userIdx: number;
++  vcTenantId: string;
++  vcDoctorId: string;
++  status: 'ACTIVE' | 'REVOKED';
++  evidenceRef: string;
++  note: string | null;
++  createdByUserIdx: number;
++  createdAt: string;
++  revokedByUserIdx: number | null;
++  revokedAt: string | null;
++  revokeReason: string | null;
++}
++
++export interface CreateDoctorLinkRequest {
++  user_idx: number;
++  vc_tenant_id: string;
++  vc_doctor_id: string;
++  evidence_ref: string;
++  note?: string;
++}
+--- a/src/stores/useUserStore.ts
++++ b/src/stores/useUserStore.ts
+@@ -11,6 +11,7 @@
+     user_id: '', user_passwd: '', checked: false,
+   },
+   licenseStatus: null,
++  vcSession: null,
+ }
+ 
+ export const useUserStore = createStore<UserStore>((set)=>({
+@@ -18,10 +19,11 @@
+   actions: {
+     userRemember: (userAuthProfile) => {
+       set({userAuthProfile});
+-      window.electron.ipcRenderer.send('user:remember-user', userAuthProfile);
++      window.electron?.ipcRenderer?.send('user:remember-user', userAuthProfile);
+     },
+     login: async (userData) => {
+-      window.electron.ipcRenderer.send('user:set-user-info', {
++      setAuthorizationHeader(userData.token);
++      window.electron?.ipcRenderer?.send('user:set-user-info', {
+         userInfo: userData.user_data,
+         token: userData.token,
+         refreshToken: userData.refresh_token
+@@ -29,22 +31,54 @@
+       set({
+         userData: userData.user_data,
+         token: userData.token,
+-        refreshToken: userData.refresh_token
++        refreshToken: userData.refresh_token,
++        vcSession: null,
+       });
+     },
++    loginWithCertificate: async (data) => {
++      // NOTE: vc1 token is held in memory ONLY. Never persist to legacy encrypt-storage or disk.
++      if (window.electron?.ipcRenderer) {
++        window.electron.ipcRenderer.send('user:set-user-info', {
++          userInfo: data.user_data,
++          token: null,
++          refreshToken: null,
++        });
++      }
++      set({
++        userData: data.user_data as any,
++        token: data.token,
++        refreshToken: null,
++        vcSession: data.vc,
++      });
++      setAuthorizationHeader(data.token);
++    },
+     logout: () => {
+-      window.electron.ipcRenderer.send('user:set-user-info', {
+-        userInfo: null,
+-        token: null,
+-        refreshToken: null,
+-      });
++      const hadVcSession = Boolean(useUserStore.getState().vcSession);
++      if (hadVcSession) {
++        import('@services/api/VisionCertiService').then(({ VisionCertiService }) => {
++          VisionCertiService.logout().catch(() => {});
++        }).catch(() => {});
++      }
++      if (window.electron?.ipcRenderer) {
++        window.electron.ipcRenderer.send('user:set-user-info', {
++          userInfo: null,
++          token: null,
++          refreshToken: null,
++        });
++      }
+       set({
+         userData: null,
+         token: null,
+         refreshToken: null,
++        vcSession: null,
+       });
++      setAuthorizationHeader(null);
+     },
+     setInitialState: userData => {
++      // Never allow legacy password session restore over an active certificate login
++      if (useUserStore.getState().vcSession) {
++        return;
++      }
+       set(state => ({
+         ...state,
+         ...userData,
+@@ -53,11 +87,14 @@
+     refreshAccessToken: (newToken: string) => {
+       set({ token: newToken });
+       setAuthorizationHeader(newToken);
+-      window.electron.ipcRenderer.send('user:set-user-info', {
+-        userInfo: useUserStore.getState().userData,
+-        token: newToken,
+-        refreshToken: useUserStore.getState().refreshToken
+-      });
++      const isVc = Boolean(useUserStore.getState().vcSession || newToken?.startsWith('vc1.'));
++      if (window.electron?.ipcRenderer) {
++        window.electron.ipcRenderer.send('user:set-user-info', {
++          userInfo: useUserStore.getState().userData,
++          token: isVc ? null : newToken,
++          refreshToken: isVc ? null : useUserStore.getState().refreshToken
++        });
++      }
+     },
+     setLicenseStatus: (licenseStatus) => {
+       set({ licenseStatus });

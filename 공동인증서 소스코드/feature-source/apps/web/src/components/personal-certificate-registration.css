@@ -1,0 +1,39 @@
+.personal-certificate-page { min-height: 100vh; padding: 24px 40px 60px; background: white; color: #3c3c3c; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+.personal-certificate-home { color: #0078c7; text-decoration: none; font-size: 15px; }
+.personal-certificate-page h1 { font-size: 36px; font-weight: 600; margin: 16px 0 32px; letter-spacing: -1px; outline: none; }
+.personal-certificate-steps { max-width: 780px; padding: 0; margin: 0 auto 44px; display: flex; align-items: center; justify-content: center; gap: 28px; position: relative; list-style: none; min-height: 70px; }
+.personal-certificate-steps::before { content: ''; position: absolute; width: 100%; height: 8px; background: #f6f6f6; border: 1px solid #e5e5e5; border-radius: 8px; }
+.personal-certificate-steps li { z-index: 1; width: 68px; height: 68px; border: 3px solid #d8d8d8; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #888; font-size: 23px; flex-shrink: 0; }
+.personal-certificate-steps li.current { width: 180px; height: 64px; border-color: #008bf0; color: #0086e7; border-radius: 40px; box-shadow: 0 3px 5px #0002; }
+.personal-certificate-form { border-top: 2px solid #62696c; }
+.personal-certificate-row { display: grid; grid-template-columns: 270px minmax(0, 1fr); border-bottom: 1px solid #dcdcdc; min-height: 69px; }
+.personal-certificate-label { display: flex; align-items: center; background: #f2f2f2; border-right: 1px solid #dcdcdc; padding: 18px 20px; font-size: 20px; letter-spacing: 1px; }
+.personal-certificate-value { display: flex; align-items: center; flex-wrap: wrap; gap: 16px 22px; padding: 17px 20px; font-size: 18px; color: #656565; }
+.personal-certificate-value label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.personal-certificate-value input { width: 27px; height: 27px; margin: 0; accent-color: #008cdd; flex-shrink: 0; }
+.personal-certificate-instruction { margin-top: 26px; padding: 27px 20px; text-align: center; border: 1px solid #c1d8f3; border-radius: 2px; background: #eaf4ff; color: #0062ac; font-size: 25px; line-height: 1.8; }
+.personal-certificate-instruction span { display: inline-block; margin-left: 12px; font-size: 18px; }
+.personal-certificate-actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: center; margin-top: 42px; }
+.personal-certificate-primary { min-height: 63px; padding: 14px 44px; background: #0089dc; border: 1px solid #0089dc; border-radius: 2px; color: white; font: inherit; font-size: 24px; cursor: pointer; }
+.personal-certificate-primary:hover { background: #0079c7; }
+.personal-certificate-secondary, .personal-certificate-channels button { background: white; border: 1px solid #0089dc; border-radius: 3px; padding: 12px 24px; color: #0076bd; font: inherit; cursor: pointer; }
+.personal-certificate-channels { border: 1px solid #c1d8f3; padding: 20px; margin: 24px auto 0; max-width: 700px; display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
+.personal-certificate-channels legend { padding: 0 10px; }
+.personal-certificate-provider-notice { max-width: 800px; margin: 24px auto 0; padding: 20px; border: 1px solid #c1d8f3; border-radius: 3px; background: #f7fbff; line-height: 1.7; }
+.personal-certificate-provider-notice p { margin: 8px 0 0; }
+.personal-certificate-page :is(button, a, input):focus-visible { outline: 3px solid #174a85; outline-offset: 3px; }
+.certificate-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 700px) {
+  .personal-certificate-page { padding: 20px 16px 40px; }
+  .personal-certificate-page h1 { font-size: 26px; line-height: 1.5; margin-bottom: 24px; }
+  .personal-certificate-steps { gap: 10px; margin-bottom: 28px; }
+  .personal-certificate-steps li { width: 42px; height: 42px; font-size: 17px; border-width: 2px; }
+  .personal-certificate-steps li.current { width: 124px; height: 46px; font-size: 17px; }
+  .personal-certificate-row { grid-template-columns: 1fr; }
+  .personal-certificate-label { padding: 12px 14px; border-right: 0; border-bottom: 1px solid #e3e3e3; font-size: 17px; }
+  .personal-certificate-value { padding: 16px 14px; gap: 16px; font-size: 16px; }
+  .personal-certificate-instruction { padding: 20px 14px; font-size: 19px; }
+  .personal-certificate-instruction span { display: block; margin: 8px 0 0; font-size: 16px; }
+  .personal-certificate-actions { margin-top: 24px; }
+  .personal-certificate-primary { width: 100%; padding: 14px 16px; font-size: 19px; }
+}

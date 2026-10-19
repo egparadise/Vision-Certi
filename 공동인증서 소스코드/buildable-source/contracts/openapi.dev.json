@@ -1,0 +1,3855 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Vision-Certi explicit development API",
+    "version": "0.2.0-dev",
+    "description": "Development only: certificate enrollment, optional Google, OpenBao private X509 and raw ECDSA. In-memory and synthetic staff headers. No clinical validity, HSM, TSA, CAdES or contracted mobile adapter."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local dev profile only"
+    }
+  ],
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "operationId": "health",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/dashboard": {
+      "get": {
+        "operationId": "dashboard",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dashboard"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/documents": {
+      "get": {
+        "operationId": "listDocuments",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Document"
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "registerDocument",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Identical registration already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "metadata": {
+                    "type": "string",
+                    "description": "JSON encoded DocumentMetadata"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "metadata",
+                  "file"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/documents/{id}": {
+      "get": {
+        "operationId": "getDocument",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/documents/{id}/versions": {
+      "post": {
+        "operationId": "amendDocument",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "previousVersionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "amendmentReason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "previousVersionId",
+                  "amendmentReason"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/documents/{id}/versions/{versionId}/content": {
+      "get": {
+        "operationId": "documentContent",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact stored PDF bytes; no-store",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sign-requests": {
+      "get": {
+        "operationId": "listSignRequests",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SignRequest"
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSignRequest",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignRequest"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSignRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sign-requests/{id}": {
+      "get": {
+        "operationId": "getSignRequest",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignRequest"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sign-requests/{id}/approve": {
+      "post": {
+        "operationId": "approveSignRequest",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignRequest"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveSignRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/signatures": {
+      "get": {
+        "operationId": "listSignatures",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Signature"
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/signatures/{id}/verify": {
+      "post": {
+        "operationId": "verifySignature",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Verification"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deliveries": {
+      "get": {
+        "operationId": "listDeliveries",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Delivery"
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deliveries/{id}": {
+      "get": {
+        "operationId": "getDelivery",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Delivery"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audit-events": {
+      "get": {
+        "operationId": "listAuditEvents",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AuditEvent"
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/enrollment/phone-challenges": {
+      "post": {
+        "operationId": "createPhoneChallenge",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneChallengeResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhoneChallengeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/enrollment/phone-challenges/{challengeId}/verify": {
+      "post": {
+        "operationId": "verifyPhoneChallenge",
+        "security": [],
+        "parameters": [
+          {
+            "name": "challengeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneVerificationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhoneCodeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/enrollment/registrations": {
+      "post": {
+        "operationId": "registerAccount",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/doctors": {
+      "get": {
+        "operationId": "adminListDoctors",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Doctor"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "adminPreregisterDoctor",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [],
+        "description": "No key or certificate; invitation code returned once",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorInvitation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreregisterDoctor"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/doctors/{id}": {
+      "get": {
+        "operationId": "adminGetDoctor",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Doctor"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/doctors/{id}/invitation": {
+      "post": {
+        "operationId": "adminReissueInvitation",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorInvitation"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/doctors/{id}/status": {
+      "patch": {
+        "operationId": "adminDoctorStatus",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Doctor"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "SUSPENDED",
+                      "REVOKED"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "reason"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/doctors/{id}/certificate-enrollments": {
+      "get": {
+        "operationId": "adminCertificateEnrollments",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ExternalEnrollment"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/doctors/{id}/certificate-reviews": {
+      "post": {
+        "operationId": "adminCertificateReview",
+        "security": [
+          {
+            "DevTenant": [],
+            "DevActor": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalEnrollment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "registrationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "decision": {
+                    "enum": [
+                      "APPROVE",
+                      "REJECT"
+                    ]
+                  },
+                  "fingerprintSha256": {
+                    "type": "string"
+                  },
+                  "evidenceRef": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "registrationId",
+                  "decision",
+                  "fingerprintSha256",
+                  "evidenceRef"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor-activation/config": {
+      "get": {
+        "operationId": "doctorActivationConfig",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor-activation/challenges": {
+      "post": {
+        "operationId": "googleChallenge",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "invitationCode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "invitationCode"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor-activation/login-challenges": {
+      "post": {
+        "operationId": "googleLoginChallenge",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor-activation/google": {
+      "post": {
+        "operationId": "googleProof",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "challengeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "idToken": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "challengeId",
+                  "idToken"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor-activation/dev-identity": {
+      "post": {
+        "operationId": "mockIdentity",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoctorSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "challengeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "challengeId",
+                  "email",
+                  "subject"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor-activation/consent": {
+      "post": {
+        "operationId": "doctorConsent",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Doctor"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DoctorConsent"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor-activation/activate": {
+      "post": {
+        "operationId": "doctorActivate",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [],
+        "description": "Default CERTIFICATE_REQUIRED needs ACTIVE external enrollment and certificate-authenticated session",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Doctor"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor-activation/me": {
+      "get": {
+        "operationId": "doctorMe",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor/sign-requests": {
+      "get": {
+        "operationId": "physicianRequests",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SignRequest"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor/sign-requests/{id}": {
+      "get": {
+        "operationId": "physicianRequest",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignRequest"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor/sign-requests/{id}/certificate-payload": {
+      "get": {
+        "operationId": "physicianReportCertificatePayload",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "signedPayloadBase64": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "signedPayloadBase64"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor/sign-requests/{id}/approve": {
+      "post": {
+        "operationId": "physicianApprove",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "202": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignRequest"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveSignRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/doctor/sign-requests/{id}/document": {
+      "get": {
+        "operationId": "physicianDocument",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Exact PDF, X-Document-Sha256, no-store",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/config": {
+      "get": {
+        "operationId": "certificateConfig",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/challenges": {
+      "post": {
+        "operationId": "certificateChallenge",
+        "security": [
+          {},
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [],
+        "description": "Invitation or existing certificate session for renewal",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateChallenge"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "invitationCode": {
+                    "type": "string"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/login-challenges": {
+      "post": {
+        "operationId": "certificateLoginChallenge",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateChallenge"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/verify": {
+      "post": {
+        "operationId": "certificateProof",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CertificateProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/login": {
+      "post": {
+        "operationId": "certificateLogin",
+        "security": [],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CertificateLoginProof"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/enrollments": {
+      "get": {
+        "operationId": "certificateHistory",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ExternalEnrollment"
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/enrollments/{id}/consent": {
+      "post": {
+        "operationId": "certificateConsent",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalEnrollment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DoctorConsent"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/enrollments/{id}/unregister": {
+      "post": {
+        "operationId": "certificateUnregister",
+        "security": [
+          {
+            "DoctorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalEnrollment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/dev/mock-sign": {
+      "post": {
+        "operationId": "mockCertificateProof",
+        "security": [],
+        "parameters": [],
+        "description": "Dev flag only; never real identity",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "challengeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "fingerprintSha256": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "challengeId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/mobile/transactions": {
+      "post": {
+        "operationId": "mobileStart",
+        "security": [],
+        "parameters": [],
+        "description": "503 until contracted provider adapter configured",
+        "responses": {
+          "201": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "purpose": {
+                    "enum": [
+                      "CERTIFICATE_ENROLLMENT",
+                      "CERTIFICATE_LOGIN"
+                    ]
+                  },
+                  "invitationCode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "purpose"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/mobile/transactions/{transactionId}/callback": {
+      "post": {
+        "operationId": "mobileCallback",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transactionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "Provider adapter verifies raw callback. Unsigned SUCCESS never trusted. 503 without adapter.",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/certificate-enrollment/mobile/transactions/{transactionId}/consume": {
+      "post": {
+        "operationId": "mobileConsume",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transactionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "One-use secret and server-verified transaction required",
+        "responses": {
+          "200": {
+            "description": "Development response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Fail closed; full errors in backend API Markdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "transactionSecret": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "transactionSecret"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "correlationId",
+          "retryable"
+        ]
+      },
+      "DocumentMetadata": {
+        "type": "object",
+        "properties": {
+          "externalDocumentId": {
+            "type": "string"
+          },
+          "externalStudyId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "signerId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "externalDocumentId",
+          "externalStudyId",
+          "title",
+          "signerId"
+        ]
+      },
+      "DocumentVersion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionNumber": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "contentType": {
+            "const": "application/pdf"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "previousVersionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amendmentReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "documentId",
+          "versionNumber",
+          "sha256",
+          "sizeBytes",
+          "contentType",
+          "createdAt",
+          "createdBy",
+          "previousVersionId",
+          "amendmentReason"
+        ]
+      },
+      "Document": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "externalDocumentId": {
+            "type": "string"
+          },
+          "externalStudyId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "signerId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "latestVersion": {
+            "$ref": "#/components/schemas/DocumentVersion"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentVersion"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "externalDocumentId",
+          "externalStudyId",
+          "title",
+          "signerId",
+          "createdAt",
+          "updatedAt",
+          "createdBy",
+          "latestVersion",
+          "versions"
+        ]
+      },
+      "CreateSignRequest": {
+        "type": "object",
+        "properties": {
+          "documentVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "signerId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentVersionId",
+          "signerId"
+        ]
+      },
+      "ApproveSignRequest": {
+        "type": "object",
+        "properties": {
+          "documentSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "nonce": {
+            "type": "string"
+          },
+          "reviewAttestation": {
+            "type": "string"
+          },
+          "certificateDerBase64": {
+            "type": "string"
+          },
+          "externalSignatureBase64": {
+            "type": "string"
+          },
+          "externalSignatureAlgorithm": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "documentSha256",
+          "nonce"
+        ]
+      },
+      "SignRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "signerId": {
+            "type": "string"
+          },
+          "nonce": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING_APPROVAL",
+              "APPROVED",
+              "SIGNING",
+              "EVIDENCE_PENDING",
+              "COMPLETED",
+              "EXPIRED",
+              "REJECTED",
+              "FAILED",
+              "RECONCILIATION_REQUIRED"
+            ]
+          },
+          "signatureMode": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "approvedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approvedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "signatureId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "documentId",
+          "documentVersionId",
+          "documentSha256",
+          "signerId",
+          "nonce",
+          "status",
+          "signatureMode",
+          "createdAt",
+          "createdBy",
+          "expiresAt",
+          "approvedAt",
+          "approvedBy",
+          "signatureId"
+        ]
+      },
+      "Signature": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "signRequestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "signerId": {
+            "type": "string"
+          },
+          "signatureMode": {
+            "type": "string"
+          },
+          "algorithm": {
+            "type": "string"
+          },
+          "signatureValue": {
+            "type": "string"
+          },
+          "clinicalUseAllowed": {
+            "const": false
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "doctorEvidence": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Doctor, authentication enrollment, certificate, approval, exact report hash, key version, audit references"
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "signRequestId",
+          "documentId",
+          "documentVersionId",
+          "documentSha256",
+          "signerId",
+          "signatureMode",
+          "algorithm",
+          "signatureValue",
+          "clinicalUseAllowed",
+          "createdAt"
+        ]
+      },
+      "Verification": {
+        "type": "object",
+        "properties": {
+          "signatureId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "enum": [
+              "INVALID",
+              "INDETERMINATE"
+            ]
+          },
+          "signatureMode": {
+            "type": "string"
+          },
+          "clinicalUseAllowed": {
+            "const": false
+          },
+          "mockSignatureIntact": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "documentIntegrity": {
+                "enum": [
+                  "VALID",
+                  "INVALID",
+                  "INDETERMINATE"
+                ]
+              },
+              "signature": {
+                "enum": [
+                  "VALID",
+                  "INVALID",
+                  "INDETERMINATE"
+                ]
+              },
+              "trustChain": {
+                "enum": [
+                  "VALID",
+                  "INVALID",
+                  "INDETERMINATE"
+                ]
+              },
+              "timestamp": {
+                "enum": [
+                  "VALID",
+                  "INVALID",
+                  "INDETERMINATE"
+                ]
+              },
+              "revocationAtSigning": {
+                "enum": [
+                  "VALID",
+                  "INVALID",
+                  "INDETERMINATE"
+                ]
+              },
+              "authorizationAtSigning": {
+                "enum": [
+                  "VALID",
+                  "INVALID",
+                  "INDETERMINATE"
+                ]
+              }
+            },
+            "required": [
+              "documentIntegrity",
+              "signature",
+              "trustChain",
+              "timestamp",
+              "revocationAtSigning",
+              "authorizationAtSigning"
+            ]
+          },
+          "reasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "signatureId",
+          "status",
+          "signatureMode",
+          "clinicalUseAllowed",
+          "mockSignatureIntact",
+          "checks",
+          "reasonCodes",
+          "verifiedAt"
+        ]
+      },
+      "Delivery": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "signatureId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "signRequestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "connectorId": {
+            "type": "string"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "QUEUED",
+              "SENDING",
+              "ACKED",
+              "RETRY_WAIT",
+              "DEAD_LETTER"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "signatureId",
+          "signRequestId",
+          "documentId",
+          "connectorId",
+          "eventType",
+          "destination",
+          "status",
+          "attempts",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "AuditEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "targetType": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "previousHash": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "sequence",
+          "occurredAt",
+          "actorId",
+          "action",
+          "targetType",
+          "targetId",
+          "outcome",
+          "correlationId",
+          "details",
+          "previousHash",
+          "hash"
+        ]
+      },
+      "Dashboard": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "signatureMode": {
+            "type": "string"
+          },
+          "persistence": {
+            "const": "IN_MEMORY"
+          },
+          "documents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "documentVersions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "signRequestsByStatus": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "signatures": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deliveriesByStatus": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "auditEvents": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "tenantId",
+          "generatedAt",
+          "signatureMode",
+          "persistence",
+          "documents",
+          "documentVersions",
+          "signRequestsByStatus",
+          "signatures",
+          "deliveriesByStatus",
+          "auditEvents"
+        ]
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "activeProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "persistence": {
+            "const": "IN_MEMORY"
+          },
+          "signatureMode": {
+            "type": "string"
+          },
+          "devSyntheticIdentities": {
+            "type": "boolean"
+          },
+          "clinicalUseAllowed": {
+            "const": false
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "activeProfiles",
+          "persistence",
+          "signatureMode",
+          "devSyntheticIdentities",
+          "clinicalUseAllowed"
+        ]
+      },
+      "PhoneChallengeRequest": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "010 followed by 8 digits; spaces and hyphens accepted"
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "PhoneChallengeResponse": {
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resendAfter": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mode": {
+            "const": "MOCK_SMS"
+          },
+          "devCode": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "description": "Development mock only; no SMS sent"
+          }
+        },
+        "required": [
+          "challengeId",
+          "expiresAt",
+          "resendAfter",
+          "mode"
+        ]
+      },
+      "PhoneCodeRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "PhoneVerificationResponse": {
+        "type": "object",
+        "properties": {
+          "verificationToken": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Phone-bound, single-use, expires after 10 minutes"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mode": {
+            "const": "MOCK_SMS"
+          }
+        },
+        "required": [
+          "verificationToken",
+          "expiresAt",
+          "mode"
+        ]
+      },
+      "EnrollmentConsents": {
+        "type": "object",
+        "properties": {
+          "authentication": {
+            "const": true
+          },
+          "signature": {
+            "const": true
+          },
+          "privacy": {
+            "const": true
+          },
+          "version": {
+            "const": "2026-10-13-draft"
+          }
+        },
+        "required": [
+          "authentication",
+          "signature",
+          "privacy",
+          "version"
+        ]
+      },
+      "RegistrationRequest": {
+        "type": "object",
+        "properties": {
+          "accountType": {
+            "enum": [
+              "PERSONAL",
+              "CLINICIAN"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{3,31}$"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "writeOnly": true
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 50
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "institution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "licenseNumber": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "specialty": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verificationToken": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "consents": {
+            "$ref": "#/components/schemas/EnrollmentConsents"
+          }
+        },
+        "required": [
+          "accountType",
+          "username",
+          "password",
+          "name",
+          "phone",
+          "verificationToken",
+          "consents"
+        ],
+        "description": "CLINICIAN requires institution (2-100), licenseNumber (1-20 ASCII digits), specialty (2-50); PERSONAL must omit or null these. Phone proof and all consents required. No login, membership or signing privilege granted."
+      },
+      "RegistrationResponse": {
+        "type": "object",
+        "properties": {
+          "registrationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "accountType": {
+            "enum": [
+              "PERSONAL",
+              "CLINICIAN"
+            ]
+          },
+          "status": {
+            "enum": [
+              "REGISTERED",
+              "PENDING_CREDENTIAL_REVIEW"
+            ]
+          },
+          "phoneVerification": {
+            "const": "MOCK_VERIFIED"
+          },
+          "registeredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "registrationId",
+          "username",
+          "accountType",
+          "status",
+          "phoneVerification",
+          "registeredAt"
+        ]
+      },
+      "Doctor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "licenseNumber": {
+            "type": "string"
+          },
+          "centerName": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "IDENTITY_VERIFIED",
+              "CONSENTED",
+              "ACTIVE",
+              "SUSPENDED",
+              "REVOKED"
+            ]
+          },
+          "certificate": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "status"
+        ]
+      },
+      "ExternalEnrollment": {
+        "type": "object",
+        "properties": {
+          "registrationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "doctorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "fingerprintSha256": {
+            "type": "string"
+          },
+          "publicKeySha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registrationStatus": {
+            "enum": [
+              "PENDING",
+              "ACTIVE",
+              "REVOKED"
+            ]
+          },
+          "externalStatus": {
+            "enum": [
+              "GOOD",
+              "REVOKED",
+              "UNKNOWN",
+              "STALE"
+            ]
+          },
+          "reviewStatus": {
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED"
+            ]
+          }
+        },
+        "required": [
+          "registrationId",
+          "doctorId",
+          "kind",
+          "fingerprintSha256",
+          "publicKeySha256",
+          "registrationStatus",
+          "externalStatus",
+          "reviewStatus"
+        ]
+      },
+      "DoctorSession": {
+        "type": "object",
+        "properties": {
+          "activationToken": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "identityMode": {
+            "type": "string"
+          },
+          "doctor": {
+            "$ref": "#/components/schemas/Doctor"
+          }
+        },
+        "required": [
+          "activationToken",
+          "expiresAt",
+          "identityMode",
+          "doctor"
+        ]
+      },
+      "CertificateSession": {
+        "type": "object",
+        "properties": {
+          "activationToken": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "identityMode": {
+            "type": "string"
+          },
+          "doctor": {
+            "$ref": "#/components/schemas/Doctor"
+          },
+          "enrollment": {
+            "$ref": "#/components/schemas/ExternalEnrollment"
+          }
+        },
+        "required": [
+          "activationToken",
+          "expiresAt",
+          "identityMode",
+          "doctor",
+          "enrollment"
+        ]
+      },
+      "DoctorConsent": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "const": "2026-10-13-draft"
+          },
+          "authentication": {
+            "const": true
+          },
+          "signature": {
+            "const": true
+          },
+          "privacy": {
+            "const": true
+          }
+        },
+        "required": [
+          "version",
+          "authentication",
+          "signature",
+          "privacy"
+        ]
+      },
+      "CertificateChallenge": {
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "registrationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "serviceId": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "signedPayload": {
+            "type": "string"
+          },
+          "signedPayloadBase64": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "challengeId",
+          "registrationId",
+          "purpose",
+          "serviceId",
+          "nonce",
+          "expiresAt",
+          "signedPayload",
+          "signedPayloadBase64"
+        ]
+      },
+      "CertificateProof": {
+        "type": "object",
+        "properties": {
+          "registrationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "certificate": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5
+          },
+          "signature": {
+            "type": "string"
+          },
+          "signatureAlgorithm": {
+            "enum": [
+              "SHA256withRSA",
+              "SHA256withECDSA"
+            ]
+          }
+        },
+        "required": [
+          "registrationId",
+          "certificate",
+          "signature",
+          "signatureAlgorithm"
+        ]
+      },
+      "CertificateLoginProof": {
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fingerprintSha256": {
+            "type": "string"
+          },
+          "certificate": {
+            "type": "string"
+          },
+          "chain": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5
+          },
+          "signature": {
+            "type": "string"
+          },
+          "signatureAlgorithm": {
+            "enum": [
+              "SHA256withRSA",
+              "SHA256withECDSA"
+            ]
+          }
+        },
+        "required": [
+          "challengeId",
+          "fingerprintSha256",
+          "certificate",
+          "signature",
+          "signatureAlgorithm"
+        ]
+      },
+      "PreregisterDoctor": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "licenseNumber": {
+            "type": "string"
+          },
+          "centerName": {
+            "type": "string"
+          },
+          "googleEmail": {
+            "type": "string"
+          },
+          "identityEvidenceRef": {
+            "type": "string"
+          },
+          "licenseEvidenceRef": {
+            "type": "string"
+          },
+          "expectedCertificateFingerprint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "licenseNumber",
+          "centerName",
+          "googleEmail",
+          "identityEvidenceRef",
+          "licenseEvidenceRef"
+        ]
+      },
+      "DoctorInvitation": {
+        "type": "object",
+        "properties": {
+          "doctor": {
+            "$ref": "#/components/schemas/Doctor"
+          },
+          "invitationCode": {
+            "type": "string"
+          },
+          "invitationExpiresAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "doctor",
+          "invitationCode",
+          "invitationExpiresAt"
+        ]
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+        },
+        "description": "Reuse the same key for retries of one operation. Different payload returns 409."
+      }
+    },
+    "securitySchemes": {
+      "DevTenant": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Tenant-Id",
+        "description": "DEV ONLY demo-hospital-a or demo-hospital-b; not authentication"
+      },
+      "DevActor": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Actor-Id",
+        "description": "DEV ONLY doctor-demo or admin-demo; not authentication"
+      },
+      "DoctorSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Opaque physician session. Dev staff headers cannot substitute."
+      }
+    }
+  },
+  "x-public-operations": [
+    "/v1/certificate-enrollment/challenges",
+    "/v1/certificate-enrollment/config",
+    "/v1/certificate-enrollment/dev/mock-sign",
+    "/v1/certificate-enrollment/login",
+    "/v1/certificate-enrollment/login-challenges",
+    "/v1/certificate-enrollment/mobile/transactions",
+    "/v1/certificate-enrollment/mobile/transactions/{transactionId}/callback",
+    "/v1/certificate-enrollment/mobile/transactions/{transactionId}/consume",
+    "/v1/certificate-enrollment/verify",
+    "/v1/doctor-activation/challenges",
+    "/v1/doctor-activation/config",
+    "/v1/doctor-activation/dev-identity",
+    "/v1/doctor-activation/google",
+    "/v1/doctor-activation/login-challenges"
+  ]
+}

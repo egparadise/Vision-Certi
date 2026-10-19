@@ -1,0 +1,305 @@
+/* Admin mode (관리자 모드) layout. Uses the shared tokens and card/btn/badge classes from index.css. */
+
+.admin-console {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: white;
+  border: 1px solid var(--navy-200);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.admin-sidebar-title {
+  display: flex;
+  flex-direction: column;
+  font-weight: 800;
+  color: var(--navy-900);
+  padding: 4px 8px 10px;
+  border-bottom: 1px solid var(--navy-100, #eef2f7);
+  margin-bottom: 6px;
+}
+
+.admin-sidebar-title span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--navy-500);
+}
+
+.admin-nav-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--navy-700, #334155);
+}
+
+.admin-nav-item span {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-nav-item small {
+  font-size: 0.72rem;
+  color: var(--navy-500);
+}
+
+.admin-nav-item:hover {
+  background: var(--navy-50, #f8fafc);
+}
+
+.admin-nav-item.active {
+  background: var(--navy-900, #0f172a);
+  color: white;
+}
+
+.admin-nav-item.active small {
+  color: #cbd5e1;
+}
+
+.admin-content {
+  min-width: 0;
+}
+
+.admin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-panel-header h2 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--navy-900);
+}
+
+.admin-panel-header p {
+  margin-top: 4px;
+  max-width: 760px;
+  font-size: 0.85rem;
+  color: var(--navy-500);
+  line-height: 1.5;
+}
+
+.admin-metric {
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.admin-status-list,
+.admin-warning-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-status-list li {
+  display: grid;
+  grid-template-columns: 20px 180px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+.admin-status-label {
+  color: var(--navy-500);
+}
+
+.admin-status-value {
+  font-weight: 600;
+  color: var(--navy-900);
+  overflow-wrap: anywhere;
+}
+
+.admin-warning-list li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--amber-700, #b45309);
+}
+
+.admin-setting-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+
+.admin-setting {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--navy-100, #eef2f7);
+}
+
+.admin-setting:first-child {
+  border-top: 0;
+}
+
+.admin-setting-main {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+
+.admin-setting-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--navy-900);
+}
+
+.admin-setting-desc {
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--navy-500);
+}
+
+.admin-setting-meta {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--navy-700, #334155);
+  overflow-wrap: anywhere;
+}
+
+.admin-setting-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.admin-setting-form {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--navy-50, #f8fafc);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.admin-setting-form label,
+.admin-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--navy-700, #334155);
+}
+
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.admin-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.admin-hint {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--navy-500);
+}
+
+.admin-error {
+  color: #b91c1c;
+}
+
+.admin-env {
+  font-size: 0.75rem;
+  color: var(--navy-500);
+}
+
+.admin-system-summary {
+  background: white;
+  border: 1px solid var(--navy-200);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.admin-system-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-denied {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+@media (max-width: 860px) {
+  .admin-console {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-sidebar {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .admin-sidebar-title {
+    display: none;
+  }
+
+  .admin-nav-item {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .admin-nav-item small {
+    display: none;
+  }
+
+  .admin-status-list li {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+
+  .admin-status-value {
+    grid-column: 2;
+  }
+}
+.admin-certificate-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+.admin-certificate-table th, .admin-certificate-table td { padding: 9px 11px; border-bottom: 1px solid #dce5ef; text-align: left; vertical-align: top; }
+.admin-certificate-table th { background: #edf3fa; white-space: nowrap; }

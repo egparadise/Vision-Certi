@@ -1,0 +1,23 @@
+[Unit]
+Description=INVIZ Vision-Certi authentication and signing API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=visioncerti
+Group=visioncerti
+WorkingDirectory=/opt/vision-certi
+EnvironmentFile=/etc/vision-certi/runtime.env
+ExecStart=/usr/bin/java -jar /opt/vision-certi/app.jar --spring.profiles.active=prod --server.address=127.0.0.1 --server.port=8080
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

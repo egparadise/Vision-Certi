@@ -1,0 +1,13 @@
+# Production profile. Startup is refused (FailClosedProfileGuard / ProductionReadiness) unless PostgreSQL,
+# OIDC staff authentication, OpenBao Transit + PKI over TLS with separate token files and PC certificate trust
+# anchors with fresh CRLs are configured. Dev headers, synthetic actors, mock identities/certificates/signing and
+# mock SMS never exist in this profile. See docs/PRODUCTION_RUNTIME.md.
+visioncerti:
+  dev:
+    synthetic-identities-enabled: false
+  persistence:
+    mode: ${VISIONCERTI_PERSISTENCE_MODE:POSTGRESQL}
+  staff-auth:
+    mode: ${VISIONCERTI_STAFF_AUTH_MODE:OIDC}
+  doctor:
+    signing-backend: ${VISIONCERTI_SIGNING_BACKEND:OPENBAO_TRANSIT}

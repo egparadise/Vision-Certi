@@ -3,6 +3,7 @@ package com.inviz.visioncerti.certificate;
 import com.inviz.visioncerti.common.ApiException;
 import com.inviz.visioncerti.common.Hashing;
 import java.io.ByteArrayInputStream;
+import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 import java.security.Signature;
@@ -29,6 +30,15 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.bouncycastle.asn1.ASN1OctetString;
+import org.bouncycastle.asn1.ASN1Primitive;
+import org.bouncycastle.asn1.ASN1Sequence;
+import org.bouncycastle.asn1.DERIA5String;
+import org.bouncycastle.asn1.x509.CertificatePolicies;
+import org.bouncycastle.asn1.x509.PolicyInformation;
+import org.bouncycastle.asn1.x509.PolicyQualifierId;
+import org.bouncycastle.asn1.x509.PolicyQualifierInfo;
+import org.bouncycastle.asn1.x509.UserNotice;
 import org.springframework.http.HttpStatus;
 
 /**
@@ -218,6 +228,7 @@ public class CertificateValidator {
         PKIXCertPathBuilderResult result = buildPath(leaf, intermediates, anchors, now);
         List<X509Certificate> path = new ArrayList<>();
         result.getCertPath().getCertificates().forEach(c -> path.add((X509Certificate) c));
+        path.forEach(CertificateValidator::checkCriticalPolicyQualifiers);
         X509Certificate anchor = result.getTrustAnchor().getTrustedCert();
         // The JDK ignores the anchor's own pathLenConstraint; every non-leaf path element is an intermediate CA.
         if (path.size() - 1 > anchor.getBasicConstraints()) {
@@ -262,6 +273,9 @@ public class CertificateValidator {
             selector.setCertificate(leaf);
             PKIXBuilderParameters params = new PKIXBuilderParameters(trustAnchors, selector);
             params.setRevocationEnabled(false); // revocation is checked explicitly against configured CRLs below
+            // Korean joint certificates can mark certificatePolicies critical and include CPS/UserNotice qualifiers.
+            // The JDK rejects those by default; inspect and validate every qualifier on the built path below.
+            params.setPolicyQualifiersRejected(false);
             params.setDate(Date.from(now));
             params.setMaxPathLength(MAX_CHAIN);
             List<X509Certificate> certs = new ArrayList<>(intermediates);
@@ -272,6 +286,43 @@ public class CertificateValidator {
             throw untrusted("설정된 신뢰 기관까지 유효한 인증서 경로를 만들 수 없습니다.");
         } catch (GeneralSecurityException e) {
             throw untrusted("인증서 경로 검증에 실패했습니다.");
+        }
+    }
+
+    private static void checkCriticalPolicyQualifiers(X509Certificate certificate) {
+        if (certificate.getCriticalExtensionOIDs() == null
+                || !certificate.getCriticalExtensionOIDs().contains("2.5.29.32")) return;
+        byte[] wrapped = certificate.getExtensionValue("2.5.29.32");
+        if (wrapped == null) throw untrusted("필수 인증서 정책을 확인할 수 없습니다.");
+        try {
+            CertificatePolicies policies = CertificatePolicies.getInstance(
+                    ASN1Primitive.fromByteArray(ASN1OctetString.getInstance(wrapped).getOctets()));
+            for (PolicyInformation policy : policies.getPolicyInformation()) {
+                ASN1Sequence qualifiers = policy.getPolicyQualifiers();
+                if (qualifiers == null) continue;
+                for (int i = 0; i < qualifiers.size(); i++) {
+                    PolicyQualifierInfo qualifier = PolicyQualifierInfo.getInstance(qualifiers.getObjectAt(i));
+                    if (PolicyQualifierId.id_qt_cps.equals(qualifier.getPolicyQualifierId())) {
+                        String value = DERIA5String.getInstance(qualifier.getQualifier()).getString();
+                        URI uri = URI.create(value);
+                        if ((!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme()))
+                                || uri.getHost() == null || value.length() > 2048) {
+                            throw untrusted("인증서 정책의 CPS 주소가 올바르지 않습니다.");
+                        }
+                    } else if (PolicyQualifierId.id_qt_unotice.equals(qualifier.getPolicyQualifierId())) {
+                        UserNotice notice = UserNotice.getInstance(qualifier.getQualifier());
+                        if (notice.getExplicitText() == null && notice.getNoticeRef() == null) {
+                            throw untrusted("인증서 정책의 사용자 안내가 비어 있습니다.");
+                        }
+                    } else {
+                        throw untrusted("지원하지 않는 필수 인증서 정책 안내가 있습니다.");
+                    }
+                }
+            }
+        } catch (ApiException e) {
+            throw e;
+        } catch (RuntimeException | java.io.IOException e) {
+            throw untrusted("필수 인증서 정책을 해석할 수 없습니다.");
         }
     }
 

@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory;
 public final class PostgresStore implements Store, AutoCloseable {
 
     public static final String SCHEMA = "certi_rt";
-    public static final int SCHEMA_VERSION = 9;
+    public static final int SCHEMA_VERSION = 10;
     private static final int MAX_ATTEMPTS = 3;
     private static final Logger LOG = LoggerFactory.getLogger(PostgresStore.class);
 
@@ -80,12 +80,12 @@ public final class PostgresStore implements Store, AutoCloseable {
                 c.rollback();
                 if (version != SCHEMA_VERSION) {
                     throw new IllegalStateException("FAIL_CLOSED: certi_rt.schema_info runtime version is " + version
-                            + ", expected " + SCHEMA_VERSION + " (apply database/migrations/V009__medical_institutions.sql)");
+                            + ", expected " + SCHEMA_VERSION + " (apply database/migrations/V010__pacs_certificate_proofs.sql)");
                 }
             }
         } catch (SQLException e) {
             throw new IllegalStateException("FAIL_CLOSED: PostgreSQL runtime schema check failed (SQLState "
-                    + e.getSQLState() + "); apply V005 to V009 and check VISIONCERTI_DB_* settings", e);
+                    + e.getSQLState() + "); apply V005 to V010 and check VISIONCERTI_DB_* settings", e);
         }
     }
 

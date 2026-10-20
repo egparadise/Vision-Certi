@@ -8,7 +8,7 @@
 | --- | --- |
 | 웹 | Firebase Hosting 전용 사이트 `vision-certi` (`vision-certi.web.app`), 기존 `hahattalk-vision-certi`는 이전 주소 |
 | API | Cloud Run `vision-certi-api`, 서울, 최소 인스턴스 1개 |
-| 데이터 | Cloud SQL PostgreSQL 17 `vision-certi-postgres-seoul`, DB `vision_certi`, 스키마 V009, 일별 백업 및 PITR 7일 |
+| 데이터 | Cloud SQL PostgreSQL 17 `vision-certi-postgres-seoul`, DB `vision_certi`, 스키마 V010, 일별 백업 및 PITR 7일 |
 | 서명 키 | Compute Engine `vision-certi-openbao-1`의 OpenBao Transit/Private PKI, 전용 VPC 내부 주소 `10.71.0.10:8200` |
 | 인증서 신뢰 | YESKEY 공개 `yessignCA Class 3` 인증서와 발급기관 서명 CRL, VM에서 매시간 갱신 |
 | 비밀 | Secret Manager의 `vision-certi-*` 비밀들. Cloud Run 서비스 계정은 필요한 비밀에만 접근 |
@@ -32,7 +32,7 @@ PACS와 웹 화면은 항상 공개 클라우드 API를 사용한다. 의사 PC�
 
 ## 검증 결과와 운영 경계
 
-공개 `/v1/runtime/capabilities`가 HTTP 200, `prod`, PostgreSQL `READY`/V009, OpenBao `OPENBAO_TRANSIT`, PC 인증서 CRL `FRESH`를 반환했다. PC에서 열었던 Cloud SQL 프록시를 종료한 뒤에도 같은 결과였다. 공개 PACS API에서 서명 없는 요청은 401, 유효한 HMAC으로 존재하지 않는 세션을 조회하면 404, 같은 nonce 재전송은 409였다. `/v1` 응답에는 `Cache-Control: private, no-store, max-age=0`가 적용된다.
+공개 `/v1/runtime/capabilities`가 HTTP 200, `prod`, PostgreSQL `READY`/V010, OpenBao `OPENBAO_TRANSIT`, PC 인증서 CRL `FRESH`를 반환했다. 공개 `POST /v1/pacs-certificate-proofs/challenges`는 HTTP 201로 PACS 확인용 서명 대상을 반환했고, HMAC 없는 `POST /v1/integrations/pacs/certificate-proofs/redeem`은 HTTP 401로 거부됐다. `/v1` 응답에는 `Cache-Control: private, no-store, max-age=0`가 적용된다. 새 확인 전용 흐름은 [PACS 연동 문서](../../docs/PACS_공동인증서_확인전용_연동.md)에 설명한다. 운영 기능 표시는 여전히 `clinicalUseAllowed: false`이며 임상 사용 적합성 승인을 뜻하지 않는다.
 
 Firebase Google 로그인을 활성화하고 `egparadise@gmail.com`의 최초 관리자 등록을 설정했다. 운영 DB에 관리자가 없을 때 이 계정의 검증된 Google 로그인으로 한 번만 관리자 주체를 만든다. 2026-10-19 새 주소에서 해당 계정의 Google 로그인과 `ADMIN` 대시보드 표시를 확인했다. 브라우저의 기존 개발용 관리자 ID/PW와 모의 SMS 가입은 이 `prod` API에서 허용되지 않는다. 개발 DB의 기존 의사·로그인 상태는 운영 DB로 자동 이전하지 않았다. 실제 의사와 의료기관 데이터는 검증 후 별도로 등록해야 한다.
 

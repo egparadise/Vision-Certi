@@ -67,6 +67,7 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
         return !path.startsWith("/v1/") || path.equals("/v1/health") || path.equals("/v1/runtime/capabilities")
                 || (path.equals("/v1/dev-admin/sessions") && "POST".equals(request.getMethod()))
                 || isPublicEnrollmentRoute(request, path)
+                || isPacsCertificateProofPublicRoute(request, path)
                 || isPhysicianRoute(request, path) || path.startsWith(IntegrationAuthFilter.PREFIX);
     }
 
@@ -90,6 +91,13 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
                 && (path.equals("/v1/enrollment/phone-challenges")
                         || path.equals("/v1/enrollment/registrations")
                         || PUBLIC_VERIFY_ROUTE.matcher(path).matches());
+    }
+
+    /** Certificate-only PACS proof is public; the subsequent redeem/status routes still require PACS HMAC. */
+    static boolean isPacsCertificateProofPublicRoute(HttpServletRequest request, String path) {
+        return "POST".equals(request.getMethod())
+                && (path.equals("/v1/pacs-certificate-proofs/challenges")
+                        || path.equals("/v1/pacs-certificate-proofs/verify"));
     }
 
     @Override

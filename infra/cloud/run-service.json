@@ -30,7 +30,7 @@
     "containers": [
       {
         "name": "api",
-        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:d9c1b26435410d2ac8dc2f082cca4bbd17832483d5592912bcb28a74f5e42a1c",
+        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:1e819dd7617f38cc756994c590664003338e0bcef79079ff92f955b54fe2db98",
         "ports": [
           {
             "containerPort": 8080,
@@ -40,7 +40,7 @@
         "env": [
           {
             "name": "VISIONCERTI_DEPLOY_ID",
-            "value": "2026-10-19-google-admin"
+            "value": "2026-10-20-pacs-proof-routes"
           },
           {
             "name": "VISIONCERTI_PERSISTENCE_MODE",

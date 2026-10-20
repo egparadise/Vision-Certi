@@ -18,6 +18,7 @@ import { CertificateEnrollmentView } from './components/CertificateEnrollmentVie
 import { CertificateLoginView } from './components/CertificateLoginView';
 import { PersonalCertificateRegistration } from './components/PersonalCertificateRegistration';
 import { PacsCertificateEnrollment } from './components/PacsCertificateEnrollment';
+import { PacsCertificateProof } from './components/PacsCertificateProof';
 import { PacsCertificateLogin } from './components/PacsCertificateLogin';
 import { AdminConsole, adminSectionFromHash } from './components/admin/AdminConsole';
 import { LocalAdminLogin } from './components/admin/LocalAdminLogin';
@@ -172,6 +173,10 @@ export const App: React.FC = () => {
 
   if (hash.startsWith('#/certificates/pacs-login')) {
     return <main className="personal-certificate-page"><PacsCertificateLogin /></main>;
+  }
+
+  if (hash.startsWith('#/certificates/pacs-proof')) {
+    return <main className="personal-certificate-page"><PacsCertificateProof /></main>;
   }
 
   if (hash.startsWith('#/doctor/sign-requests')) {

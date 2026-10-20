@@ -31,7 +31,8 @@ with psycopg.connect(**owner,dbname='postgres',autocommit=True) as c:
         c.execute('CREATE DATABASE vision_certi_local')
 migrations=[ROOT/'database/migrations'/name for name in (
     'V005__production_runtime.sql', 'V006__pacs_self_enrollment.sql', 'V007__physician_accounts.sql',
-    'V008__admin_system_settings.sql', 'V009__medical_institutions.sql')]
+    'V008__admin_system_settings.sql', 'V009__medical_institutions.sql',
+    'V010__pacs_certificate_proofs.sql')]
 checksums={m.name:hashlib.sha256(m.read_bytes()).hexdigest() for m in migrations}
 with psycopg.connect(**owner,dbname='vision_certi_local') as c:
     c.execute('CREATE TABLE IF NOT EXISTS public.vc_local_migrations(name text PRIMARY KEY,sha256 text NOT NULL)')
@@ -45,7 +46,7 @@ with psycopg.connect(**owner,dbname='vision_certi_local') as c:
             target=int(migration.name[1:4])
             if current and current[0] >= target:
                 # A pre-ledger local upgrade may already have applied this migration. Check its unique table.
-                expected={8:'system_settings',9:'medical_institutions'}.get(target)
+                expected={8:'system_settings',9:'medical_institutions',10:'pacs_certificate_proofs'}.get(target)
                 if not expected or not c.execute('SELECT to_regclass(%s)',(f'certi_rt.{expected}',)).fetchone()[0]:
                     raise RuntimeError(f'Untracked migration {migration.name} needs manual review')
             else:

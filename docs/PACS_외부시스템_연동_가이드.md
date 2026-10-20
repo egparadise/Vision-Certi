@@ -1,5 +1,7 @@
 # 외부 PACS ↔ Vision-Certi 공동인증·판독 전자서명 연동 가이드
 
+> PACS가 자체 ID/PW를 인증하고 Vision-Certi는 공동인증서만 확인하는 신규 방식은 [PACS 공동인증서 확인 전용 연동](PACS_공동인증서_확인전용_연동.md)을 사용한다. 아래 내용은 기존 의사 등록·전자서명 연동 방식이다.
+
 > 공개 운영 주소: `https://vision-certi.web.app` (HTTPS/TCP 443), API 기본 주소: `https://vision-certi.web.app/v1`. 현재 배포 설정과 운영상 제약은 [공개 PACS 연결 안내](PUBLIC_PACS_CONNECTION.md)를 참조한다.
 
 검증 기준일: 2026-10-19. 이 문서는 **다른 PACS의 개발자가 현재 구현된 API에 연결**하기 위한 계약이다. 아래 공개 주소는 실제 클라우드 배포 주소다. 관리자 OIDC·의사 자격 승인과 임상 사용 적합성은 아직 완료되지 않았다.

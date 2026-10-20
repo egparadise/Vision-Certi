@@ -12,7 +12,8 @@ export type EnrollmentReviewMethod = 'ADMIN_REVIEW' | 'EXPECTED_FINGERPRINT' | n
 
 export type CertificateChallengePurpose =
   | 'CERTIFICATE_ENROLLMENT'
-  | 'CERTIFICATE_LOGIN';
+  | 'CERTIFICATE_LOGIN'
+  | 'PACS_CERTIFICATE_PROOF';
 
 export interface PcCertificateConfig {
   trustConfigured: boolean;

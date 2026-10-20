@@ -73,6 +73,7 @@ public class StaffAuthFilter extends OncePerRequestFilter implements Ordered {
         return ("GET".equals(request.getMethod())
                         && (path.equals("/v1/health") || path.equals("/v1/runtime/capabilities")))
                 || DevHeaderAuthFilter.isPublicEnrollmentRoute(request, path)
+                || DevHeaderAuthFilter.isPacsCertificateProofPublicRoute(request, path)
                 || DevHeaderAuthFilter.isPhysicianRoute(request, path)
                 || path.startsWith(IntegrationAuthFilter.PREFIX);
     }

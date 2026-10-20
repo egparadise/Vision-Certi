@@ -714,6 +714,27 @@ export class ApiClient {
     } finally { window.clearTimeout(timeout); }
   }
 
+  /** PACS-only certificate possession check; no Vision-Certi doctor account is required. */
+  async createPacsCertificateProofChallenge(audience: string): Promise<CertificateChallenge> {
+    const res = await fetch(`${this.baseUrl}/pacs-certificate-proofs/challenges`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audience }),
+    });
+    return this.handleResponse<CertificateChallenge>(res);
+  }
+
+  async verifyPacsCertificateProof(req: CertificateLoginRequest): Promise<{
+    verificationCode: string; audience: string; expiresAt: string;
+  }> {
+    const res = await fetch(`${this.baseUrl}/pacs-certificate-proofs/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    return this.handleResponse(res);
+  }
+
   async getMedicalInstitutions(): Promise<MedicalInstitution[]> {
     return this.adminJson<MedicalInstitution[]>('/admin/medical-institutions', 'GET');
   }

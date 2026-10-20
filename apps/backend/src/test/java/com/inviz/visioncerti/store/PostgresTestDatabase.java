@@ -138,6 +138,7 @@ public final class PostgresTestDatabase {
                 + Files.readString(file.resolveSibling("V006__pacs_self_enrollment.sql"), StandardCharsets.UTF_8) + "\n"
                 + Files.readString(file.resolveSibling("V007__physician_accounts.sql"), StandardCharsets.UTF_8) + "\n"
                 + Files.readString(file.resolveSibling("V008__admin_system_settings.sql"), StandardCharsets.UTF_8) + "\n"
-                + Files.readString(file.resolveSibling("V009__medical_institutions.sql"), StandardCharsets.UTF_8);
+                + Files.readString(file.resolveSibling("V009__medical_institutions.sql"), StandardCharsets.UTF_8) + "\n"
+                + Files.readString(file.resolveSibling("V010__pacs_certificate_proofs.sql"), StandardCharsets.UTF_8);
     }
 }

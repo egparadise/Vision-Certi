@@ -1,6 +1,7 @@
 package com.inviz.visioncerti.integration;
 
 import com.inviz.visioncerti.audit.AuditService;
+import com.inviz.visioncerti.certificate.CertificateValidator;
 import com.inviz.visioncerti.common.IdempotencyService;
 import com.inviz.visioncerti.doctor.DoctorService;
 import com.inviz.visioncerti.document.DocumentService;
@@ -23,6 +24,13 @@ public class PacsIntegrationConfig {
             @Value("${visioncerti.pacs.audience:}") String audience,
             @Value("${visioncerti.pacs.tenant-ids:}") String tenantIds) {
         return IntegrationClients.fromConfig(clientId, secretFile, secret, audience, tenantIds);
+    }
+
+    @Bean
+    PacsCertificateProofService pacsCertificateProofService(IntegrationClients clients,
+            CertificateValidator validator, DoctorService doctors, AuditService audit, Clock clock,
+            @Value("${visioncerti.cert.service-id:vision-certi-dev}") String serviceId) {
+        return new PacsCertificateProofService(clients, validator, doctors, audit, clock, serviceId);
     }
 
     @Bean

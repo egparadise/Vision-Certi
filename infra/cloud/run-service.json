@@ -30,7 +30,7 @@
     "containers": [
       {
         "name": "api",
-        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:1e819dd7617f38cc756994c590664003338e0bcef79079ff92f955b54fe2db98",
+        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:34dadd24607016f1f0a1cca123c1459e38e785723699a6eec9a35164b24e21d9",
         "ports": [
           {
             "containerPort": 8080,

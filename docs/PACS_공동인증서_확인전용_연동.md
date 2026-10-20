@@ -56,4 +56,8 @@ PACS는 현재 로그인 계정과 연결된 `verificationId`를 HMAC 인증으�
 
 ## 현재 설치형 PACS 적용 범위
 
-Vision-Certi 서버와 웹 팝업의 위 API/화면은 이 소스에 추가되었다. 이 PC에 설치된 SaintViewPACS 3.3.46은 아직 일반 `#/login`을 열며, 설치형 PACS의 소스/배포본은 이 작업 공간에 없다. 해당 PACS가 `#/certificates/pacs-proof` 호출, 코드 교환, 로컬 계정 연결 및 승인 시 상태 조회를 구현하고 새 버전으로 배포해야 실제 로그인 흐름이 바뀐다.
+Vision-Certi 서버와 웹 팝업의 위 API/화면은 이 소스에 추가되었다. 과거에 확인한 SaintViewPACS 3.3.46은 일반 `#/login`을 열었다. 설치형 PACS의 빌드 가능한 소스는 이 작업 공간에 없다. PACS가 `#/certificates/pacs-proof` 호출, 코드 교환, 로컬 계정 연결 및 승인 시 상태 조회를 구현하고 새 버전으로 배포해야 실제 로그인 흐름이 바뀐다.
+
+2026-10-21 재점검한 설치형 앱은 **3.40-SP4**다. `http://tauri.localhost/index.html#/login` 화면은 로컬 브로커의 `clientId` 및 서버 연결 설정이 없다는 경고를 표시했고, 별도 인증 창은 흰 화면이었다. 운영 API와 PACS API의 공개 health 경로는 모두 HTTP 200이어서 네트워크 단절로 단정할 수 없다. 로컬 브로커 설정 복구·연결 진단 도구는 [설치형 PACS 설정 패치](../infra/pacs_patch/README.md)를 따른다. 해당 도구는 네이티브 창 코드나 서버 간 HMAC 연동을 대신하지 않는다.
+
+인증 웹 화면은 팝업에서 `window.opener`로 PACS에 일회용 확인 코드를 전달한다. 설치형 Tauri가 별도 WebView 창을 생성할 때 브라우저의 `window.opener` 관계가 생기는지는 현재 배포본에서 확인되지 않았다. PACS 구현자는 인증 창의 실제 탐색 URL, 페이지 로드 실패 이벤트, 팝업과 본창의 메시지 전달 및 서버 간 코드 교환을 함께 확인해야 한다. 화면이 흰색인 원인을 단일 항목으로 확정하지 않는다.

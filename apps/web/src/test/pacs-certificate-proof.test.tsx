@@ -2,10 +2,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PacsCertificateProof } from '../components/PacsCertificateProof';
 
-const mocks = vi.hoisted(() => ({ start: vi.fn(), verify: vi.fn() }));
-vi.mock('../context/AppContext', () => ({ useApp: () => ({ client: {
-  createPacsCertificateProofChallenge: mocks.start, verifyPacsCertificateProof: mocks.verify,
-} }) }));
+const mocks = vi.hoisted(() => {
+  const start = vi.fn();
+  const verify = vi.fn();
+  return { start, verify, client: {
+    createPacsCertificateProofChallenge: start, verifyPacsCertificateProof: verify,
+  } };
+});
+vi.mock('../context/AppContext', () => ({ useApp: () => ({ client: mocks.client }) }));
 vi.mock('../utils/cryptoCert', () => ({ computeCertificateFingerprint: async () => 'f'.repeat(64) }));
 vi.mock('../components/ExternalCertificateProof', () => ({
   ExternalCertificateProof: ({ onProof }: { onProof: (value: object) => Promise<void> }) =>

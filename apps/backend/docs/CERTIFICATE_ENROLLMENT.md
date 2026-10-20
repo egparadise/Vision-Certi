@@ -189,17 +189,19 @@ Physician signature evidence gains two fields, additively: `certificateEnrollmen
 
 No network access is ever made from certificate contents (no CRL DP/AIA/OCSP fetch). OCSP is not implemented.
 
-**CRL scope (fail closed).** Only complete, direct, unpartitioned base CRLs are interpreted. The status becomes
+**CRL scope (fail closed).** Complete, direct base CRLs are interpreted. An `issuingDistributionPoint` with an exact
+full-name match to a certificate CRL distribution point is supported when neither side restricts reasons or names a
+different CRL issuer; no network fetch occurs. The status becomes
 UNKNOWN (`503 CERTIFICATE_REVOCATION_UNAVAILABLE`) when any CRL that is signed by the issuer:
 - is a delta CRL (`deltaCRLIndicator`);
-- has an `issuingDistributionPoint`: a partition, a reason subset or `indirectCRL`;
+- has an unmatched, reason-scoped or indirect `issuingDistributionPoint`;
 - advertises delta CRLs (`freshestCRL`);
-- has a critical extension other than CRL number or authority key identifier;
+- has a critical extension other than CRL number, authority key identifier or a matched issuing distribution point;
 - has a revoked entry with any critical extension or `certificateIssuer`.
 
 Such a CRL is **not** skipped in favour of an older complete CRL. The certificate is REVOKED when it is listed in any
 authentic, interpretable CRL. A CRL under the same issuer name that is not signed by the issuer key is ignored. If
-your CA publishes only partitioned/IDP CRLs, enrollment fails closed until scope-aware CRL processing is added.
+your CA publishes only unsupported reason-scoped or indirect CRLs, enrollment fails closed.
 
 **Trust anchors.** An anchor is used only if all of these hold:
 - it is currently valid;
@@ -225,7 +227,7 @@ unregister invalidation and re-enrollment, DER fingerprint reissue, login finger
 gate with stale CRL, unsigned/forged/replayed mobile callbacks, mobile single-use consume, mobile 503.
 `CertificateRevocationScopeTest` covers:
 - a signed fresh empty delta CRL, alone or with an older base CRL → UNKNOWN;
-- IDP partition, reason-subset and indirect CRLs, and `freshestCRL` → UNKNOWN;
+- matching IDP full-name CRL → GOOD or REVOKED; unmatched IDP, reason-subset and indirect CRLs, and `freshestCRL` → UNKNOWN;
 - unknown critical CRL extension, and critical/`certificateIssuer` entry extensions → UNKNOWN;
 - a forged delta is ignored, and a revocation in a full CRL wins over an omitting delta;
 - expired, not-yet-valid and no-keyCertSign anchors → UNTRUSTED;

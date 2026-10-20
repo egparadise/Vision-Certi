@@ -35,6 +35,11 @@ import org.bouncycastle.asn1.ASN1Primitive;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.DERIA5String;
 import org.bouncycastle.asn1.x509.CertificatePolicies;
+import org.bouncycastle.asn1.x509.CRLDistPoint;
+import org.bouncycastle.asn1.x509.DistributionPoint;
+import org.bouncycastle.asn1.x509.DistributionPointName;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.IssuingDistributionPoint;
 import org.bouncycastle.asn1.x509.PolicyInformation;
 import org.bouncycastle.asn1.x509.PolicyQualifierId;
 import org.bouncycastle.asn1.x509.PolicyQualifierInfo;
@@ -51,10 +56,10 @@ import org.springframework.http.HttpStatus;
  * pathLenConstraint is enforced; the JDK builder does not check any of this for anchors;</li>
  * <li>revocation of every path element against configured CRLs: CRL signature by the issuer (cRLSign), issuer name,
  * {@code thisUpdate ≤ now < nextUpdate}. Missing → UNKNOWN, expired → STALE, listed → REVOKED.</li>
- * <li>CRL scope: only complete, direct, unpartitioned base CRLs are understood. Any authentic CRL for the issuer
- * that is a delta CRL, carries an issuingDistributionPoint (partition, reason subset, indirect), advertises deltas
- * (freshestCRL), has an unknown critical extension, or has a revoked entry with a critical extension or
- * certificateIssuer makes the status UNKNOWN (fail closed); it is never skipped in favour of an older full CRL.</li>
+ * <li>CRL scope: complete, direct base CRLs are understood, including an issuingDistributionPoint whose full name
+ * exactly matches a certificate CRL distribution point without reason or issuer restrictions. Delta CRLs, unmatched
+ * or reason-scoped IDPs, indirect CRLs, freshestCRL, unknown critical extensions and critical/indirect entries yield
+ * UNKNOWN (fail closed); they are never skipped in favour of an older full CRL.</li>
  * </ul>
  * No network access is made from certificate contents (no CRL distribution point, AIA or OCSP fetch).
  */
@@ -372,7 +377,7 @@ public class CertificateValidator {
         // A listing in any authentic, fully understood CRL is definitive, whatever its date. (A listing in a
         // delta/partitioned CRL may be a removeFromCRL entry, so it only yields UNKNOWN below.)
         for (X509CRL crl : authentic) {
-            if (!supportedScope(crl)) {
+            if (!supportedScope(crl, cert)) {
                 continue;
             }
             X509CRLEntry entry = crl.getRevokedCertificate(cert);
@@ -383,7 +388,7 @@ public class CertificateValidator {
         }
         // Signed evidence whose scope this validator cannot interpret: fail closed, never fall back to an older CRL.
         for (X509CRL crl : authentic) {
-            if (!supportedScope(crl)) {
+            if (!supportedScope(crl, cert)) {
                 return RevocationStatus.UNKNOWN;
             }
         }
@@ -408,18 +413,21 @@ public class CertificateValidator {
     static final String DELTA_CRL_INDICATOR = "2.5.29.27";
     static final String ISSUING_DISTRIBUTION_POINT = "2.5.29.28";
     static final String FRESHEST_CRL = "2.5.29.46";
-    /** Critical CRL extensions that do not change scope: CRL number, authority key identifier. */
-    private static final Set<String> HARMLESS_CRITICAL = Set.of("2.5.29.20", "2.5.29.35");
+    /** IssuingDistributionPoint is accepted only after exact matching with the certificate's CRL DP. */
+    private static final Set<String> UNDERSTOOD_CRITICAL = Set.of("2.5.29.20", "2.5.29.35",
+            ISSUING_DISTRIBUTION_POINT);
 
-    /** True only for a complete, direct, unpartitioned base CRL without unknown critical (entry) extensions. */
-    static boolean supportedScope(X509CRL crl) {
+    /** True only for a complete, direct CRL covering this certificate, without unknown critical extensions. */
+    static boolean supportedScope(X509CRL crl, X509Certificate cert) {
         if (crl.getExtensionValue(DELTA_CRL_INDICATOR) != null
-                || crl.getExtensionValue(ISSUING_DISTRIBUTION_POINT) != null
                 || crl.getExtensionValue(FRESHEST_CRL) != null) {
             return false;
         }
+        if (crl.getExtensionValue(ISSUING_DISTRIBUTION_POINT) != null && !idpMatchesCertificate(crl, cert)) {
+            return false;
+        }
         Set<String> critical = crl.getCriticalExtensionOIDs();
-        if (critical != null && !HARMLESS_CRITICAL.containsAll(critical)) {
+        if (critical != null && !UNDERSTOOD_CRITICAL.containsAll(critical)) {
             return false;
         }
         Set<? extends X509CRLEntry> entries = crl.getRevokedCertificates();
@@ -432,6 +440,28 @@ public class CertificateValidator {
             }
         }
         return true;
+    }
+
+    private static boolean idpMatchesCertificate(X509CRL crl, X509Certificate cert) {
+        try {
+            IssuingDistributionPoint idp = IssuingDistributionPoint.getInstance(ASN1Primitive.fromByteArray(
+                    ASN1OctetString.getInstance(crl.getExtensionValue(ISSUING_DISTRIBUTION_POINT)).getOctets()));
+            if (idp.onlyContainsUserCerts() || idp.onlyContainsCACerts() || idp.onlyContainsAttributeCerts()
+                    || idp.isIndirectCRL() || idp.getOnlySomeReasons() != null) return false;
+            DistributionPointName name = idp.getDistributionPoint();
+            if (name == null || name.getType() != DistributionPointName.FULL_NAME) return false;
+            byte[] encoded = cert.getExtensionValue(Extension.cRLDistributionPoints.getId());
+            if (encoded == null) return false;
+            CRLDistPoint points = CRLDistPoint.getInstance(ASN1Primitive.fromByteArray(
+                    ASN1OctetString.getInstance(encoded).getOctets()));
+            for (DistributionPoint point : points.getDistributionPoints()) {
+                if (point.getCRLIssuer() == null && point.getReasons() == null
+                        && name.equals(point.getDistributionPoint())) return true;
+            }
+            return false;
+        } catch (RuntimeException | java.io.IOException e) {
+            return false;
+        }
     }
 
     private static byte[] decode(String base64, int maxBytes, String field) {

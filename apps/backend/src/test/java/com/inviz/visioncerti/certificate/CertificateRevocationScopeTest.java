@@ -127,6 +127,32 @@ class CertificateRevocationScopeTest {
     }
 
     @Test
+    void issuerDistributionPointMustMatchCertificateDistributionPoint() {
+        String uri = "ldap://ca.example.invalid/ou=issuer?certificateRevocationList";
+        X509Certificate withDp = pki.leafWithCrlDistributionPoint(TestPki.rsa(2048), uri).certificate();
+        DistributionPointName matchingName = new DistributionPointName(new GeneralNames(
+                new GeneralName(GeneralName.uniformResourceIdentifier, uri)));
+        X509CRL matching = issuingCrl(now.minusSeconds(30), b -> ext(b,
+                Extension.issuingDistributionPoint, true,
+                new IssuingDistributionPoint(matchingName, false, false, null, false, false)));
+        assertThat(CertificateValidator.statusOf(withDp, pki.intermediate.certificate(), List.of(matching), now))
+                .isEqualTo(RevocationStatus.GOOD);
+        X509CRL revoked = issuingCrl(now.minusSeconds(30), b -> ext(b,
+                Extension.issuingDistributionPoint, true,
+                new IssuingDistributionPoint(matchingName, false, false, null, false, false)), withDp);
+        assertThat(CertificateValidator.statusOf(withDp, pki.intermediate.certificate(), List.of(revoked), now))
+                .isEqualTo(RevocationStatus.REVOKED);
+
+        DistributionPointName otherName = new DistributionPointName(new GeneralNames(
+                new GeneralName(GeneralName.uniformResourceIdentifier, "ldap://ca.example.invalid/other")));
+        X509CRL other = issuingCrl(now.minusSeconds(30), b -> ext(b,
+                Extension.issuingDistributionPoint, true,
+                new IssuingDistributionPoint(otherName, false, false, null, false, false)));
+        assertThat(CertificateValidator.statusOf(withDp, pki.intermediate.certificate(), List.of(other), now))
+                .isEqualTo(RevocationStatus.UNKNOWN);
+    }
+
+    @Test
     void unknownCriticalCrlOrEntryExtensionIsUnknown() {
         X509CRL criticalCrlExt = issuingCrl(now.minusSeconds(30),
                 b -> ext(b, new ASN1ObjectIdentifier("1.3.6.1.4.1.99999.1"), true, DERNull.INSTANCE));

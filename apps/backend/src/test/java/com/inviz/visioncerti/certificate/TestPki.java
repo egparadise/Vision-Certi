@@ -21,7 +21,12 @@ import java.util.function.Consumer;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.CRLReason;
+import org.bouncycastle.asn1.x509.CRLDistPoint;
+import org.bouncycastle.asn1.x509.DistributionPoint;
+import org.bouncycastle.asn1.x509.DistributionPointName;
 import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.cert.X509v2CRLBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CRLConverter;
@@ -132,6 +137,27 @@ public final class TestPki {
                 new X500Name("CN=Dr Test " + serials.get() + ",O=Synthetic Hospital"), keys, notBefore, notAfter,
                 false, keyUsage);
         return new Leaf(keys, cert);
+    }
+
+    public Leaf leafWithCrlDistributionPoint(KeyPair keys, String uri) {
+        Instant now = clock.instant();
+        try {
+            JcaX509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
+                    new X500Name(intermediate.name()), BigInteger.valueOf(serials.incrementAndGet()),
+                    Date.from(now.minus(Duration.ofDays(1))), Date.from(now.plus(Duration.ofDays(365))),
+                    new X500Name("CN=Dr Distribution Point,O=Synthetic Hospital"), keys.getPublic());
+            builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));
+            builder.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature));
+            DistributionPointName name = new DistributionPointName(new GeneralNames(
+                    new GeneralName(GeneralName.uniformResourceIdentifier, uri)));
+            builder.addExtension(Extension.cRLDistributionPoints, false,
+                    new CRLDistPoint(new DistributionPoint[] {new DistributionPoint(name, null, null)}));
+            X509Certificate cert = new JcaX509CertificateConverter().getCertificate(
+                    builder.build(new JcaContentSignerBuilder("SHA256withRSA").build(intermediate.keys().getPrivate())));
+            return new Leaf(keys, cert);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /** A CRL from {@code issuer}, valid [thisUpdate, nextUpdate), listing the given certificates as revoked. */

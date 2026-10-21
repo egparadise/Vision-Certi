@@ -19,7 +19,8 @@ Copy-Item -LiteralPath (Join-Path $forgeRoot 'LICENSE') -Destination (Join-Path 
 Copy-Item -LiteralPath (Join-Path $forgeRoot 'lib') -Destination (Join-Path $stageRoot 'node_modules\korea-forge\lib') -Recurse
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-VisionCertiBridge.ps1') -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Start-VisionCertiBridge.ps1') -Destination $stageRoot
-foreach ($name in @('Install-VisionCertiBridge.ps1', 'Start-VisionCertiBridge.ps1')) {
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Bridge-Setup.ps1') -Destination $stageRoot
+foreach ($name in @('Install-VisionCertiBridge.ps1', 'Start-VisionCertiBridge.ps1', 'Bridge-Setup.ps1')) {
     $path = Join-Path $stageRoot $name
     $contents = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
     [System.IO.File]::WriteAllText($path, $contents, (New-Object System.Text.UTF8Encoding($true)))
@@ -35,7 +36,7 @@ Get-ChildItem -LiteralPath $stageRoot -Recurse -File | Where-Object { $_.Name -n
     $relative = $_.FullName.Substring($stageRoot.Length + 1)
     $hashes[$relative] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 }
-@{ version = '0.1.0'; nodeVersion = $nodeVersion; files = $hashes } | ConvertTo-Json -Depth 5 |
+@{ version = '0.1.1'; nodeVersion = $nodeVersion; files = $hashes } | ConvertTo-Json -Depth 5 |
     Set-Content -LiteralPath (Join-Path $stageRoot 'manifest.json') -Encoding utf8
 
 $downloads = Join-Path $webRoot 'public\downloads'

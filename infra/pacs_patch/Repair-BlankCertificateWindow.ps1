@@ -36,6 +36,10 @@ $runtimeRoot = Join-Path $programFilesX86 'Microsoft\EdgeWebView\Application'
 $runtimeVersions = @(Get-ChildItem -LiteralPath $runtimeRoot -Directory -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -ExpandProperty Name)
 $pacsRunning = [bool](Get-Process -Name 'saint-pacs-tauri' -ErrorAction SilentlyContinue)
+$pacsExe = Join-Path $env:ProgramFiles 'SaintViewPACS\saint-pacs-tauri.exe'
+$pacsVersion = if (Test-Path -LiteralPath $pacsExe -PathType Leaf) {
+    (Get-Item -LiteralPath $pacsExe).VersionInfo.FileVersion
+} else { $null }
 $moved = @()
 $cacheNames = @('Default\Cache', 'Default\Code Cache', 'Default\GPUCache', 'Default\Service Worker\CacheStorage')
 
@@ -74,6 +78,7 @@ if ($RepairCache) {
     localBrokerHttp = $broker.status
     localCertificateBridgeHttp = $bridge.status
     webView2Versions = $runtimeVersions
+    pacsVersion = $pacsVersion
     webViewProfilePresent = (Test-Path -LiteralPath $profileRoot -PathType Container)
     pacsRunning = $pacsRunning
     cacheBackups = $moved

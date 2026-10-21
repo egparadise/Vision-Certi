@@ -20,6 +20,8 @@
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [{ "source": "/v1/**", "run": { "serviceId": "vision-certi-api", "region": "asia-northeast3" } }],
       "headers": [
+        { "source": "/", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
+        { "source": "**/*.html", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/v1/**", "headers": [{ "key": "Cache-Control", "value": "no-store, private" }] },
         { "source": "/downloads/**", "headers": [{ "key": "Content-Disposition", "value": "attachment; filename=vision-certi-bridge-win-x64.zip" }] },
         { "source": "**", "headers": [
@@ -34,6 +36,8 @@
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [{ "source": "/v1/**", "run": { "serviceId": "vision-certi-api", "region": "asia-northeast3" } }],
       "headers": [
+        { "source": "/", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
+        { "source": "**/*.html", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/v1/**", "headers": [{ "key": "Cache-Control", "value": "no-store, private" }] },
         { "source": "**", "headers": [
           { "key": "X-Content-Type-Options", "value": "nosniff" },

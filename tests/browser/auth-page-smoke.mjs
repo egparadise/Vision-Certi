@@ -6,12 +6,18 @@ const base = process.env.VISION_CERTI_BASE_URL || 'https://vision-certi.web.app'
 const root = await fetch(`${base}/`, { cache: 'no-store' });
 assert.equal(root.status, 200);
 assert.match(root.headers.get('cache-control') || '', /no-store/);
+const currentHtml = await root.text();
+const missingAssetHtml = currentHtml
+  .replace(/\/assets\/index-[A-Za-z0-9_-]+\.js/, '/assets/index-stale-missing.js')
+  .replace(/\/assets\/index-[A-Za-z0-9_-]+\.css/, '/assets/index-stale-missing.css');
+assert.notEqual(missingAssetHtml, currentHtml);
 
 const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
 try {
   const scenarios = [
     { route: '#/login' },
     { route: '#/certificates/pacs-login' },
+    { route: '#/login', html: missingAssetHtml },
   ];
   if (process.env.STALE_AUTH_INDEX_HTML) {
     scenarios.push({ route: '#/login', html: await readFile(process.env.STALE_AUTH_INDEX_HTML, 'utf8') });

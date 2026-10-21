@@ -35,6 +35,12 @@ try {
     console.log(JSON.stringify({ route, staleHtml: Boolean(html), status: response?.status(), body, errors, failed }));
     await page.close();
   }
+  const failedPage = await browser.newPage();
+  await failedPage.route('**/assets/index-*.js', request => request.abort());
+  await failedPage.goto(`${base}/#/login`, { waitUntil: 'domcontentloaded' });
+  await failedPage.getByRole('alert').getByText('인증 화면을 불러오지 못했습니다.').waitFor({ timeout: 15000 });
+  console.log(JSON.stringify({ scenario: 'missing JavaScript', recoveryMessage: true }));
+  await failedPage.close();
 } finally {
   await browser.close();
 }

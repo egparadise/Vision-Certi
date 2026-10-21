@@ -16,7 +16,30 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div data-vc-startup role="status" style="max-width:36rem;margin:3rem auto;padding:1.5rem;font:16px/1.6 sans-serif;color:#153153">
+        인증 화면을 불러오는 중입니다.
+      </div>
+    </div>
+    <script>
+      window.setTimeout(() => {
+        const root = document.getElementById('root');
+        if (!root || (root.childElementCount > 0 && !root.querySelector('[data-vc-startup]'))) return;
+        const status = document.createElement('div');
+        status.setAttribute('role', 'alert');
+        status.style.cssText = 'max-width:36rem;margin:3rem auto;padding:1.5rem;font:16px/1.6 sans-serif;color:#153153';
+        const title = document.createElement('strong');
+        title.textContent = '인증 화면을 불러오지 못했습니다.';
+        const help = document.createElement('p');
+        help.textContent = '네트워크를 확인한 뒤 다시 시도해 주세요. 계속되면 이 창을 닫고 PACS에서 공동인증서 로그인을 다시 시작해 주세요.';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = '다시 시도';
+        retry.addEventListener('click', () => window.location.reload());
+        status.append(title, help, retry);
+        root.replaceChildren(status);
+      }, 10000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

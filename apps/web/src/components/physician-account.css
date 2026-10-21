@@ -33,6 +33,9 @@
 .account-proof .cert-bridge-setup a { color:#0369a1; font-weight:700; }
 .account-proof .cert-bridge-setup button { justify-self:start; padding:8px 12px; border:1px solid #0284c7; border-radius:6px; background:#fff; color:#075985; cursor:pointer; }
 .account-proof .cert-bridge-setup small { color:#536b7c; line-height:1.45; }
+.account-proof .cert-install-guide { display:grid; gap:8px; padding:12px; border:1px solid #a6cce8; border-radius:6px; background:#fff; }
+.account-proof .cert-install-guide ol { margin:0; padding-left:22px; line-height:1.65; }
+.account-proof .cert-install-guide code { overflow-wrap:anywhere; }
 .cert-manual { margin:16px 0 18px; border:1px solid #d9e4ed; border-radius:6px; padding:10px 14px; }
 .cert-manual summary { cursor:pointer; color:#075b8a; font-weight:600; }
 .cert-manual[open] summary { margin-bottom:16px; }

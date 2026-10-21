@@ -864,7 +864,8 @@ export const CertificateEnrollmentView: React.FC<{
           )}
 
           {proofMethod === 'external' ? <ExternalCertificateProof key={challenge.challengeId} challenge={challenge}
-            busy={loading || configLoading || !config?.pcCertificate.trustConfigured} onProof={submitSdkProof} /> : <CertificateSecurityStep key={challenge.challengeId} challenge={challenge} busy={loading || configLoading || !config || !config.pcCertificate.trustConfigured}
+            busy={loading || configLoading || !config?.pcCertificate.trustConfigured} onProof={submitSdkProof}
+            onRestart={!initialChallenge && authMode === 'PC_LOGIN' ? () => { void handleRequestChallenge('CERTIFICATE_LOGIN'); } : undefined} /> : <CertificateSecurityStep key={challenge.challengeId} challenge={challenge} busy={loading || configLoading || !config || !config.pcCertificate.trustConfigured}
             onProof={submitSdkProof} onRestart={initialChallenge ? undefined : () => { if (authMode === 'PC_LOGIN') void handleRequestChallenge('CERTIFICATE_LOGIN'); else void handleStartRenewal(); }} onExpired={() => setError(initialChallenge
               ? '인증 시간이 만료되었습니다. 가입 화면 또는 PACS에서 새 인증서 등록 요청을 시작해주세요.'
               : '인증 시간이 만료되었습니다. 처음으로 돌아가 새 인증 요청을 받아주세요.')} />}

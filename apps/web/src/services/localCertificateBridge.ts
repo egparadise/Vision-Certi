@@ -3,6 +3,22 @@ import type { CertificateMedium, DiscoveredCertificate } from './localCertificat
 
 const BRIDGE = 'http://127.0.0.1:18187';
 
+/** Check only the local process, without rescanning an entire drive. */
+export async function probeLocalCertificateBridge(): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(`${BRIDGE}/v1/certificates`, {
+      method: 'OPTIONS', mode: 'cors', credentials: 'omit', cache: 'no-store', signal: controller.signal,
+    });
+    return response.status === 204;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export interface BridgeCertificate extends Omit<DiscoveredCertificate, 'getFiles'> {
   source: 'LOCAL_BRIDGE';
   sign(password: string, payloadBase64: string): Promise<LocalSignResult>;

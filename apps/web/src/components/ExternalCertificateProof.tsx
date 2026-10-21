@@ -5,7 +5,7 @@ import { CertificateVirtualKeyboard } from './CertificateVirtualKeyboard';
 import type { CertificateChallenge } from '../types/api';
 import type { LocalSignResult } from '../services/localCertSdkAdapter';
 import { PASSWORD_MISMATCH, signWithCertificateFiles, type CertificateFiles } from '../services/certificateFileSigner';
-import { discoverBridgeCertificates, type BridgeCertificate } from '../services/localCertificateBridge';
+import { discoverBridgeCertificates, probeLocalCertificateBridge, type BridgeCertificate } from '../services/localCertificateBridge';
 import { getRememberedDirectory, rememberDirectory, scanCertificateDirectory,
   type CertificateMedium, type DiscoveredCertificate, type ReadableDirectoryHandle } from '../services/localCertificateDiscovery';
 import './physician-account.css';
@@ -18,9 +18,10 @@ const MEDIA_LABEL: Record<CertificateMedium, string> = { 'hard-disk': '하드디
 type CertificateChoice = DiscoveredCertificate | BridgeCertificate;
 
 /** The server-supplied exact bytes are signed locally; only public proof fields reach INVIZ. */
-export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, actionLabel, busy, onProof, onCancel }: {
+export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, actionLabel, busy, onProof, onCancel, onRestart }: {
   challenge?: CertificateChallenge; payloadBase64?: string; expiresAt?: string; actionLabel?: string;
   busy: boolean; onProof: (proof: LocalSignResult) => Promise<void>; onCancel?: () => void;
+  onRestart?: () => void;
 }) {
   const [medium, setMedium] = useState<CertificateMedium>('hard-disk');
   const [directories, setDirectories] = useState<Partial<Record<CertificateMedium, ReadableDirectoryHandle>>>({});
@@ -32,6 +33,9 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   const [scanning, setScanning] = useState(false);
   const [scanRetry, setScanRetry] = useState(0);
   const [bridgeState, setBridgeState] = useState<'checking' | 'available' | 'unavailable'>('checking');
+  const [installerOpened, setInstallerOpened] = useState(false);
+  const restartRef = useRef(onRestart);
+  restartRef.current = onRestart;
   const [manualMode, setManualMode] = useState(false);
   const [kind, setKind] = useState<'PFX' | 'NPKI'>('PFX');
   const [bundle, setBundle] = useState<File>();
@@ -88,6 +92,31 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
   }
 
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  useEffect(() => {
+    if (bridgeState !== 'unavailable') return;
+    let active = true;
+    let checking = false;
+    const poll = async () => {
+      if (checking || document.visibilityState === 'hidden') return;
+      checking = true;
+      const connected = await probeLocalCertificateBridge();
+      checking = false;
+      if (active && connected) {
+        setInstallerOpened(false);
+        setError('');
+        setBridgeState('checking');
+        if (expired && restartRef.current) restartRef.current();
+        else setScanRetry(value => value + 1);
+      }
+    };
+    const interval = window.setInterval(() => { void poll(); }, 4000);
+    const resumed = () => { void poll(); };
+    window.addEventListener('focus', resumed);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', resumed); };
+  }, [bridgeState, expired]);
+  useEffect(() => {
+    if (certificateChosen && !passwordLocked) passwordInput.current?.focus();
+  }, [certificateChosen, passwordLocked]);
   // A password typed for one certificate is never reused for another.
   useEffect(() => {
     setPassword(''); virtualCaret.current = null; if (!chosenKey) setKeyboardOpen(false);
@@ -259,12 +288,22 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
     {passwordLocked && <p role="alert">비밀번호 입력이 잠겼습니다. {Math.ceil((lockedUntil - now) / 60000)}분 뒤 다시 시도해 주세요.</p>}
     {bridgeState === 'unavailable' && <div className="cert-bridge-setup" role="status">
       <strong>이 PC의 인증서 프로그램에 연결할 수 없습니다</strong>
-      <p>처음 사용하는 PC라면 설치 파일의 압축을 풀고 <code>Install.cmd</code>를 실행하세요. 이미 설치했다면 브라우저의 로컬 네트워크 접근을 허용한 뒤 다시 검색하세요.</p>
+      <p>처음 사용하는 PC라면 인증서 프로그램을 설치해 주세요. 설치되면 이 화면에서 인증서를 자동으로 다시 검색합니다.</p>
       {import.meta.env.VITE_CERT_INSTALLER_URL && <>
-        <a href={import.meta.env.VITE_CERT_INSTALLER_URL} target="_blank" rel="noopener noreferrer">Windows 인증서 프로그램 다운로드</a>
-        <small>새 창에서 다운로드가 시작되지 않으면 주소를 복사해 브라우저 주소창에 붙여넣으세요: <code>{import.meta.env.VITE_CERT_INSTALLER_URL}</code></small>
+        <a href={import.meta.env.VITE_CERT_INSTALLER_URL} download="vision-certi-bridge-win-x64.zip"
+          onClick={() => setInstallerOpened(true)}>Windows 인증서 프로그램 다운로드</a>
+        {installerOpened && <div className="cert-install-guide" aria-label="인증서 프로그램 설치 안내">
+          <strong>다운로드 및 설치</strong>
+          <ol>
+            <li>브라우저의 다운로드 목록에서 <code>vision-certi-bridge-win-x64.zip</code>을 여세요.</li>
+            <li>압축을 모두 푼 뒤 <code>Install.cmd</code>를 실행하세요.</li>
+            <li>설치가 끝나면 이 화면이 연결을 감지하고 인증서를 자동으로 다시 검색합니다.</li>
+          </ol>
+          <small>다운로드가 시작되지 않으면 이 주소를 브라우저 주소창에 붙여넣으세요: <code>{import.meta.env.VITE_CERT_INSTALLER_URL}</code></small>
+        </div>}
       </>}
       <button type="button" onClick={() => { setError(''); setScanRetry(value => value + 1); }}>설치 후 다시 검색</button>
+      <small>프로그램이 실행되면 자동으로 다시 검색합니다. 연결되지 않으면 브라우저의 로컬 네트워크 접근을 허용해 주세요.</small>
       <small>인증서는 현재 사용 중인 PC에서만 검색됩니다. 브라우저가 막은 시스템 폴더를 강제로 열 수는 없습니다.</small>
     </div>}
     <form onSubmit={submit}>

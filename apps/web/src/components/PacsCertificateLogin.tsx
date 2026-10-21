@@ -53,7 +53,10 @@ export function PacsCertificateLogin() {
   }, [context]);
 
   if (!context) return <section role="alert">PACS 로그인 요청이 유효하지 않습니다. PACS 로그인 화면에서 다시 시작해 주세요.</section>;
-  if (delivered) return <section role="status">인증서 비밀번호 확인을 완료했습니다. PACS에서 로그인 결과를 확인하고 있습니다.</section>;
+  if (delivered) return <section className="certificate-complete" role="status">
+    <h1>인증이 완료되었습니다.</h1>
+    <p>공동인증서 확인 결과를 PACS에 전달했습니다. PACS 로그인 화면에서 결과를 확인해 주세요.</p>
+  </section>;
   return <CertificateEnrollmentView initialMode="PC_LOGIN" proofMethod="external"
     onLoginComplete={complete} onLoginFailed={fail} />;
 }

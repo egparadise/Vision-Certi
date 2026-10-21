@@ -26,6 +26,9 @@
 .certificate-login-help p { margin: 0 0 14px; }
 .certificate-login-help button { display: block; margin-top: 16px; padding: 6px 16px; background: white; border: 1px solid #7a93ab; border-radius: 3px; cursor: pointer; }
 .certificate-login-flow { padding: 24px; max-width: 1100px; margin: 0 auto; }
+.certificate-complete { max-width:640px; margin:10vh auto; padding:40px 28px; border:1px solid #bfd9e8; border-radius:12px; background:#f3fbff; color:#123b50; text-align:center; box-shadow:0 8px 28px #0f385414; }
+.certificate-complete h1 { margin:0 0 12px; font-size:28px; color:#0676ae; }
+.certificate-complete p { margin:0; line-height:1.6; }
 .certificate-login-back { padding: 10px 0; margin-bottom: 16px; border: 0; background: none; color: #006ab5; cursor: pointer; }
 @media (max-width: 480px) {
   .certificate-login-page { padding: 28px 16px; }

@@ -48,6 +48,7 @@ describe('PACS certificate-only proof', () => {
       challengeId: 'challenge-1', fingerprintSha256: 'f'.repeat(64), certificate: 'public-cert',
     }));
     expect(JSON.stringify(opener.postMessage.mock.calls)).not.toContain('public-cert');
+    expect(await screen.findByRole('heading', { name: '인증이 완료되었습니다.' })).toBeInTheDocument();
   });
 
   it('does not start verification for an untrusted caller', () => {

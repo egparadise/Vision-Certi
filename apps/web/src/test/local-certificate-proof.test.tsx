@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   scanCertificateDirectory: vi.fn(),
   signWithCertificateFiles: vi.fn(),
   discoverBridgeCertificates: vi.fn(),
+  probeLocalCertificateBridge: vi.fn(),
 }));
 vi.mock('../services/localCertificateDiscovery', () => ({
   getRememberedDirectory: mocks.getRememberedDirectory,
@@ -20,8 +21,11 @@ vi.mock('../services/certificateFileSigner', () => ({
   signWithCertificateFiles: mocks.signWithCertificateFiles,
   PASSWORD_MISMATCH: '인증서 비밀번호가 일치하지 않습니다. 선택한 인증서의 비밀번호를 다시 입력해 주세요.',
 }));
-vi.mock('../services/localCertificateBridge', () => ({ discoverBridgeCertificates: mocks.discoverBridgeCertificates }));
-beforeEach(() => vi.clearAllMocks());
+vi.mock('../services/localCertificateBridge', () => ({
+  discoverBridgeCertificates: mocks.discoverBridgeCertificates,
+  probeLocalCertificateBridge: mocks.probeLocalCertificateBridge,
+}));
+beforeEach(() => { vi.clearAllMocks(); mocks.probeLocalCertificateBridge.mockResolvedValue(false); });
 afterEach(() => vi.unstubAllEnvs());
 
 it('keeps the Windows installer link usable after the certificate challenge expires', async () => {
@@ -33,9 +37,12 @@ it('keeps the Windows installer link usable after the certificate challenge expi
     expiresAt: new Date(Date.now() - 1000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
   const link = await screen.findByRole('link', { name: 'Windows 인증서 프로그램 다운로드' });
   expect(link).toHaveAttribute('href', installerUrl);
-  expect(link).toHaveAttribute('target', '_blank');
-  expect(link).not.toHaveAttribute('download');
+  expect(link).not.toHaveAttribute('target', '_blank');
+  expect(link).toHaveAttribute('download', 'vision-certi-bridge-win-x64.zip');
   expect(link.closest('fieldset')).toBeNull();
+  link.addEventListener('click', event => event.preventDefault(), { once: true });
+  fireEvent.click(link);
+  expect(screen.getByLabelText('인증서 프로그램 설치 안내')).toHaveTextContent('Install.cmd');
   expect(screen.getByText(installerUrl)).toBeInTheDocument();
 });
 
@@ -45,10 +52,39 @@ it('offers local program setup and retry when the browser cannot reach this PC',
   render(<ExternalCertificateProof challenge={{ challengeId: 'setup', signedPayloadBase64: btoa('challenge'),
     expiresAt: new Date(Date.now() + 600000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
   expect(await screen.findByText('이 PC의 인증서 프로그램에 연결할 수 없습니다')).toBeInTheDocument();
-  expect(screen.getByText(/로컬 네트워크 접근을 허용한 뒤 다시 검색하세요/)).toBeInTheDocument();
+  expect(screen.getByText(/로컬 네트워크 접근을 허용해 주세요/)).toBeInTheDocument();
   mocks.discoverBridgeCertificates.mockResolvedValue([]);
   fireEvent.click(screen.getByRole('button', { name: '설치 후 다시 검색' }));
   await waitFor(() => expect(screen.queryByText('이 PC의 인증서 프로그램에 연결할 수 없습니다')).not.toBeInTheDocument());
+});
+
+it('rescans automatically when the installed PC program becomes reachable', async () => {
+  mocks.discoverBridgeCertificates.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  render(<ExternalCertificateProof challenge={{ challengeId: 'auto-rescan', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() + 600000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
+  await screen.findByText('이 PC의 인증서 프로그램에 연결할 수 없습니다');
+  mocks.probeLocalCertificateBridge.mockResolvedValue(true);
+  mocks.discoverBridgeCertificates.mockResolvedValue([{
+    id: 'bridge:doctor', kind: 'NPKI', name: '의사 인증서', issuer: '인증기관',
+    path: '이 PC의 NPKI', source: 'LOCAL_BRIDGE', sign: vi.fn(),
+  }]);
+  fireEvent(window, new Event('focus'));
+  expect(await screen.findByRole('radio', { name: '의사 인증서 인증서 선택' })).toBeChecked();
+  expect(screen.getByLabelText('인증서 비밀번호')).toBeEnabled();
+});
+
+it('requests a fresh challenge after installation if the previous one expired', async () => {
+  mocks.discoverBridgeCertificates.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  const restart = vi.fn();
+  render(<ExternalCertificateProof challenge={{ challengeId: 'expired-while-installing', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() - 1000).toISOString() } as CertificateChallenge} busy={false}
+    onProof={async () => {}} onRestart={restart} />);
+  await screen.findByText('이 PC의 인증서 프로그램에 연결할 수 없습니다');
+  mocks.probeLocalCertificateBridge.mockResolvedValue(true);
+  fireEvent(window, new Event('focus'));
+  await waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
 });
 
 it('asks the PC program to scan removable drives when that storage medium is selected', async () => {

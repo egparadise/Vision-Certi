@@ -76,13 +76,16 @@ export function PacsCertificateProof() {
   }, [challenge, client, context]);
 
   if (!context) return <section role="alert">PACS에서 인증서 확인을 다시 시작해 주세요.</section>;
-  if (delivered) return <section role="status">공동인증서 확인 결과를 PACS에 전달했습니다. PACS의 로그인 결과를 확인해 주세요.</section>;
+  if (delivered) return <section className="certificate-complete" role="status">
+    <h1>인증이 완료되었습니다.</h1>
+    <p>공동인증서 확인 결과를 PACS에 전달했습니다. PACS 로그인 화면에서 결과를 확인해 주세요.</p>
+  </section>;
   return <section className="personal-certificate-page">
     <h2>공동인증서 확인</h2>
     <p>PACS 계정 비밀번호는 PACS에서만 확인합니다. 이 화면은 공동인증서와 개인키 소유만 확인합니다.</p>
     {error && <p role="alert">{error}</p>}
     {challenge ? <ExternalCertificateProof key={challenge.challengeId} challenge={challenge} busy={loading}
-      actionLabel="공동인증서 확인" onProof={submit} />
+      actionLabel="공동인증서 확인" onProof={submit} onRestart={() => void begin()} />
       : <button type="button" disabled={loading} onClick={() => void begin()}>
         {loading ? '인증서 검증 준비 중' : '다시 시도'}
       </button>}

@@ -28,6 +28,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class PacsCertificateProofServiceTest {
+    private static final String PC_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    private static final String PC_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+    private static final String PC_NONCE = "a".repeat(64);
     private MutableClock clock;
     private TestPki pki;
     private CertificateEnrollmentServiceTest.TestTrust trust;
@@ -59,6 +62,95 @@ class PacsCertificateProofServiceTest {
     }
 
     @Test
+    void pcProofRequiresOriginalVerifierNonceAndFreshCodeWithoutAnySharedKey() {
+        var challenge = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId(), null,
+                PC_NONCE, PC_CHALLENGE, "S256"), "127.0.0.1");
+        assertThat(challenge.signedPayload()).contains("pcNonce=" + PC_NONCE, "codeChallenge=" + PC_CHALLENGE);
+        var leaf = pki.leaf(TestPki.rsa(2048));
+        var code = service.verify(signed(challenge, leaf)).verificationCode();
+        var context = PacsRequestContext.EMPTY;
+        assertThatThrownBy(() -> service.redeemPc(new PacsCertificateProofService.PcRedeemRequest(
+                pacs.clientId(), code, "x".repeat(43), PC_NONCE), context)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.redeemPc(new PacsCertificateProofService.PcRedeemRequest(
+                pacs.clientId(), code, PC_VERIFIER, "b".repeat(64)), context)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.redeemPc(new PacsCertificateProofService.PcRedeemRequest(
+                "other-pacs", code, PC_VERIFIER, PC_NONCE), context)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.redeem(pacs, new PacsCertificateProofService.RedeemRequest(code)))
+                .isInstanceOf(ApiException.class);
+        var request = new PacsCertificateProofService.PcRedeemRequest(pacs.clientId(), code, PC_VERIFIER, PC_NONCE);
+        var delivered = service.redeemPc(request, context);
+        assertThat(delivered.nonce()).isEqualTo(PC_NONCE);
+        assertThat(delivered.codeChallenge()).isEqualTo(PC_CHALLENGE);
+        assertThat(delivered.receipt().certificateFingerprintSha256()).isEqualTo(leaf.fingerprint());
+        assertThatThrownBy(() -> service.redeemPc(request, context)).isInstanceOf(ApiException.class);
+        var id = delivered.receipt().verificationId();
+        var status = new PacsCertificateProofService.PcStatusRequest(pacs.clientId(), id, PC_VERIFIER);
+        assertThat(service.statusPc(status, context).verified()).isTrue();
+        assertThatThrownBy(() -> service.statusPc(new PacsCertificateProofService.PcStatusRequest(
+                pacs.clientId(), id, "x".repeat(43)), context)).isInstanceOf(ApiException.class);
+        assertThat(audit.list("hospital-a").toString()).doesNotContain(code, PC_VERIFIER);
+        trust.crls.clear();
+        trust.crls.addAll(pki.freshCrls(leaf.certificate()));
+        assertThatThrownBy(() -> service.statusPc(status, context)).isInstanceOf(ApiException.class)
+                .satisfies(error -> assertThat(((ApiException) error).code()).isEqualTo("CERTIFICATE_REVOKED"));
+    }
+
+    @Test
+    void pcExchangeRejectsDowngradesLegacyCodesAndExpiry() {
+        for (String method : new String[]{null, "plain", "s256"}) {
+            assertThatThrownBy(() -> service.start(new PacsCertificateProofService.StartRequest(pacs.clientId(), null,
+                    PC_NONCE, PC_CHALLENGE, method), "127.0.0.1")).isInstanceOf(ApiException.class);
+        }
+        var leaf = pki.leaf(TestPki.rsa(2048));
+        var legacy = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId()), "127.0.0.1");
+        var oldCode = service.verify(signed(legacy, leaf)).verificationCode();
+        assertThatThrownBy(() -> service.redeemPc(new PacsCertificateProofService.PcRedeemRequest(
+                pacs.clientId(), oldCode, PC_VERIFIER, PC_NONCE), PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        var challenge = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId(), null,
+                PC_NONCE, PC_CHALLENGE, "S256"), "127.0.0.1");
+        var code = service.verify(signed(challenge, leaf)).verificationCode();
+        clock.advance(Duration.ofSeconds(61));
+        assertThatThrownBy(() -> service.redeemPc(new PacsCertificateProofService.PcRedeemRequest(
+                pacs.clientId(), code, PC_VERIFIER, PC_NONCE), PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void pcEventsRequireTheirOwnLiveRedeemedProofAndPreserveDashboardCounts() {
+        var challenge = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId(), null,
+                PC_NONCE, PC_CHALLENGE, "S256"), "127.0.0.1");
+        var code = service.verify(signed(challenge, pki.leaf(TestPki.rsa(2048)))).verificationCode();
+        var info = new PacsCertificateProofService.ClientInfo("reader-sp10", "42", "SP10-PC", "device-sp10");
+        var receipt = service.redeemPc(new PacsCertificateProofService.PcRedeemRequest(pacs.clientId(), code,
+                PC_VERIFIER, PC_NONCE, info), PacsRequestContext.EMPTY).receipt();
+        var event = new PacsCertificateProofService.ClientEventRequest(java.util.UUID.randomUUID(), "LOGIN_SUCCEEDED", info, null);
+        var request = new PacsCertificateProofService.PcClientEventRequest(pacs.clientId(), receipt.verificationId(), PC_VERIFIER, event);
+        assertThat(service.clientEventPc(request, PacsRequestContext.EMPTY).duplicate()).isFalse();
+        assertThat(service.clientEventPc(request, PacsRequestContext.EMPTY).duplicate()).isTrue();
+        assertThatThrownBy(() -> service.clientEventPc(new PacsCertificateProofService.PcClientEventRequest(
+                pacs.clientId(), receipt.verificationId(), "x".repeat(43), event), PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.clientEventPc(new PacsCertificateProofService.PcClientEventRequest(
+                "other-client", receipt.verificationId(), PC_VERIFIER, event), PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        for (int i = 0; i < 2; i++) {
+            var approval = new PacsCertificateProofService.ClientEventRequest(java.util.UUID.randomUUID(), "APPROVAL_REQUESTED", info, "a".repeat(64));
+            service.clientEventPc(new PacsCertificateProofService.PcClientEventRequest(pacs.clientId(), receipt.verificationId(),
+                    PC_VERIFIER, approval), PacsRequestContext.EMPTY);
+        }
+        var page = new PacsProofActivityController(audit, IntegrationClients.of(pacs))
+                .list(new RequestActor("hospital-a", "admin", ActorRole.ADMIN), "", 0, 50).getBody();
+        assertThat(page.totals().loginSucceeded()).isEqualTo(1);
+        assertThat(page.totals().approvalRequests()).isEqualTo(2);
+        assertThat(page.totals().approvalDocuments()).isEqualTo(1);
+        assertThat(page.certificates()).singleElement().satisfies(cert -> {
+            assertThat(cert.accounts()).containsExactly("reader-sp10");
+            assertThat(cert.computers()).containsExactly("SP10-PC");
+        });
+        assertThat(page.toString()).doesNotContain(PC_VERIFIER, code);
+        assertThat(request.toString()).doesNotContain(PC_VERIFIER);
+        clock.advance(Duration.ofHours(2));
+        assertThatThrownBy(() -> service.clientEventPc(request, PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
     void unregisteredValidCertificateReturnsOneTimeReceiptWithoutPacsCredentials() {
         ChallengeResponse challenge = service.start(new PacsCertificateProofService.StartRequest("pacs-sv70"), "127.0.0.1");
         TestPki.Leaf leaf = pki.leaf(TestPki.rsa(2048));
@@ -76,6 +168,48 @@ class PacsCertificateProofServiceTest {
         assertThatThrownBy(() -> service.verify(signed(challenge, leaf))).isInstanceOf(ApiException.class);
         clock.advance(Duration.ofHours(2));
         assertThatThrownBy(() -> service.status(pacs, receipt.verificationId())).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void pcProofBindingSurvivesPostgresRestart() throws Exception {
+        var db = PostgresTestDatabase.create("pc_proof_binding");
+        java.util.UUID proofId;
+        String legacyCode;
+        try (var store = db.store()) {
+            var durableAudit = new AuditService(store, clock);
+            var doctors = new DoctorService(durableAudit, new DevSimulatedCredentialProvider(clock),
+                    new TestGoogleTokens(clock).verifier(), clock, DoctorPolicy.defaults(), false, true, true);
+            var durable = new PacsCertificateProofService(IntegrationClients.of(pacs),
+                    new CertificateValidator(trust, clock), doctors, durableAudit, clock, "test");
+            var challenge = durable.start(new PacsCertificateProofService.StartRequest(pacs.clientId(), null,
+                    PC_NONCE, PC_CHALLENGE, "S256"), "127.0.0.1");
+            var code = durable.verify(signed(challenge, pki.leaf(TestPki.rsa(2048))));
+            proofId = durable.redeemPc(new PacsCertificateProofService.PcRedeemRequest(pacs.clientId(),
+                    code.verificationCode(), PC_VERIFIER, PC_NONCE), PacsRequestContext.EMPTY).receipt().verificationId();
+            var legacy = durable.start(new PacsCertificateProofService.StartRequest(pacs.clientId()), "127.0.0.1");
+            try (var connection = db.adminConnect(); var sql = connection.prepareStatement(
+                    "UPDATE certi_rt.pacs_proof_challenges SET payload = payload - 'pcNonce' - 'codeChallenge' WHERE id = ?")) {
+                sql.setObject(1, legacy.challengeId());
+                assertThat(sql.executeUpdate()).isEqualTo(1);
+            }
+            legacyCode = durable.verify(signed(legacy, pki.leaf(TestPki.rsa(2048)))).verificationCode();
+            try (var connection = db.adminConnect(); var sql = connection.createStatement()) {
+                assertThat(sql.executeUpdate("UPDATE certi_rt.pacs_certificate_proofs SET payload = payload - 'pcNonce' - 'codeChallenge'"
+                        + " WHERE payload->>'codeChallenge' IS NULL")).isEqualTo(1);
+            }
+        }
+        try (var store = db.store()) {
+            var durableAudit = new AuditService(store, clock);
+            var doctors = new DoctorService(durableAudit, new DevSimulatedCredentialProvider(clock),
+                    new TestGoogleTokens(clock).verifier(), clock, DoctorPolicy.defaults(), false, true, true);
+            var reopened = new PacsCertificateProofService(IntegrationClients.of(pacs),
+                    new CertificateValidator(trust, clock), doctors, durableAudit, clock, "test");
+            var status = new PacsCertificateProofService.PcStatusRequest(pacs.clientId(), proofId, PC_VERIFIER);
+            assertThat(reopened.statusPc(status, PacsRequestContext.EMPTY).verified()).isTrue();
+            assertThat(reopened.redeem(pacs, new PacsCertificateProofService.RedeemRequest(legacyCode)).verified()).isTrue();
+            clock.advance(Duration.ofHours(2));
+            assertThatThrownBy(() -> reopened.statusPc(status, PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        }
     }
 
     @Test

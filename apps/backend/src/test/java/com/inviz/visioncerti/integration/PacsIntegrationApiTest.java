@@ -54,6 +54,90 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @ActiveProfiles("dev")
 class PacsIntegrationApiTest {
 
+    private static final String PC_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    private static final String PC_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+    private static final String PC_NONCE = "a".repeat(64);
+    private static final String PC_BASE = "/v1/pacs-certificate-proofs";
+
+    private String pcProofCode() throws Exception {
+        String start = mvc.perform(post(PC_BASE + "/challenges").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"audience\":\"" + CLIENT + "\",\"pcNonce\":\"" + PC_NONCE
+                        + "\",\"codeChallenge\":\"" + PC_CHALLENGE + "\",\"codeChallengeMethod\":\"S256\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String payload = JsonPath.read(start, "$.signedPayload");
+        assertThat(payload).contains("pcNonce=" + PC_NONCE, "codeChallenge=" + PC_CHALLENGE);
+        var leaf = PKI.leaf(TestPki.rsa(2048));
+        String body = "{\"challengeId\":\"" + JsonPath.read(start, "$.challengeId")
+                + "\",\"fingerprintSha256\":\"" + leaf.fingerprint() + "\",\"certificate\":\"" + leaf.der()
+                + "\",\"chain\":[\"" + PKI.intermediateDer() + "\"],\"signature\":\""
+                + TestPki.sign(leaf.keys(), "SHA256withRSA", payload.getBytes(StandardCharsets.UTF_8))
+                + "\",\"signatureAlgorithm\":\"SHA256withRSA\"}";
+        String verified = mvc.perform(post(PC_BASE + "/verify").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return JsonPath.read(verified, "$.verificationCode");
+    }
+
+    private String pcRedeemBody(String code) {
+        return "{\"audience\":\"" + CLIENT + "\",\"verificationCode\":\"" + code + "\",\"codeVerifier\":\""
+                + PC_VERIFIER + "\",\"nonce\":\"" + PC_NONCE + "\"}";
+    }
+
+    @Test
+    void publicPcHttpExchangeStatusAndEventsWorkWithoutSharedHmacOrStaffToken() throws Exception {
+        mvc.perform(get(PC_BASE + "/pc/capabilities")).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.protocol").value("VC-PC-PROOF-S256-V1"))
+                .andExpect(jsonPath("$.clientEvents").value(true));
+        String code = pcProofCode();
+        String body = pcRedeemBody(code);
+        mvc.perform(post(PC_BASE + "/pc/redeem").contentType(MediaType.APPLICATION_JSON)
+                .content(body.replace(PC_VERIFIER, "x".repeat(43)))).andExpect(status().isUnauthorized());
+        servicePost("/v1/integrations/pacs/certificate-proofs/redeem", "{\"verificationCode\":\"" + code + "\"}")
+                .andExpect(status().isUnauthorized());
+        String redeemed = mvc.perform(post(PC_BASE + "/pc/redeem").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.receipt.authentication").value("Y"))
+                .andExpect(jsonPath("$.nonce").value(PC_NONCE)).andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(redeemed, "$.receipt.verificationId");
+        mvc.perform(post(PC_BASE + "/pc/redeem").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        String access = "{\"audience\":\"" + CLIENT + "\",\"verificationId\":\"" + id + "\",\"codeVerifier\":\"" + PC_VERIFIER + "\"";
+        mvc.perform(post(PC_BASE + "/pc/status").contentType(MediaType.APPLICATION_JSON).content(access + "}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.verified").value(true));
+        mvc.perform(post(PC_BASE + "/pc/status").contentType(MediaType.APPLICATION_JSON)
+                .content(access.replace(PC_VERIFIER, "z".repeat(43)) + "}")).andExpect(status().isUnauthorized());
+        String event = access + ",\"event\":{\"eventId\":\"" + UUID.randomUUID() + "\",\"action\":\"LOGIN_SUCCEEDED\","
+                + "\"clientInfo\":{\"pacsLoginId\":\"sp10-http-" + id + "\",\"computerName\":\"SP10-HTTP\",\"deviceId\":\"test-sp10\"}}}";
+        mvc.perform(post(PC_BASE + "/pc/events").contentType(MediaType.APPLICATION_JSON).content(event))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.duplicate").value(false));
+        mvc.perform(post(PC_BASE + "/pc/events").contentType(MediaType.APPLICATION_JSON).content(event))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.duplicate").value(true));
+        mvc.perform(post(PC_BASE + "/pc/events").contentType(MediaType.APPLICATION_JSON)
+                .content(event.replace("LOGIN_SUCCEEDED", "LOGIN_FAILED"))).andExpect(status().isConflict());
+        mvc.perform(admin(get("/v1/admin/pacs-certificate-activity")).param("q", "sp10-http-" + id))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totals.loginSucceeded").value(1))
+                .andExpect(jsonPath("$.events[0].details.exchangeMethod").value("PC_S256"))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(PC_VERIFIER))));
+    }
+
+    @Test
+    void concurrentPcRedeemsConsumeTheCodeExactlyOnce() throws Exception {
+        String body = pcRedeemBody(pcProofCode());
+        var gate = new java.util.concurrent.CountDownLatch(1);
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            java.util.concurrent.Callable<Integer> redeem = () -> {
+                gate.await();
+                return mvc.perform(post(PC_BASE + "/pc/redeem").contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse().getStatus();
+            };
+            var first = executor.submit(redeem);
+            var second = executor.submit(redeem);
+            gate.countDown();
+            assertThat(List.of(first.get(30, java.util.concurrent.TimeUnit.SECONDS), second.get(30, java.util.concurrent.TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(200, 401);
+        }
+    }
+
     @Test
     void clientActivityRequiresHmacAndRejectsUnknownProofs() throws Exception {
         String path = "/v1/integrations/pacs/certificate-proofs/" + UUID.randomUUID() + "/events";

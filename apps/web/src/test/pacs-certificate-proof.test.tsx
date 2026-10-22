@@ -60,6 +60,29 @@ describe('PACS certificate-only proof', () => {
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
+  it('binds PC proof to S256 and waits for PACS before the final success screen', async () => {
+    const challenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+    window.location.hash += `&codeChallenge=${challenge}&codeChallengeMethod=S256`;
+    mocks.start.mockResolvedValue({ challengeId: 'challenge-1', purpose: 'PACS_CERTIFICATE_PROOF',
+      signedPayload: `audience=pacs-sv70\npcNonce=${nonce}\ncodeChallengeMethod=S256\ncodeChallenge=${challenge}`,
+      expiresAt: new Date(Date.now() + 60000).toISOString() });
+    mocks.verify.mockResolvedValue({ verificationCode: 'A'.repeat(43), audience: 'pacs-sv70',
+      expiresAt: new Date(Date.now() + 60000).toISOString() });
+    render(<PacsCertificateProof />);
+    fireEvent.click(await screen.findByRole('button', { name: '인증서 확인' }));
+    await screen.findByRole('status');
+    expect(mocks.start).toHaveBeenCalledWith('pacs-sv70', { pcNonce: nonce, codeChallenge: challenge, codeChallengeMethod: 'S256' });
+    expect(screen.queryByRole('heading', { name: '인증되었습니다.' })).not.toBeInTheDocument();
+  });
+
+  it('rejects a server challenge which silently drops the PC binding', async () => {
+    window.location.hash += '&codeChallenge=' + 'A'.repeat(43) + '&codeChallengeMethod=S256';
+    render(<PacsCertificateProof />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('PC 인증 요청');
+    expect(screen.queryByRole('button', { name: '인증서 확인' })).not.toBeInTheDocument();
+    expect(mocks.verify).not.toHaveBeenCalled();
+  });
+
   it.each(['invalid-date', new Date(0).toISOString()])('never displays completion for an invalid expiry: %s', async expiresAt => {
     mocks.verify.mockResolvedValue({ verificationCode: 'A'.repeat(43), audience: 'pacs-sv70', expiresAt });
     render(<PacsCertificateProof />);

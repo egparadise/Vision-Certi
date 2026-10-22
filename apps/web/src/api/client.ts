@@ -721,11 +721,12 @@ export class ApiClient {
   }
 
   /** PACS-only certificate possession check; no Vision-Certi doctor account is required. */
-  async createPacsCertificateProofChallenge(audience: string): Promise<CertificateChallenge> {
+  async createPacsCertificateProofChallenge(audience: string,
+    binding?: { pcNonce: string; codeChallenge: string; codeChallengeMethod: 'S256' }): Promise<CertificateChallenge> {
     const res = await fetch(`${this.baseUrl}/pacs-certificate-proofs/challenges`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audience }),
+      body: JSON.stringify({ audience, ...binding }),
     });
     return this.handleResponse<CertificateChallenge>(res);
   }

@@ -11,6 +11,7 @@ import com.inviz.visioncerti.store.Kind;
 import com.inviz.visioncerti.store.Store;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.security.MessageDigest;
 import java.security.cert.X509Certificate;
 import java.time.Clock;
 import java.time.Duration;
@@ -27,7 +28,7 @@ import org.springframework.http.HttpStatus;
  * PACS certificate possession attestation. It deliberately does not know or check a PACS ID/password, and it does
  * not create a Vision-Certi physician account. The PACS authenticates its own account and binds the returned
  * fingerprint to that account. A local JSON file is never an authorization source: PACS redeems the one-time code
- * and checks the live proof through its HMAC-authenticated server route before login/approval.
+ * and checks the live proof through HMAC server routes or per-attempt S256 PC routes before login/approval.
  */
 public final class PacsCertificateProofService {
     private static final String PURPOSE = "PACS_CERTIFICATE_PROOF";
@@ -39,10 +40,11 @@ public final class PacsCertificateProofService {
     private static final int MAX_LIVE = 10_000;
 
     record Challenge(UUID id, String clientId, byte[] payload, Instant issuedAt, Instant expiresAt,
-            Instant retainUntil, boolean used, String tenantId) { }
+            Instant retainUntil, boolean used, String tenantId, String pcNonce, String codeChallenge) { }
     record Proof(UUID id, String clientId, String codeHash, String fingerprint, String subjectDn, String issuerDn,
             Instant certificateNotAfter, String certificateDer, List<String> chainDer, Instant verifiedAt,
-            Instant codeExpiresAt, Instant expiresAt, Instant redeemedAt, String tenantId) { }
+            Instant codeExpiresAt, Instant expiresAt, Instant redeemedAt, String tenantId,
+            String pcNonce, String codeChallenge) { }
 
     static final Kind<Challenge> CHALLENGES = Kind.of("pacs_proof_challenges", Challenge.class)
             .id(Challenge::id).expiresAt(Challenge::retainUntil).column("client_id", Challenge::clientId).build();
@@ -50,9 +52,23 @@ public final class PacsCertificateProofService {
             .id(Proof::id).expiresAt(Proof::expiresAt)
             .unique("code_hash", Proof::codeHash, null).column("client_id", Proof::clientId).build();
 
-    public record StartRequest(String audience, String tenantId) {
-        public StartRequest(String audience) { this(audience, null); }
+    public record StartRequest(String audience, String tenantId, String pcNonce, String codeChallenge, String codeChallengeMethod) {
+        public StartRequest(String audience) { this(audience, null, null, null, null); }
+        public StartRequest(String audience, String tenantId) { this(audience, tenantId, null, null, null); }
     }
+    public record PcRedeemRequest(String audience, String verificationCode, String codeVerifier, String nonce, ClientInfo clientInfo) {
+        public PcRedeemRequest(String audience, String verificationCode, String codeVerifier, String nonce) {
+            this(audience, verificationCode, codeVerifier, nonce, null);
+        }
+        @Override public String toString() { return "PcRedeemRequest[<redacted>]"; }
+    }
+    public record PcStatusRequest(String audience, UUID verificationId, String codeVerifier) {
+        @Override public String toString() { return "PcStatusRequest[<redacted>]"; }
+    }
+    public record PcClientEventRequest(String audience, UUID verificationId, String codeVerifier, ClientEventRequest event) {
+        @Override public String toString() { return "PcClientEventRequest[<redacted>]"; }
+    }
+    public record PcReceipt(Receipt receipt, String nonce, String codeChallenge) { }
     public record ProofCodeResponse(String verificationCode, String audience, Instant expiresAt) {
         @Override public String toString() { return "ProofCodeResponse[verificationCode=<redacted>]"; }
     }
@@ -122,6 +138,12 @@ public final class PacsCertificateProofService {
         if (request == null || !client.clientId().equals(request.audience())) {
             throw ApiException.unprocessable("PROOF_AUDIENCE_INVALID", "PACS audience is invalid");
         }
+        boolean pc = request.pcNonce() != null || request.codeChallenge() != null || request.codeChallengeMethod() != null;
+        if (pc && (request.pcNonce() == null || !request.pcNonce().matches("[0-9a-f]{64}")
+                || request.codeChallenge() == null || !CODE.matcher(request.codeChallenge()).matches()
+                || !"S256".equals(request.codeChallengeMethod()))) {
+            throw ApiException.unprocessable("PROOF_PKCE_INVALID", "S256 PC request binding is required");
+        }
         if (!validator.trustConfigured()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "CERTIFICATE_TRUST_NOT_CONFIGURED",
                     "Certificate trust is not configured");
@@ -135,6 +157,7 @@ public final class PacsCertificateProofService {
         String payload = String.join("\n", PAYLOAD_HEADER, "purpose=" + PURPOSE,
                 "challengeId=" + id, "serviceId=" + serviceId, "audience=" + client.clientId(),
                 "nonce=" + nonce, "issuedAt=" + now, "expiresAt=" + expiresAt);
+        if (pc) payload += "\npcNonce=" + request.pcNonce() + "\ncodeChallengeMethod=S256\ncodeChallenge=" + request.codeChallenge();
         byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
         store.run(tx -> {
             tx.deleteExpired(CHALLENGES, now);
@@ -143,7 +166,7 @@ public final class PacsCertificateProofService {
                         "Too many certificate challenges", true);
             }
             tx.insert(CHALLENGES, new Challenge(id, client.clientId(), bytes, now, expiresAt,
-                    expiresAt.plus(CHALLENGE_TTL), false, tenant));
+                    expiresAt.plus(CHALLENGE_TTL), false, tenant, request.pcNonce(), request.codeChallenge()));
             record(tenant, client.clientId(), "REQUESTED", id.toString(), AuditService.SUCCESS, context,
                     Map.of("challengeId", id.toString(), "challengeExpiresAt", expiresAt.toString()));
         });
@@ -179,7 +202,7 @@ public final class PacsCertificateProofService {
                 throw ApiException.conflict("CHALLENGE_ALREADY_USED", "Challenge already used");
             }
             tx.update(CHALLENGES, new Challenge(found.id(), found.clientId(), found.payload(), found.issuedAt(),
-                    found.expiresAt(), found.retainUntil(), true, found.tenantId()));
+                    found.expiresAt(), found.retainUntil(), true, found.tenantId(), found.pcNonce(), found.codeChallenge()));
             if (!now.isBefore(found.expiresAt())) {
                 record(tenant(clients.require(), found.tenantId()), found.clientId(), "DENIED", found.id().toString(),
                         AuditService.DENIED, context, Map.of("code", "CHALLENGE_EXPIRED", "stage", "VERIFY"));
@@ -220,7 +243,7 @@ public final class PacsCertificateProofService {
                 leaf.getSubjectX500Principal().getName(), leaf.getIssuerX500Principal().getName(),
                 leaf.getNotAfter().toInstant(), request.certificate(), List.copyOf(request.chain() == null
                         ? List.of() : request.chain()), verifiedAt, verifiedAt.plus(CODE_TTL),
-                verifiedAt.plus(PROOF_TTL), null, tenant);
+                verifiedAt.plus(PROOF_TTL), null, tenant, challenge.pcNonce(), challenge.codeChallenge());
         Map<String, String> evidence = evidence(proof);
         evidence.put("challengeId", challenge.id().toString());
         evidence.put("certificateNotBefore", leaf.getNotBefore().toInstant().toString());
@@ -257,11 +280,12 @@ public final class PacsCertificateProofService {
         Instant now = clock.instant();
         Proof proof = store.tx(tx -> {
             Proof found = tx.lockFindOne(PROOFS, "code_hash", Hashing.sha256Hex(code)).orElse(null);
-            if (found == null || found.redeemedAt() != null || !found.clientId().equals(client.clientId())
+            if (found == null || found.codeChallenge() != null || found.redeemedAt() != null || !found.clientId().equals(client.clientId())
                     || !now.isBefore(found.codeExpiresAt())) throw invalidCode();
             tx.update(PROOFS, new Proof(found.id(), found.clientId(), found.codeHash(), found.fingerprint(),
                     found.subjectDn(), found.issuerDn(), found.certificateNotAfter(), found.certificateDer(),
-                    found.chainDer(), found.verifiedAt(), found.codeExpiresAt(), found.expiresAt(), now, found.tenantId()));
+                    found.chainDer(), found.verifiedAt(), found.codeExpiresAt(), found.expiresAt(), now, found.tenantId(),
+                    found.pcNonce(), found.codeChallenge()));
             return found;
         });
         Receipt receipt = statusChecked(client, proof.id());
@@ -303,11 +327,14 @@ public final class PacsCertificateProofService {
         if (proof == null && historical == null) throw ApiException.forbidden("CERTIFICATE_PROOF_INACTIVE", "Redeemed proof not found");
         String scope = proof != null ? tenant(client, proof.tenantId()) : historical.tenantId();
         if (proof != null) details.putAll(evidence(proof));
-        else for (String key : List.of("verificationId", "fingerprintSha256", "subjectDn", "issuerDn", "certificateNotAfter", "verifiedAt", "expiresAt")) {
+        else for (String key : List.of("verificationId", "fingerprintSha256", "subjectDn", "issuerDn", "certificateNotAfter", "verifiedAt", "expiresAt", "exchangeMethod")) {
             if (historical.details().containsKey(key)) details.put(key, historical.details().get(key));
         }
         details.put("eventId", request.eventId().toString());
-        String identity = Hashing.sha256Hex(new java.util.TreeMap<>(details).toString() + request.action());
+        var identityDetails = new java.util.TreeMap<>(details);
+        // Transport metadata is not part of the client event. Keep pre-SP10 event retries compatible.
+        identityDetails.remove("exchangeMethod");
+        String identity = Hashing.sha256Hex(identityDetails.toString() + request.action());
         // Lock and append in the same DB transaction: retries and concurrent submissions count only once.
         return store.tx(tx -> {
             tx.lock("pacs-client-event|" + scope + "|" + client.clientId() + "|" + request.eventId());
@@ -329,6 +356,95 @@ public final class PacsCertificateProofService {
 
     public Receipt status(IntegrationClient client, UUID verificationId) {
         return status(client, verificationId, PacsRequestContext.EMPTY);
+    }
+
+    /** Public PC redemption: possession of a fresh certificate AND the originating PC verifier is required.
+     * No integration HMAC key is sent to a PC. Only the S256 hash is retained by the server.
+     */
+    public PcReceipt redeemPc(PcRedeemRequest request, PacsRequestContext context) {
+        try {
+            return redeemPcChecked(request, context);
+        } catch (ApiException failure) {
+            recordUnboundDenial(context, "PC_REDEEM", failure.code());
+            throw failure;
+        }
+    }
+
+    private PcReceipt redeemPcChecked(PcRedeemRequest request, PacsRequestContext context) {
+        IntegrationClient client = clients.require();
+        if (request == null || !client.clientId().equals(request.audience())
+                || request.verificationCode() == null || !CODE.matcher(request.verificationCode()).matches()) throw invalidCode();
+        Map<String, String> clientInfo = request.clientInfo() == null ? Map.of() : request.clientInfo().details();
+        Instant now = clock.instant();
+        Proof proof = store.tx(tx -> {
+            Proof found = tx.lockFindOne(PROOFS, "code_hash", Hashing.sha256Hex(request.verificationCode())).orElse(null);
+            if (found == null || found.redeemedAt() != null || !found.clientId().equals(client.clientId())
+                    || !now.isBefore(found.codeExpiresAt()) || !pkceMatches(found, request.codeVerifier())
+                    || !constantEquals(found.pcNonce(), request.nonce())) throw invalidCode();
+            tx.update(PROOFS, new Proof(found.id(), found.clientId(), found.codeHash(), found.fingerprint(),
+                    found.subjectDn(), found.issuerDn(), found.certificateNotAfter(), found.certificateDer(),
+                    found.chainDer(), found.verifiedAt(), found.codeExpiresAt(), found.expiresAt(), now, found.tenantId(),
+                    found.pcNonce(), found.codeChallenge()));
+            return found;
+        });
+        Receipt receipt = statusChecked(client, proof.id());
+        Map<String, String> details = evidence(proof);
+        details.putAll(clientInfo);
+        record(tenant(client, proof.tenantId()), client.clientId(), "REDEEMED", proof.id().toString(),
+                AuditService.SUCCESS, context, details);
+        return new PcReceipt(receipt, proof.pcNonce(), proof.codeChallenge());
+    }
+
+    /** The verifier is a per-proof capability, never a bearer credential for any other proof/account. */
+    public Receipt statusPc(PcStatusRequest request, PacsRequestContext context) {
+        IntegrationClient client = clients.require();
+        Proof proof;
+        try {
+            if (request == null) throw invalidCode();
+            proof = requirePcProof(client, request.audience(), request.verificationId(), request.codeVerifier());
+        } catch (ApiException failure) {
+            recordUnboundDenial(context, "PC_STATUS", failure.code());
+            throw failure;
+        }
+        return status(client, proof.id(), context);
+    }
+
+    /** Optional PC telemetry. A proof-scoped verifier can report observations, never grant approval. */
+    public ClientEventResponse clientEventPc(PcClientEventRequest request, PacsRequestContext context) {
+        try {
+            IntegrationClient client = clients.require();
+            if (request == null) throw invalidCode();
+            Proof proof = requirePcProof(client, request.audience(), request.verificationId(), request.codeVerifier());
+            // A public PC capability is not accepted after its two-hour lifetime.
+            if (proof.redeemedAt() == null || !clock.instant().isBefore(proof.expiresAt())) {
+                throw ApiException.forbidden("CERTIFICATE_PROOF_INACTIVE", "A live redeemed PC proof is required");
+            }
+            return clientEvent(client, proof.id(), request.event(), context);
+        } catch (ApiException failure) {
+            recordUnboundDenial(context, "PC_EVENT", failure.code());
+            throw failure;
+        }
+    }
+
+    private Proof requirePcProof(IntegrationClient client, String audience, UUID id, String verifier) {
+        if (id == null || !client.clientId().equals(audience)) throw invalidCode();
+        Proof proof = store.tx(tx -> tx.get(PROOFS, id).orElse(null));
+        if (proof == null || !proof.clientId().equals(client.clientId()) || !pkceMatches(proof, verifier)) throw invalidCode();
+        return proof;
+    }
+
+    private static boolean constantEquals(String expected, String actual) {
+        return expected != null && actual != null && MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.US_ASCII), actual.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    private static boolean pkceMatches(Proof proof, String verifier) {
+        if (verifier == null || !verifier.matches("[A-Za-z0-9._~-]{43,128}")) return false;
+        try {
+            String challenge = Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    MessageDigest.getInstance("SHA-256").digest(verifier.getBytes(StandardCharsets.US_ASCII)));
+            return constantEquals(proof.codeChallenge(), challenge);
+        } catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
     }
 
     public Receipt status(IntegrationClient client, UUID verificationId, PacsRequestContext context) {
@@ -405,6 +521,7 @@ public final class PacsCertificateProofService {
         details.put("certificateNotAfter", proof.certificateNotAfter().toString());
         details.put("verifiedAt", proof.verifiedAt().toString());
         details.put("expiresAt", proof.expiresAt().toString());
+        details.put("exchangeMethod", proof.codeChallenge() == null ? "SERVER_HMAC" : "PC_S256");
         return details;
     }
 

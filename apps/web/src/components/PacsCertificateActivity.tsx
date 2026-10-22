@@ -18,6 +18,7 @@ const fields: Record<string, string> = {
   userAgent: '접속 프로그램', origin: '웹 출처', code: '오류 코드', stage: '처리 단계',
   pacsLoginId: 'PACS 로그인 ID', pacsAccountId: 'PACS 계정 번호', computerName: 'PC 이름', deviceId: 'PC 식별자',
   clientInfoSource: '계정·PC 정보 출처', reportKeySha256: '판독문 식별 해시', eventId: 'PACS 이벤트 ID', eventFingerprint: '이벤트 중복 확인 해시',
+  exchangeMethod: '결과 교환 방식',
 };
 const date = (value?: string | null) => value ? new Date(value).toLocaleString('ko-KR') : '기록 없음';
 
@@ -64,7 +65,7 @@ export function PacsCertificateActivity() {
           '비밀번호·개인키·일회용 인증코드는 저장하지 않습니다. 과거에 수집하지 않은 항목은 기록 없음으로 표시합니다.',
         ]} />
       <button className="btn btn-outline" onClick={() => void load()} disabled={loading} type="button"><RefreshCw size={16} /> 갱신</button>
-      <a className="btn btn-outline" href="/downloads/vision-certi-pacs-activity-patch.zip" download>PACS 기록 연동 패치</a>
+      <a className="btn btn-outline" href="/downloads/vision-certi-pacs-activity-patch.zip" download>PACS 3.40.6 기록 연동 패치</a>
     </div>
     <div className="card-body">
       {error && <p role="alert" className="alert alert-error">{error}</p>}

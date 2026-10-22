@@ -93,11 +93,15 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
                         || PUBLIC_VERIFY_ROUTE.matcher(path).matches());
     }
 
-    /** Certificate-only PACS proof is public; the subsequent redeem/status routes still require PACS HMAC. */
+    /** Exact public PC proof routes; redeem/status/events require S256 possession. Integration routes require HMAC. */
     static boolean isPacsCertificateProofPublicRoute(HttpServletRequest request, String path) {
+        if ("GET".equals(request.getMethod()) && path.equals("/v1/pacs-certificate-proofs/pc/capabilities")) return true;
         return "POST".equals(request.getMethod())
                 && (path.equals("/v1/pacs-certificate-proofs/challenges")
-                        || path.equals("/v1/pacs-certificate-proofs/verify"));
+                        || path.equals("/v1/pacs-certificate-proofs/verify")
+                        || path.equals("/v1/pacs-certificate-proofs/pc/redeem")
+                        || path.equals("/v1/pacs-certificate-proofs/pc/status")
+                        || path.equals("/v1/pacs-certificate-proofs/pc/events"));
     }
 
     @Override

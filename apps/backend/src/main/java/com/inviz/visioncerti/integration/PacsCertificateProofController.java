@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Public certificate challenge/proof, followed by PACS-only HMAC authenticated code redemption and status. */
+/** Certificate proof with HMAC server exchange or S256-bound public PC exchange. */
 @RestController
 public final class PacsCertificateProofController {
     private final PacsCertificateProofService proofs;
@@ -62,5 +62,30 @@ public final class PacsCertificateProofController {
         Object client = request.getAttribute(IntegrationAuthFilter.CLIENT_ATTRIBUTE);
         if (!(client instanceof IntegrationClient c)) throw IntegrationAuthFilter.authInvalid();
         return c;
+    }
+
+    @GetMapping("/v1/pacs-certificate-proofs/pc/capabilities")
+    ResponseEntity<java.util.Map<String, Object>> pcCapabilities() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(java.util.Map.of("protocol", "VC-PC-PROOF-S256-V1", "codeChallengeMethod", "S256",
+                        "clientEvents", true, "clientEventPath", "/v1/pacs-certificate-proofs/pc/events"));
+    }
+
+    @PostMapping("/v1/pacs-certificate-proofs/pc/redeem")
+    ResponseEntity<PacsCertificateProofService.PcReceipt> redeemPc(HttpServletRequest request,
+            @RequestBody(required = false) PacsCertificateProofService.PcRedeemRequest body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(proofs.redeemPc(body, PacsRequestContext.from(request)));
+    }
+
+    @PostMapping("/v1/pacs-certificate-proofs/pc/status")
+    ResponseEntity<PacsCertificateProofService.Receipt> statusPc(HttpServletRequest request,
+            @RequestBody(required = false) PacsCertificateProofService.PcStatusRequest body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(proofs.statusPc(body, PacsRequestContext.from(request)));
+    }
+
+    @PostMapping("/v1/pacs-certificate-proofs/pc/events")
+    ResponseEntity<PacsCertificateProofService.ClientEventResponse> clientEventPc(HttpServletRequest request,
+            @RequestBody(required = false) PacsCertificateProofService.PcClientEventRequest body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(proofs.clientEventPc(body, PacsRequestContext.from(request)));
     }
 }

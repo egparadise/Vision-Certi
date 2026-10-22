@@ -30,7 +30,7 @@
     "containers": [
       {
         "name": "api",
-        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:b1801addb595eecb5ddd70b47d960f2ed3c666adff122382dd5c47addb06bdb8",
+        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:06a81b5937375e57d96f66f22ff7c8597c75060a5cfe47552bcbaecc3598dcb2",
         "ports": [
           {
             "containerPort": 8080,
@@ -40,7 +40,7 @@
         "env": [
           {
             "name": "VISIONCERTI_DEPLOY_ID",
-            "value": "2026-10-22-dashboard-activity"
+            "value": "2026-10-22-sp10-s256"
           },
           {
             "name": "VISIONCERTI_PERSISTENCE_MODE",

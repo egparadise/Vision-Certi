@@ -12,7 +12,7 @@ node infra/cloud/Check-WebDeployment.cjs
 
 검사 프로그램은 네 운영 도메인의 HTML·자바스크립트가 로컬 빌드와 일치하는지, `no-store` 헤더와 이전 JS 주소의 최신 파일 반환을 확인하며 불일치 시 실패한다. 기존 미리보기 채널까지 갱신할 때는 `firebase hosting:clone vision-certi:live hahattalk-vision-certi:vision-certi-preview --project hahattalk --non-interactive`를 실행한다.
 
-HMAC 키를 PC에 자동 발급하는 기능은 현재 없다. 클라우드의 `vision-certi-pacs-hmac-secret`은 서버에서 `/run/secrets/pacs-hmac/value`로 읽는다. PC 브로커는 `%LOCALAPPDATA%\SaintViewPACS\CertificateAuth\broker-config.json`의 `VISIONCERTI_PACS_CLIENT_SECRET_FILE` 경로를 읽지만 새 설치에는 비밀키가 포함되지 않는다. Client ID `vision-certi-pacs`는 공개 식별자이며, ID 설정만으로 키 설정이나 인증 결과 교환이 완료되는 것은 아니다.
+PACS SP10은 서버 공용 HMAC 키 없이 `VC-PC-PROOF-S256-V1` PC 교환 API를 사용한다. Client ID `vision-certi-pacs`는 공개 식별자이며 매 요청의 verifier와 인증서 서명을 함께 검증한다. [PC 연동 규격](../../docs/PACS_PC_S256_연동.md)을 따른다. 클라우드의 `vision-certi-pacs-hmac-secret`은 기존 서버 간 연동용으로 `/run/secrets/pacs-hmac/value`에서만 읽으며, PC에 발급·배포하지 않는다. 이전 HMAC 전용 helper와 SP10 helper의 설정을 혼용하지 않는다.
 
 2026-10-19 기준 `hahattalk` 프로젝트에 Vision-Certi 전용 운영 자원을 서울 리전으로 구성했다. 공개 화면과 API 주소는 **https://vision-certi.web.app** 이다. PACS에는 `https://vision-certi.web.app/v1`을 설정한다. Firebase Hosting의 `/v1/**` 요청은 서울 Cloud Run `vision-certi-api`로 전달된다. Cloud Run은 이 PC의 서버를 경유하지 않으므로 PC가 꺼져도 API 주소가 유지된다.
 

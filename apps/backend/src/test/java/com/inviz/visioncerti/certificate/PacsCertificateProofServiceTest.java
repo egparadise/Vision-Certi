@@ -15,6 +15,11 @@ import com.inviz.visioncerti.doctor.identity.TestGoogleTokens;
 import com.inviz.visioncerti.integration.IntegrationClient;
 import com.inviz.visioncerti.integration.IntegrationClients;
 import com.inviz.visioncerti.integration.PacsCertificateProofService;
+import com.inviz.visioncerti.integration.PacsProofActivityController;
+import com.inviz.visioncerti.integration.PacsRequestContext;
+import com.inviz.visioncerti.security.RequestActor;
+import com.inviz.visioncerti.security.ActorRole;
+import com.inviz.visioncerti.store.PostgresTestDatabase;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -28,11 +33,12 @@ class PacsCertificateProofServiceTest {
     private CertificateEnrollmentServiceTest.TestTrust trust;
     private PacsCertificateProofService service;
     private IntegrationClient pacs;
+    private AuditService audit;
 
     @BeforeEach
     void setUp() {
         clock = new MutableClock(Instant.parse("2026-10-20T00:00:00Z"));
-        AuditService audit = new AuditService(clock);
+        audit = new AuditService(clock);
         DoctorService doctors = new DoctorService(audit, new DevSimulatedCredentialProvider(clock),
                 new TestGoogleTokens(clock).verifier(), clock, DoctorPolicy.defaults(), false, true, true);
         pki = new TestPki(clock, "PACS Proof");
@@ -83,6 +89,10 @@ class PacsCertificateProofServiceTest {
                 "SHA256withRSA");
         assertThatThrownBy(() -> service.verify(forged)).isInstanceOf(ApiException.class)
                 .satisfies(error -> assertThat(((ApiException) error).code()).isEqualTo("CERTIFICATE_SIGNATURE_INVALID"));
+        assertThat(audit.list("hospital-a")).anySatisfy(event -> {
+            assertThat(event.action()).isEqualTo("PACS_CERTIFICATE_PROOF_DENIED");
+            assertThat(event.details()).containsEntry("code", "CERTIFICATE_SIGNATURE_INVALID");
+        });
     }
 
     @Test
@@ -95,5 +105,75 @@ class PacsCertificateProofServiceTest {
         trust.crls.addAll(pki.freshCrls(leaf.certificate()));
         assertThatThrownBy(() -> service.status(pacs, receipt.verificationId())).isInstanceOf(ApiException.class)
                 .satisfies(error -> assertThat(((ApiException) error).code()).isEqualTo("CERTIFICATE_REVOKED"));
+    }
+
+    @Test
+    void durableActivitySurvivesRestartExpiryAndProofPruningWithoutSecrets() throws Exception {
+        var db = PostgresTestDatabase.create("proof_activity");
+        String fingerprint;
+        String codeValue;
+        var context = new PacsRequestContext("127.0.0.8", "203.0.113.8, 198.51.100.2", "PACS-test/3.40.6", "https://vision-certi.web.app");
+        try (var store = db.store()) {
+            audit = new AuditService(store, clock);
+            DoctorService doctors = new DoctorService(audit, new DevSimulatedCredentialProvider(clock),
+                    new TestGoogleTokens(clock).verifier(), clock, DoctorPolicy.defaults(), false, true, true);
+            service = new PacsCertificateProofService(IntegrationClients.of(pacs), new CertificateValidator(trust, clock),
+                    doctors, audit, clock, "test");
+            var challenge = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId()), context);
+            var leaf = pki.leaf(TestPki.rsa(2048));
+            fingerprint = leaf.fingerprint();
+            var code = service.verify(signed(challenge, leaf), context);
+            codeValue = code.verificationCode();
+            var receipt = service.redeem(pacs, new PacsCertificateProofService.RedeemRequest(codeValue), context);
+            service.status(pacs, receipt.verificationId(), context);
+            assertThatThrownBy(() -> service.redeem(pacs, new PacsCertificateProofService.RedeemRequest(codeValue), context))
+                    .isInstanceOf(ApiException.class);
+            clock.advance(Duration.ofHours(3));
+            assertThatThrownBy(() -> service.status(pacs, receipt.verificationId(), context)).isInstanceOf(ApiException.class);
+            // Another proof prunes the old operational row, but never its audit evidence.
+            trust.crls.clear();
+            trust.crls.addAll(pki.freshCrls());
+            var next = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId()), context);
+            service.verify(signed(next, leaf), context);
+            assertThat(audit.list(pacs.clientId())).isEmpty();
+        }
+        try (var reopened = db.store()) {
+            var readAudit = new AuditService(reopened, clock);
+            var controller = new PacsProofActivityController(readAudit, IntegrationClients.of(pacs));
+            var admin = new RequestActor("hospital-a", "admin", ActorRole.ADMIN);
+            var page = controller.list(admin, "", 0, 50).getBody();
+            assertThat(page.totals().requested()).isEqualTo(2);
+            assertThat(page.totals().verified()).isEqualTo(2);
+            assertThat(page.totals().redeemed()).isEqualTo(1);
+            assertThat(page.totals().checked()).isEqualTo(1);
+            assertThat(page.totals().denied()).isEqualTo(2);
+            assertThat(page.certificates()).singleElement().satisfies(cert -> {
+                assertThat(cert.fingerprintSha256()).isEqualTo(fingerprint);
+                assertThat(cert.subjectDn()).isNotBlank();
+                assertThat(cert.issuerDn()).isNotBlank();
+                assertThat(cert.notAfter()).isNotBlank();
+            });
+            assertThat(page.events()).allSatisfy(event -> assertThat(event.details()).containsEntry("peerIp", "127.0.0.8"));
+            assertThat(page.toString()).doesNotContain(codeValue, "certificateDer", "privateKey", "password");
+            assertThat(controller.list(admin, "203.0.113.8", 1, 2).getBody().events()).hasSize(2);
+            assertThat(controller.list(new RequestActor("other", "admin", ActorRole.ADMIN), "", 0, 50).getBody().total()).isZero();
+            assertThatThrownBy(() -> controller.list(new RequestActor("hospital-a", "doctor", ActorRole.DOCTOR), "", 0, 50))
+                    .isInstanceOf(ApiException.class);
+        }
+    }
+
+    @Test
+    void legacyChainIsVisibleOnlyToItsSingleTenantAndIsNeverRewritten() {
+        audit.record(pacs.clientId(), "certificate", "PACS_CERTIFICATE_PROOF_VERIFIED", "CERTIFICATE", "old-proof",
+                AuditService.SUCCESS, java.util.Map.of("fingerprintSha256", "a".repeat(64)));
+        var original = audit.list(pacs.clientId());
+        var admin = new RequestActor("hospital-a", "admin", ActorRole.ADMIN);
+        var controller = new PacsProofActivityController(audit, IntegrationClients.of(pacs));
+        assertThat(controller.list(admin, "", 0, 50).getBody().events()).singleElement()
+                .satisfies(event -> assertThat(event.legacy()).isTrue());
+        assertThat(controller.list(new RequestActor("other", "admin", ActorRole.ADMIN), "", 0, 50).getBody().total()).isZero();
+        var multi = new IntegrationClient(pacs.clientId(), new byte[32], "test", Set.of("hospital-a", "other"));
+        assertThat(new PacsProofActivityController(audit, IntegrationClients.of(multi)).list(admin, "", 0, 50).getBody().total()).isZero();
+        assertThat(audit.list(pacs.clientId())).isEqualTo(original);
     }
 }

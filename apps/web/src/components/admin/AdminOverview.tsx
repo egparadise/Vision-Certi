@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { PacsCertificateActivity } from '../PacsCertificateActivity';
 import type { MedicalInstitution } from '../../types/admin';
 import type { AdminSection } from './AdminConsole';
 
@@ -43,8 +44,9 @@ export function AdminOverview({ onNavigate }: { onNavigate: (section: AdminSecti
   };
 
   return <div className="admin-panel" data-testid="admin-overview">
+    <PacsCertificateActivity />
     <div className="admin-panel-header">
-      <div><h2>공동인증서별 판독 현황</h2>
+      <div><h2>의사 등록 인증서·판독 현황</h2>
         <p>등록된 외부 인증서의 로그인과 판독 서명 기록을 서버에서 집계합니다. 합성 시험 인증서는 제외합니다. 기관 필터는 배정 의사를 골라 보여주며, 복수 기관에 배정된 의사의 판독 건수를 기관별로 분할하지 않습니다.</p>
       </div>
       <button type="button" className="btn btn-outline" onClick={() => void load()} disabled={loading}>

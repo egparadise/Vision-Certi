@@ -54,6 +54,24 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @ActiveProfiles("dev")
 class PacsIntegrationApiTest {
 
+    @Test
+    void proofAuthenticationFailuresAreDurableAndVisibleOnlyToAdministrators() throws Exception {
+        mvc.perform(post("/v1/integrations/pacs/certificate-proofs/redeem")
+                .header("User-Agent", "AuditDeniedFixture")
+                .header("X-Forwarded-For", "203.0.113.99")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"verificationCode\":\"never-log-this-code\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(admin(get("/v1/admin/pacs-certificate-activity")).param("q", "AuditDeniedFixture"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.totals.denied").value(1))
+                .andExpect(jsonPath("$.events[0].details.stage").value("INTEGRATION_AUTH"))
+                .andExpect(jsonPath("$.events[0].details.forwardedIpTrust").value("UNVERIFIED"))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("never-log-this-code"))));
+        mvc.perform(get("/v1/admin/pacs-certificate-activity")
+                .header("X-Tenant-Id", A).header("X-Actor-Id", "doctor-demo"))
+                .andExpect(status().isForbidden());
+    }
+
     static final String CLIENT = "pacs-sv70";
     static final String SECRET = "test-only-secret-0123456789abcdefghijklmnop";
     static final String AUDIENCE = IntegrationClients.DEFAULT_AUDIENCE;

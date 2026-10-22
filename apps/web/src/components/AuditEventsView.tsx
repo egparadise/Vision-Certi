@@ -7,6 +7,7 @@ import { LoadingSpinner } from './LoadingSpinner';
 import { EmptyState } from './EmptyState';
 import { InfoPopover } from './InfoPopover';
 import { CertificateLoginHistory } from './CertificateLoginHistory';
+import { PacsCertificateActivity } from './PacsCertificateActivity';
 
 export const AuditEventsView: React.FC = () => {
   const { tenantId, client, isMockMode, mockStore, role } = useApp();
@@ -49,6 +50,7 @@ export const AuditEventsView: React.FC = () => {
   return (
     <div>
       {role === 'ADMIN' && !isMockMode && <CertificateLoginHistory />}
+      {role === 'ADMIN' && !isMockMode && <PacsCertificateActivity />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

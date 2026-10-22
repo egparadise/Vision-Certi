@@ -1,6 +1,7 @@
 package com.inviz.visioncerti.integration;
 
 import com.inviz.visioncerti.common.ApiException;
+import com.inviz.visioncerti.audit.AuditService;
 import com.inviz.visioncerti.common.CorrelationIdFilter;
 import com.inviz.visioncerti.common.Hashing;
 import com.inviz.visioncerti.store.Kind;
@@ -71,12 +72,14 @@ public class IntegrationAuthFilter extends OncePerRequestFilter {
     private final IntegrationClients clients;
     private final Clock clock;
     private final Store store;
+    private final AuditService audit;
     private volatile Instant lastPrune = Instant.EPOCH;
 
-    public IntegrationAuthFilter(IntegrationClients clients, Clock clock, Store store) {
+    public IntegrationAuthFilter(IntegrationClients clients, Clock clock, Store store, AuditService audit) {
         this.clients = clients;
         this.clock = clock;
         this.store = store;
+        this.audit = audit;
     }
 
     @Override
@@ -150,6 +153,17 @@ public class IntegrationAuthFilter extends OncePerRequestFilter {
             request.setAttribute(CLIENT_ATTRIBUTE, client);
             chain.doFilter(new CachedBodyRequest(request, body), response);
         } catch (ApiException e) {
+            if (path(request).startsWith(PREFIX + "certificate-proofs/") && clients.configured()
+                    && clients.require().tenantIds().size() == 1) {
+                IntegrationClient configured = clients.require();
+                var details = PacsRequestContext.from(request).details();
+                details.put("clientId", configured.clientId());
+                details.put("stage", "INTEGRATION_AUTH");
+                details.put("code", e.code());
+                audit.record(configured.tenantIds().iterator().next(), "integration:unverified",
+                        "PACS_CERTIFICATE_PROOF_DENIED", "PACS_CERTIFICATE_PROOF", "integration-auth",
+                        AuditService.DENIED, details);
+            }
             reject(request, response, e);
         }
     }

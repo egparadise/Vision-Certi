@@ -35,6 +35,7 @@ function mockFetch(handler: Handler) {
     const url = String(input);
     const handled = handler(url, init);
     if (handled) return handled;
+    if (url.includes('/admin/pacs-certificate-activity')) return json({ totals: { requested: 0, attempted: 0, verified: 0, redeemed: 0, checked: 0, denied: 0 }, certificates: [], events: [], total: 0, offset: 0, limit: 50 });
     if (url.includes('/runtime/capabilities')) return json({ profile: 'dev', persistence: { mode: 'IN_MEMORY' }, staffAuth: { mode: 'DEV_HEADERS' }, doctorAuth: { pcCertificate: { configured: false, trustAnchors: 0, crlState: 'NOT_CONFIGURED' }, mobile: { configured: false, provider: null }, googleConfigured: false, devMockCertificate: false, devIdentity: false }, signing: { backend: 'DEV_SIMULATED', available: true }, clinicalUseAllowed: false, warnings: ['IN_MEMORY_PERSISTENCE_NOT_DURABLE'] });
     if (url.includes('/admin/certificate-operations') || url.includes('/admin/medical-institutions')) return json([]);
     if (url.includes('/dashboard')) return json({ tenantId: 'demo-hospital-a', generatedAt: '', signatureMode: '', persistence: 'IN_MEMORY', documents: 1, documentVersions: 1, signRequestsByStatus: {}, signatures: 0, deliveriesByStatus: {}, auditEvents: 3 });

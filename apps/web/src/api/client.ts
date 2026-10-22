@@ -381,6 +381,10 @@ export class ApiClient {
 
   // --- Admin mode (관리자 모드): operational settings, deployment configuration, staff accounts ---
 
+  async getPacsCertificateActivity(q = '', offset = 0): Promise<import('../types/pacsActivity').PacsActivityPage> {
+    return this.adminJson(`/admin/pacs-certificate-activity?${new URLSearchParams({ q, offset: String(offset), limit: '50' })}`, 'GET');
+  }
+
   private async adminJson<T>(path: string, method: string, body?: unknown): Promise<T> {
     const res = await fetch(`${this.baseUrl}${path}`, {
       method,

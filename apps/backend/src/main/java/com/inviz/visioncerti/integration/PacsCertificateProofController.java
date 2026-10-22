@@ -26,25 +26,28 @@ public final class PacsCertificateProofController {
     ResponseEntity<ChallengeResponse> start(@RequestBody(required = false) PacsCertificateProofService.StartRequest body,
             HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore())
-                .body(proofs.start(body, request.getRemoteAddr()));
+                .body(proofs.start(body, PacsRequestContext.from(request)));
     }
 
     @PostMapping("/v1/pacs-certificate-proofs/verify")
-    ResponseEntity<PacsCertificateProofService.ProofCodeResponse> verify(@RequestBody(required = false) LoginRequest body) {
-        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(proofs.verify(body));
+    ResponseEntity<PacsCertificateProofService.ProofCodeResponse> verify(@RequestBody(required = false) LoginRequest body,
+            HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore())
+                .body(proofs.verify(body, PacsRequestContext.from(request)));
     }
 
     @PostMapping("/v1/integrations/pacs/certificate-proofs/redeem")
     ResponseEntity<PacsCertificateProofService.Receipt> redeem(HttpServletRequest request,
             @RequestBody(required = false) PacsCertificateProofService.RedeemRequest body) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(proofs.redeem(client(request), body));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(proofs.redeem(client(request), body, PacsRequestContext.from(request)));
     }
 
     @GetMapping("/v1/integrations/pacs/certificate-proofs/{verificationId}")
     ResponseEntity<PacsCertificateProofService.Receipt> status(HttpServletRequest request,
             @PathVariable UUID verificationId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(proofs.status(client(request), verificationId));
+                .body(proofs.status(client(request), verificationId, PacsRequestContext.from(request)));
     }
 
     private static IntegrationClient client(HttpServletRequest request) {

@@ -61,7 +61,8 @@ import org.springframework.http.HttpStatus;
  * or reason-scoped IDPs, indirect CRLs, freshestCRL, unknown critical extensions and critical/indirect entries yield
  * UNKNOWN (fail closed); they are never skipped in favour of an older full CRL.</li>
  * </ul>
- * No network access is made from certificate contents (no CRL distribution point, AIA or OCSP fetch).
+ * Optional yessign CRL lookup is restricted to explicitly approved provider distribution points after PKIX succeeds.
+ * Arbitrary certificate URLs, AIA and OCSP are never fetched.
  */
 public class CertificateValidator {
 
@@ -81,10 +82,16 @@ public class CertificateValidator {
 
     private final CertificateTrustSource trust;
     private final Clock clock;
+    private final YessignCrlResolver crlResolver;
 
     public CertificateValidator(CertificateTrustSource trust, Clock clock) {
+        this(trust, clock, null);
+    }
+
+    public CertificateValidator(CertificateTrustSource trust, Clock clock, YessignCrlResolver crlResolver) {
         this.trust = trust;
         this.clock = clock;
+        this.crlResolver = crlResolver;
     }
 
     public CertificateTrustSource trust() {
@@ -338,6 +345,11 @@ public class CertificateValidator {
             X509Certificate cert = path.get(i);
             X509Certificate issuer = i + 1 < path.size() ? path.get(i + 1) : anchor;
             RevocationStatus status = statusOf(cert, issuer, crls, now);
+            if (crlResolver != null && (status == RevocationStatus.UNKNOWN || status == RevocationStatus.STALE)) {
+                List<X509CRL> applicable = new ArrayList<>(crls);
+                applicable.addAll(crlResolver.resolve(cert, issuer));
+                status = statusOf(cert, issuer, applicable, clock.instant());
+            }
             if (status == RevocationStatus.REVOKED) {
                 return RevocationStatus.REVOKED;
             }
@@ -372,7 +384,7 @@ public class CertificateValidator {
             } catch (GeneralSecurityException e) {
                 continue; // not signed by this issuer: not evidence at all
             }
-            authentic.add(crl);
+            if (!differentNamedPartition(crl, cert)) authentic.add(crl);
         }
         // A listing in any authentic, fully understood CRL is definitive, whatever its date. (A listing in a
         // delta/partitioned CRL may be a removeFromCRL entry, so it only yields UNKNOWN below.)
@@ -462,6 +474,29 @@ public class CertificateValidator {
         } catch (RuntimeException | java.io.IOException e) {
             return false;
         }
+    }
+
+    /** A signed CRL for another named partition supplies no evidence for this certificate. */
+    private static boolean differentNamedPartition(X509CRL crl, X509Certificate cert) {
+        try {
+            byte[] idpBytes = crl.getExtensionValue(ISSUING_DISTRIBUTION_POINT);
+            byte[] dpBytes = cert.getExtensionValue(Extension.cRLDistributionPoints.getId());
+            if (idpBytes == null || dpBytes == null) return false;
+            var idp = IssuingDistributionPoint.getInstance(ASN1OctetString.getInstance(idpBytes).getOctets());
+            var name = idp.getDistributionPoint();
+            if (idp.isIndirectCRL() || name == null || name.getType() != DistributionPointName.FULL_NAME) return false;
+            var points = CRLDistPoint.getInstance(ASN1OctetString.getInstance(dpBytes).getOctets()).getDistributionPoints();
+            if (points.length == 0) return false;
+            for (var point : points) {
+                if (point.getCRLIssuer() != null || point.getReasons() != null || point.getDistributionPoint() == null
+                        || point.getDistributionPoint().getType() != DistributionPointName.FULL_NAME) return false;
+                var names = org.bouncycastle.asn1.x509.GeneralNames.getInstance(name.getName()).getNames();
+                var certNames = org.bouncycastle.asn1.x509.GeneralNames.getInstance(point.getDistributionPoint().getName()).getNames();
+                if (names.length == 0 || certNames.length == 0) return false;
+                for (var candidate : names) for (var certName : certNames) if (candidate.equals(certName)) return false;
+            }
+            return true;
+        } catch (RuntimeException ignored) { return false; }
     }
 
     private static byte[] decode(String base64, int maxBytes, String field) {

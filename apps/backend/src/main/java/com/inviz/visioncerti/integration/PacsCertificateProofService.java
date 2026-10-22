@@ -229,6 +229,11 @@ public final class PacsCertificateProofService {
             validator.verifySignature(leaf, request.signatureAlgorithm(), challenge.payload(), request.signature());
             List<X509Certificate> chain = validator.parseChain(request.chain());
             CertificateValidator.Validation validation = validator.validate(leaf, chain);
+            attempt.put("issuerDn", leaf.getIssuerX500Principal().getName());
+            attempt.put("revocationStatus", validation.revocation().name());
+            String points = com.inviz.visioncerti.certificate.YessignCrlResolver.distributionPoints(leaf).stream()
+                    .map(Object::toString).collect(java.util.stream.Collectors.joining(" | "));
+            if (!points.isEmpty()) attempt.put("crlDistributionPoints", points);
             CertificateValidator.requireGood(validation.revocation());
         } catch (ApiException failure) {
             Map<String, String> denial = new HashMap<>(attempt);

@@ -19,6 +19,7 @@ public class CertificateConfig {
     CertificateValidator certificateValidator(Clock clock,
             @Value("${visioncerti.cert.trust-anchors-file:}") String anchorsFile,
             @Value("${visioncerti.cert.crl-files:}") String crlFiles,
+            @Value("${visioncerti.cert.yessign-crl-lookup-enabled:false}") boolean yessignLookup,
             ObjectProvider<DevMockCertificateAuthority> mockCa) {
         List<CertificateTrustSource> sources = new ArrayList<>();
         sources.add(new FileCertificateTrustSource(anchorsFile, crlFiles));
@@ -26,7 +27,8 @@ public class CertificateConfig {
         if (mock != null) {
             sources.add(mock);
         }
-        return new CertificateValidator(CertificateTrustSource.composite(sources), clock);
+        return new CertificateValidator(CertificateTrustSource.composite(sources), clock,
+                yessignLookup ? new YessignCrlResolver(clock) : null);
     }
 
     /** No mobile adapter is bundled: whatever VISIONCERTI_MOBILE_PROVIDER says, mobile reports "not configured". */

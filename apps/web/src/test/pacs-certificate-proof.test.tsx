@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PacsCertificateProof } from '../components/PacsCertificateProof';
+import { ApiClientError } from '../api/client';
 
 const mocks = vi.hoisted(() => {
   const start = vi.fn();
@@ -98,5 +99,19 @@ describe('PACS certificate-only proof', () => {
     fireEvent.click(await screen.findByRole('button', { name: '인증서 확인' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('서명 검증에 실패'));
     expect(screen.queryByRole('heading', { name: '인증되었습니다.' })).not.toBeInTheDocument();
+  });
+
+  it('obtains a fresh challenge after revocation lookup fails so the same window can retry', async () => {
+    mocks.verify.mockRejectedValueOnce(new ApiClientError(503, {
+      code: 'CERTIFICATE_REVOCATION_UNAVAILABLE', message: '폐지 상태 조회 실패', correlationId: 'test-crl', retryable: true,
+    })).mockResolvedValueOnce({ verificationCode: 'A'.repeat(43), audience: 'pacs-sv70',
+      expiresAt: new Date(Date.now() + 60000).toISOString() });
+    render(<PacsCertificateProof />);
+    fireEvent.click(await screen.findByRole('button', { name: '인증서 확인' }));
+    await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('alert')).toHaveTextContent('폐지 상태 조회 실패');
+    expect(opener.postMessage).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: '인증서 확인' }));
+    expect(await screen.findByRole('heading', { name: '인증되었습니다.' })).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { ApiClientError } from '../api/client';
 import { ExternalCertificateProof } from './ExternalCertificateProof';
 import { CertificateComplete } from './CertificateComplete';
 import { computeCertificateFingerprint } from '../utils/cryptoCert';
@@ -36,9 +37,9 @@ export function PacsCertificateProof() {
   const [delivered, setDelivered] = useState(false);
   const [error, setError] = useState('');
 
-  const begin = useCallback(async () => {
+  const begin = useCallback(async (keepError = false) => {
     if (!context) return;
-    setLoading(true); setError(''); setChallenge(null);
+    setLoading(true); if (!keepError) setError(''); setChallenge(null);
     try {
       const next = await client.createPacsCertificateProofChallenge(context.audience, context.codeChallenge ? {
         pcNonce: context.nonce, codeChallenge: context.codeChallenge, codeChallengeMethod: 'S256',
@@ -61,6 +62,7 @@ export function PacsCertificateProof() {
   const submit = useCallback(async (proof: LocalSignResult) => {
     if (!challenge || !context || context.opener.closed) throw new Error('PACS 창을 다시 열어 주세요.');
     setLoading(true); setError('');
+    let refresh = false;
     try {
       const result = await client.verifyPacsCertificateProof({
         challengeId: challenge.challengeId,
@@ -80,11 +82,19 @@ export function PacsCertificateProof() {
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : '인증서 검증에 실패했습니다.';
       setError(message);
-      context.opener.postMessage({ type: 'VC_CERTIFICATE_PROOF_ERROR', nonce: context.nonce,
-        audience: context.audience, code: 'CERTIFICATE_PROOF_FAILED' }, context.origin);
+      refresh = failure instanceof ApiClientError;
+      // A temporary provider outage must not cancel the helper's still-pending S256 attempt.
+      if (!(failure instanceof ApiClientError && failure.retryable)) {
+        context.opener.postMessage({ type: 'VC_CERTIFICATE_PROOF_ERROR', nonce: context.nonce,
+          audience: context.audience, code: 'CERTIFICATE_PROOF_FAILED' }, context.origin);
+      }
       throw failure;
-    } finally { setLoading(false); }
-  }, [challenge, client, context]);
+    } finally {
+      setLoading(false);
+      // A server verification attempt consumes its challenge even when revocation data is unavailable.
+      if (refresh) void begin(true);
+    }
+  }, [begin, challenge, client, context]);
 
   if (!context) return <section role="alert">PACS에서 인증서 확인을 다시 시작해 주세요.</section>;
   if (delivered) return context.codeChallenge

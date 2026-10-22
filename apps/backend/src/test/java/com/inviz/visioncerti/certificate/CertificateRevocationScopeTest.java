@@ -150,6 +150,10 @@ class CertificateRevocationScopeTest {
                 new IssuingDistributionPoint(otherName, false, false, null, false, false)));
         assertThat(CertificateValidator.statusOf(withDp, pki.intermediate.certificate(), List.of(other), now))
                 .isEqualTo(RevocationStatus.UNKNOWN);
+        assertThat(CertificateValidator.statusOf(withDp, pki.intermediate.certificate(), List.of(other, matching), now))
+                .isEqualTo(RevocationStatus.GOOD);
+        assertThat(CertificateValidator.statusOf(withDp, pki.intermediate.certificate(), List.of(other, revoked), now))
+                .isEqualTo(RevocationStatus.REVOKED);
     }
 
     @Test

@@ -19,6 +19,7 @@ const fields: Record<string, string> = {
   pacsLoginId: 'PACS 로그인 ID', pacsAccountId: 'PACS 계정 번호', computerName: 'PC 이름', deviceId: 'PC 식별자',
   clientInfoSource: '계정·PC 정보 출처', reportKeySha256: '판독문 식별 해시', eventId: 'PACS 이벤트 ID', eventFingerprint: '이벤트 중복 확인 해시',
   exchangeMethod: '결과 교환 방식',
+  revocationStatus: '인증서 폐지 조회 상태', crlDistributionPoints: '발급기관 폐지 목록 위치',
 };
 const date = (value?: string | null) => value ? new Date(value).toLocaleString('ko-KR') : '기록 없음';
 

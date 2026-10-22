@@ -24,7 +24,7 @@ PACS SP10은 서버 공용 HMAC 키 없이 `VC-PC-PROOF-S256-V1` PC 교환 API�
 | API | Cloud Run `vision-certi-api`, 서울, 최소 인스턴스 1개 |
 | 데이터 | Cloud SQL PostgreSQL 17 `vision-certi-postgres-seoul`, DB `vision_certi`, 스키마 V010, 일별 백업 및 PITR 7일 |
 | 서명 키 | Compute Engine `vision-certi-openbao-1`의 OpenBao Transit/Private PKI, 전용 VPC 내부 주소 `10.71.0.10:8200` |
-| 인증서 신뢰 | YESKEY 공개 `yessignCA Class 3` 인증서와 발급기관 서명 CRL, VM에서 매시간 갱신 |
+| 인증서 신뢰 | YESKEY 공개 `yessignCA Class 3`와 서명 CRL. 기존 CRL은 VM에서 매시간 갱신하며, 다른 yessign 분배 지점은 검증 시 제한된 LDAP 조회로 확인 |
 | 비밀 | Secret Manager의 `vision-certi-*` 비밀들. Cloud Run 서비스 계정은 필요한 비밀에만 접근 |
 | 인증서버 백업 | OpenBao VM 디스크의 서울 일별 스냅샷, 7일 보존 |
 
@@ -45,6 +45,8 @@ PACS와 웹 화면은 항상 공개 클라우드 API를 사용한다. 의사 PC�
 인증서 개인키와 비밀번호는 의사 PC 밖으로 보내지 않는다. 공개 클라우드에는 인증서 공개 정보, 일회용 challenge의 서명, 계정·판독 승인 기록만 저장한다. PACS 서버는 `vision-certi-pacs` 클라이언트 ID와 Secret Manager의 `vision-certi-pacs-hmac-secret` 값을 안전하게 전달받아 HMAC 요청을 생성한다. 현재 허용 기관 ID는 `inviz`이며, 실제 의료기관을 등록할 때 기관별 범위와 관리자 배정을 검토·추가해야 한다. [PACS 연동 문서](../../docs/PUBLIC_PACS_CONNECTION.md)를 따른다.
 
 ## 검증 결과와 운영 경계
+
+2026-10-22 다른 판독자의 yessign 인증서가 UNKNOWN으로 거절되는 문제에 대해 분배 지점별 CRL 조회를 추가했다. `VISIONCERTI_CERT_YESSIGN_CRL_LOOKUP_ENABLED=true`일 때 신뢰 경로 확인 후 `ds.yessign.or.kr:389`의 허용된 CRL DN만 조회한다. 다른 호스트, 포트, 자격증명, 검색 필터와 LDAP referral은 허용하지 않는다. 서명·발급기관·분배 지점·시각을 검증한 CRL만 최대 5분(또는 nextUpdate까지) 캐시하며, 조회 실패는 20초간 재호출을 제한한다. 분배 지점이 다른 CRL을 이 인증서의 증거로 사용하지 않는다. 상세 원인/검증은 [장애 처리 보고서](../../docs/obsidian/2026-10-22_yessign_UNKNOWN_원인과_처리결과.md)를 참고한다. 상태 화면의 기존 CRL FRESH는 등록 파일의 신선도를 뜻하며 모든 인증서의 폐지 조회 성공을 보증하지 않는다.
 
 공개 `/v1/runtime/capabilities`가 HTTP 200, `prod`, PostgreSQL `READY`/V010, OpenBao `OPENBAO_TRANSIT`, PC 인증서 CRL `FRESH`를 반환했다. 공개 `POST /v1/pacs-certificate-proofs/challenges`는 HTTP 201로 PACS 확인용 서명 대상을 반환했고, HMAC 없는 `POST /v1/integrations/pacs/certificate-proofs/redeem`은 HTTP 401로 거부됐다. `/v1` 응답에는 `Cache-Control: private, no-store, max-age=0`가 적용된다. 새 확인 전용 흐름은 [PACS 연동 문서](../../docs/PACS_공동인증서_확인전용_연동.md)에 설명한다. 운영 기능 표시는 여전히 `clinicalUseAllowed: false`이며 임상 사용 적합성 승인을 뜻하지 않는다.
 

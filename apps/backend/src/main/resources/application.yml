@@ -67,6 +67,7 @@ visioncerti:
   cert:
     trust-anchors-file: ${VISIONCERTI_CERT_TRUST_ANCHORS_FILE:}
     crl-files: ${VISIONCERTI_CERT_CRL_FILES:}
+    yessign-crl-lookup-enabled: ${VISIONCERTI_CERT_YESSIGN_CRL_LOOKUP_ENABLED:false}
     service-id: ${VISIONCERTI_CERT_SERVICE_ID:vision-certi-dev}
     challenge-ttl: ${VISIONCERTI_CERT_CHALLENGE_TTL:PT5M}
     dev-mock-enabled: ${VISIONCERTI_CERT_DEV_MOCK_ENABLED:false}

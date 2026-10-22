@@ -55,6 +55,17 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class PacsIntegrationApiTest {
 
     @Test
+    void clientActivityRequiresHmacAndRejectsUnknownProofs() throws Exception {
+        String path = "/v1/integrations/pacs/certificate-proofs/" + UUID.randomUUID() + "/events";
+        String body = "{\"eventId\":\"" + UUID.randomUUID() + "\",\"action\":\"LOGIN_SUCCEEDED\","
+                + "\"clientInfo\":{\"pacsLoginId\":\"reader\",\"deviceId\":\"test-device\"}}";
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        servicePost(path, body).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CERTIFICATE_PROOF_INACTIVE"));
+    }
+
+    @Test
     void proofAuthenticationFailuresAreDurableAndVisibleOnlyToAdministrators() throws Exception {
         mvc.perform(post("/v1/integrations/pacs/certificate-proofs/redeem")
                 .header("User-Agent", "AuditDeniedFixture")

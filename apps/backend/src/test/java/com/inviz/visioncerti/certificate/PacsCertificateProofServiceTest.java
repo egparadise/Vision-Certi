@@ -112,6 +112,9 @@ class PacsCertificateProofServiceTest {
         var db = PostgresTestDatabase.create("proof_activity");
         String fingerprint;
         String codeValue;
+        java.util.UUID durableProof;
+        var durableEvent = new PacsCertificateProofService.ClientEventRequest(java.util.UUID.randomUUID(), "LOGIN_SUCCEEDED",
+                new PacsCertificateProofService.ClientInfo("durable-reader", "42", "DURABLE-PC", "device-durable"), null);
         var context = new PacsRequestContext("127.0.0.8", "203.0.113.8, 198.51.100.2", "PACS-test/3.40.6", "https://vision-certi.web.app");
         try (var store = db.store()) {
             audit = new AuditService(store, clock);
@@ -125,6 +128,8 @@ class PacsCertificateProofServiceTest {
             var code = service.verify(signed(challenge, leaf), context);
             codeValue = code.verificationCode();
             var receipt = service.redeem(pacs, new PacsCertificateProofService.RedeemRequest(codeValue), context);
+            durableProof = receipt.verificationId();
+            service.clientEvent(pacs, durableProof, durableEvent, context);
             service.status(pacs, receipt.verificationId(), context);
             assertThatThrownBy(() -> service.redeem(pacs, new PacsCertificateProofService.RedeemRequest(codeValue), context))
                     .isInstanceOf(ApiException.class);
@@ -139,6 +144,12 @@ class PacsCertificateProofServiceTest {
         }
         try (var reopened = db.store()) {
             var readAudit = new AuditService(reopened, clock);
+            DoctorService reopenedDoctors = new DoctorService(readAudit, new DevSimulatedCredentialProvider(clock),
+                    new TestGoogleTokens(clock).verifier(), clock, DoctorPolicy.defaults(), false, true, true);
+            var reopenedService = new PacsCertificateProofService(IntegrationClients.of(pacs), new CertificateValidator(trust, clock), reopenedDoctors, readAudit, clock, "test");
+            assertThat(reopenedService.clientEvent(pacs, durableProof, durableEvent, context).duplicate()).isTrue();
+            var delayed = new PacsCertificateProofService.ClientEventRequest(java.util.UUID.randomUUID(), "APPROVAL_REQUESTED", durableEvent.clientInfo(), "d".repeat(64));
+            assertThat(reopenedService.clientEvent(pacs, durableProof, delayed, context).recorded()).isTrue();
             var controller = new PacsProofActivityController(readAudit, IntegrationClients.of(pacs));
             var admin = new RequestActor("hospital-a", "admin", ActorRole.ADMIN);
             var page = controller.list(admin, "", 0, 50).getBody();
@@ -146,6 +157,8 @@ class PacsCertificateProofServiceTest {
             assertThat(page.totals().verified()).isEqualTo(2);
             assertThat(page.totals().redeemed()).isEqualTo(1);
             assertThat(page.totals().checked()).isEqualTo(1);
+            assertThat(page.totals().loginSucceeded()).isEqualTo(1);
+            assertThat(page.totals().approvalDocuments()).isEqualTo(1);
             assertThat(page.totals().denied()).isEqualTo(2);
             assertThat(page.certificates()).singleElement().satisfies(cert -> {
                 assertThat(cert.fingerprintSha256()).isEqualTo(fingerprint);
@@ -175,5 +188,54 @@ class PacsCertificateProofServiceTest {
         var multi = new IntegrationClient(pacs.clientId(), new byte[32], "test", Set.of("hospital-a", "other"));
         assertThat(new PacsProofActivityController(audit, IntegrationClients.of(multi)).list(admin, "", 0, 50).getBody().total()).isZero();
         assertThat(audit.list(pacs.clientId())).isEqualTo(original);
+    }
+
+    @Test
+    void clientLoginAndApprovalEventsAreScopedDeduplicatedAndCountReportsSeparately() {
+        var challenge = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId()), "127.0.0.1");
+        var leaf = pki.leaf(TestPki.rsa(2048));
+        var code = service.verify(signed(challenge, leaf));
+        var info = new PacsCertificateProofService.ClientInfo("doctor-login", "42", "READING-PC", "device-123");
+        var receipt = service.redeem(pacs, new PacsCertificateProofService.RedeemRequest(code.verificationCode(), info));
+        var attempt = new PacsCertificateProofService.ClientEventRequest(java.util.UUID.randomUUID(), "LOGIN_ATTEMPTED", info, null);
+        assertThat(service.clientEvent(pacs, receipt.verificationId(), attempt, PacsRequestContext.EMPTY).duplicate()).isFalse();
+        assertThat(service.clientEvent(pacs, receipt.verificationId(), attempt, PacsRequestContext.EMPTY).duplicate()).isTrue();
+        var success = new PacsCertificateProofService.ClientEventRequest(java.util.UUID.randomUUID(), "LOGIN_SUCCEEDED", info, null);
+        service.clientEvent(pacs, receipt.verificationId(), success, PacsRequestContext.EMPTY);
+        for (int i = 0; i < 3; i++) {
+            service.clientEvent(pacs, receipt.verificationId(), new PacsCertificateProofService.ClientEventRequest(
+                    java.util.UUID.randomUUID(), "APPROVAL_REQUESTED", info, (i == 2 ? "b" : "a").repeat(64)), PacsRequestContext.EMPTY);
+        }
+        var changed = new PacsCertificateProofService.ClientEventRequest(attempt.eventId(), "LOGIN_SUCCEEDED", info, null);
+        assertThatThrownBy(() -> service.clientEvent(pacs, receipt.verificationId(), changed, PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        var otherClient = new IntegrationClient("other", new byte[32], "test", Set.of("other"));
+        assertThatThrownBy(() -> service.clientEvent(otherClient, receipt.verificationId(), success, PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        var page = new PacsProofActivityController(audit, IntegrationClients.of(pacs))
+                .list(new RequestActor("hospital-a", "admin", ActorRole.ADMIN), "", 0, 50).getBody();
+        assertThat(page.totals().loginAttempted()).isEqualTo(1);
+        assertThat(page.totals().loginSucceeded()).isEqualTo(1);
+        assertThat(page.totals().approvalRequests()).isEqualTo(3);
+        assertThat(page.totals().approvalDocuments()).isEqualTo(2);
+        assertThat(page.certificates()).singleElement().satisfies(cert -> {
+            assertThat(cert.attempted()).isEqualTo(1);
+            assertThat(cert.accounts()).containsExactly("doctor-login");
+            assertThat(cert.computers()).containsExactly("READING-PC");
+            assertThat(cert.loginSucceeded()).isEqualTo(1);
+        });
+        assertThat(page.toString()).doesNotContain(code.verificationCode(), "password", "privateKey");
+    }
+
+    @Test
+    void rejectedSignatureIsCountedAgainstTheSubmittedCertificate() {
+        var challenge = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId()), "127.0.0.1");
+        var leaf = pki.leaf(TestPki.rsa(2048));
+        var signed = signed(challenge, leaf);
+        var invalid = new LoginRequest(signed.challengeId(), signed.fingerprintSha256(), signed.certificate(), signed.chain(), "AA==", signed.signatureAlgorithm());
+        assertThatThrownBy(() -> service.verify(invalid)).isInstanceOf(ApiException.class);
+        var page = new PacsProofActivityController(audit, IntegrationClients.of(pacs))
+                .list(new RequestActor("hospital-a", "admin", ActorRole.ADMIN), "", 0, 50).getBody();
+        assertThat(page.certificates()).singleElement().satisfies(cert -> {
+            assertThat(cert.attempted()).isEqualTo(1); assertThat(cert.verified()).isZero();
+        });
     }
 }

@@ -19,6 +19,7 @@ import { computeMockDashboard } from '../mock/mockData';
 import { ErrorBanner } from './ErrorBanner';
 import { LoadingSpinner } from './LoadingSpinner';
 import { InfoPopover } from './InfoPopover';
+import { PacsCertificateActivity } from './PacsCertificateActivity';
 
 const signRequestLabels: Record<string, string> = {
   COMPLETED: '완료',
@@ -34,7 +35,7 @@ const deliveryLabels: Record<string, string> = {
 };
 
 export const DashboardView: React.FC = () => {
-  const { tenantId, client, isMockMode, mockStore, setActiveTab, runtimeCapabilities } = useApp();
+  const { tenantId, client, isMockMode, mockStore, setActiveTab, setSelectedDocumentId, runtimeCapabilities, role } = useApp();
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<unknown>(null);
@@ -143,7 +144,8 @@ export const DashboardView: React.FC = () => {
         <>
           {/* Top Metrics Cards */}
           <div className="metrics-grid">
-            <div className="metric-card" tabIndex={0} aria-label={`등록 판독문 ${data.documents}건`}>
+            <div className="metric-card metric-navigation">
+              <button type="button" className="metric-navigation-action" aria-label={`등록 판독문 ${data.documents}건 · 목록으로 이동`} onClick={() => { setSelectedDocumentId(null); setActiveTab('documents'); }} />
               <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <FileText size={16} style={{ color: 'var(--teal-600)' }} />
                 등록 판독문
@@ -153,7 +155,8 @@ export const DashboardView: React.FC = () => {
               <div className="metric-sub">버전 {data.documentVersions}개</div>
             </div>
 
-            <div className="metric-card" tabIndex={0} aria-label={`전자서명 완료 ${data.signatures}건`}>
+            <div className="metric-card metric-navigation">
+              <button type="button" className="metric-navigation-action" aria-label={`전자서명 완료 ${data.signatures}건 · 서명 내역으로 이동`} onClick={() => setActiveTab('signatures')} />
               <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <FileCheck size={16} style={{ color: '#16a34a' }} />
                 전자서명 완료
@@ -164,7 +167,8 @@ export const DashboardView: React.FC = () => {
               </div>
             </div>
 
-            <div className="metric-card" tabIndex={0} aria-label={`병원 전송 큐 ${data.deliveriesByStatus['QUEUED'] || 0}건 대기`}>
+            <div className="metric-card metric-navigation">
+              <button type="button" className="metric-navigation-action" aria-label={`전송 대기 ${data.deliveriesByStatus['QUEUED'] || 0}건 · 전송 큐로 이동`} onClick={() => setActiveTab('deliveries')} />
               <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Send size={16} style={{ color: '#0284c7' }} />
                 전송 대기
@@ -178,7 +182,8 @@ export const DashboardView: React.FC = () => {
               </div>
             </div>
 
-            <div className="metric-card" tabIndex={0} aria-label={`감사 로그 ${data.auditEvents}건`}>
+            <div className="metric-card metric-navigation">
+              <button type="button" className="metric-navigation-action" aria-label={`감사 이벤트 ${data.auditEvents}건 · 감사 로그로 이동`} onClick={() => setActiveTab('audit')} />
               <div className="metric-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <ShieldCheck size={16} style={{ color: '#7c3aed' }} />
                 감사 이벤트
@@ -188,6 +193,7 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
 
+          {role === 'ADMIN' && !isMockMode && <PacsCertificateActivity />}
           {/* Breakdown Sections */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
             {/* Sign Request Status Breakdown */}

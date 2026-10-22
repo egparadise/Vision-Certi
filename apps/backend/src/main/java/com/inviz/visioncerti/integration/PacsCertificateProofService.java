@@ -56,9 +56,30 @@ public final class PacsCertificateProofService {
     public record ProofCodeResponse(String verificationCode, String audience, Instant expiresAt) {
         @Override public String toString() { return "ProofCodeResponse[verificationCode=<redacted>]"; }
     }
-    public record RedeemRequest(String verificationCode) {
+    public record ClientInfo(String pacsLoginId, String pacsAccountId, String computerName, String deviceId) {
+        Map<String, String> details() {
+            Map<String, String> result = new HashMap<>();
+            metadata(result, "pacsLoginId", pacsLoginId);
+            metadata(result, "pacsAccountId", pacsAccountId);
+            metadata(result, "computerName", computerName);
+            metadata(result, "deviceId", deviceId);
+            result.put("clientInfoSource", "PACS_REPORTED");
+            return result;
+        }
+        private static void metadata(Map<String, String> values, String field, String value) {
+            if (value == null || value.isBlank()) return;
+            if (value.length() > 128 || value.chars().anyMatch(Character::isISOControl)) {
+                throw ApiException.badRequest("INVALID_CLIENT_INFO", "Client identifiers must be at most 128 characters without control characters");
+            }
+            values.put(field, value.strip());
+        }
+    }
+    public record RedeemRequest(String verificationCode, ClientInfo clientInfo) {
+        public RedeemRequest(String verificationCode) { this(verificationCode, null); }
         @Override public String toString() { return "RedeemRequest[verificationCode=<redacted>]"; }
     }
+    public record ClientEventRequest(UUID eventId, String action, ClientInfo clientInfo, String reportKeySha256) { }
+    public record ClientEventResponse(boolean recorded, boolean duplicate) { }
     public record Receipt(boolean verified, String authentication, UUID verificationId, String audience,
             String certificateFingerprintSha256, String subjectDn, String issuerDn,
             Instant certificateNotAfter, Instant verifiedAt, Instant expiresAt) { }
@@ -167,8 +188,12 @@ public final class PacsCertificateProofService {
             return found;
         });
         String tenant = tenant(clients.require(), challenge.tenantId());
-        record(tenant, challenge.clientId(), "ATTEMPTED", challenge.id().toString(), AuditService.SUCCESS, context,
-                Map.of("challengeId", challenge.id().toString()));
+        Map<String, String> attempt = new HashMap<>();
+        attempt.put("challengeId", challenge.id().toString());
+        // Parse the submitted certificate for attribution only; verification below still decides success.
+        try { attempt.put("fingerprintSha256", CertificateValidator.fingerprint(validator.parse(request.certificate()))); }
+        catch (ApiException ignored) { /* malformed certificate still counts as an unattributed attempt */ }
+        record(tenant, challenge.clientId(), "ATTEMPTED", challenge.id().toString(), AuditService.SUCCESS, context, attempt);
         X509Certificate leaf;
         String fingerprint;
         try {
@@ -183,8 +208,10 @@ public final class PacsCertificateProofService {
             CertificateValidator.Validation validation = validator.validate(leaf, chain);
             CertificateValidator.requireGood(validation.revocation());
         } catch (ApiException failure) {
+            Map<String, String> denial = new HashMap<>(attempt);
+            denial.put("code", failure.code()); denial.put("stage", "VERIFY");
             record(tenant, challenge.clientId(), "DENIED", challenge.id().toString(), AuditService.DENIED, context,
-                    Map.of("code", failure.code(), "challengeId", challenge.id().toString(), "stage", "VERIFY"));
+                    denial);
             throw failure;
         }
         String code = randomBase64();
@@ -225,6 +252,7 @@ public final class PacsCertificateProofService {
 
     private Receipt redeemChecked(IntegrationClient client, RedeemRequest request, PacsRequestContext context) {
         String code = request == null ? null : request.verificationCode();
+        Map<String, String> clientInfo = request == null || request.clientInfo() == null ? Map.of() : request.clientInfo().details();
         if (code == null || !CODE.matcher(code).matches()) throw invalidCode();
         Instant now = clock.instant();
         Proof proof = store.tx(tx -> {
@@ -237,9 +265,66 @@ public final class PacsCertificateProofService {
             return found;
         });
         Receipt receipt = statusChecked(client, proof.id());
+        Map<String, String> details = evidence(proof);
+        details.putAll(clientInfo);
         record(tenant(client, proof.tenantId()), client.clientId(), "REDEEMED", proof.id().toString(),
-                AuditService.SUCCESS, context, evidence(proof));
+                AuditService.SUCCESS, context, details);
         return receipt;
+    }
+
+    /** HMAC-authenticated PACS observations. These records never grant login or report approval. */
+    public ClientEventResponse clientEvent(IntegrationClient client, UUID verificationId, ClientEventRequest request,
+            PacsRequestContext context) {
+        if (request == null || request.eventId() == null || request.clientInfo() == null || request.action() == null
+                || !List.of("LOGIN_ATTEMPTED", "LOGIN_SUCCEEDED", "LOGIN_FAILED", "APPROVAL_REQUESTED").contains(request.action())) {
+            throw ApiException.badRequest("INVALID_CLIENT_EVENT", "A supported action, eventId and clientInfo are required");
+        }
+        Map<String, String> details = new HashMap<>(request.clientInfo().details());
+        if (!details.containsKey("pacsLoginId") || !details.containsKey("deviceId")) {
+            throw ApiException.badRequest("INVALID_CLIENT_EVENT", "pacsLoginId and deviceId are required");
+        }
+        if ("APPROVAL_REQUESTED".equals(request.action())) {
+            if (request.reportKeySha256() == null || !request.reportKeySha256().matches("[a-f0-9]{64}")) {
+                throw ApiException.badRequest("INVALID_CLIENT_EVENT", "A SHA-256 report identifier is required");
+            }
+            details.put("reportKeySha256", request.reportKeySha256());
+        } else if (request.reportKeySha256() != null) {
+            throw ApiException.badRequest("INVALID_CLIENT_EVENT", "Report identifier is only allowed for approval requests");
+        }
+        Proof proof = store.tx(tx -> tx.get(PROOFS, verificationId).orElse(null));
+        if (proof != null && (!proof.clientId().equals(client.clientId()) || proof.redeemedAt() == null)) {
+            throw ApiException.forbidden("CERTIFICATE_PROOF_INACTIVE", "A redeemed proof for this PACS is required");
+        }
+        // Operational proofs expire; the immutable redeem record still allows a delayed audit outbox delivery.
+        var historical = proof == null ? client.tenantIds().stream().flatMap(t -> audit.list(t).stream())
+                .filter(e -> "PACS_CERTIFICATE_PROOF_REDEEMED".equals(e.action())
+                        && verificationId.toString().equals(e.targetId()) && client.clientId().equals(e.details().get("clientId")))
+                .findFirst().orElse(null) : null;
+        if (proof == null && historical == null) throw ApiException.forbidden("CERTIFICATE_PROOF_INACTIVE", "Redeemed proof not found");
+        String scope = proof != null ? tenant(client, proof.tenantId()) : historical.tenantId();
+        if (proof != null) details.putAll(evidence(proof));
+        else for (String key : List.of("verificationId", "fingerprintSha256", "subjectDn", "issuerDn", "certificateNotAfter", "verifiedAt", "expiresAt")) {
+            if (historical.details().containsKey(key)) details.put(key, historical.details().get(key));
+        }
+        details.put("eventId", request.eventId().toString());
+        String identity = Hashing.sha256Hex(new java.util.TreeMap<>(details).toString() + request.action());
+        // Lock and append in the same DB transaction: retries and concurrent submissions count only once.
+        return store.tx(tx -> {
+            tx.lock("pacs-client-event|" + scope + "|" + client.clientId() + "|" + request.eventId());
+            var previous = audit.list(scope).stream().filter(e -> client.clientId().equals(e.details().get("clientId"))
+                    && request.eventId().toString().equals(e.details().get("eventId"))).findFirst();
+            if (previous.isPresent()) {
+                if (!identity.equals(previous.get().details().get("eventFingerprint"))) {
+                    throw ApiException.conflict("CLIENT_EVENT_REUSED", "eventId was used with different details");
+                }
+                return new ClientEventResponse(true, true);
+            }
+            // Queued observations may arrive after expiry; they remain client-reported history, not authorization.
+            details.put("eventFingerprint", identity);
+            record(scope, client.clientId(), request.action(), verificationId.toString(),
+                    "LOGIN_FAILED".equals(request.action()) ? AuditService.DENIED : AuditService.SUCCESS, context, details);
+            return new ClientEventResponse(true, false);
+        });
     }
 
     public Receipt status(IntegrationClient client, UUID verificationId) {

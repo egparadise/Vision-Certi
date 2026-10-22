@@ -21,6 +21,7 @@ Inviz_*.pdf
 outputs/
 # PACS installers are release artifacts; source lives in Saintview-Web-PACS.
 apps/web/public/downloads/saintview-pacs-*-setup.exe
+apps/web/public/downloads/vision-certi-pacs-activity-patch.zip
 **/__pycache__/
 **/.venv/
 **/venv/

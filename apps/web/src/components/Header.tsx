@@ -5,6 +5,7 @@ import { isDemoEnabled } from '../utils/env';
 import { discoverOidc } from '../services/oidcDiscovery';
 import { signInGoogleStaff, signOutGoogleStaff } from '../services/firebaseStaffAuth';
 import { InfoPopover } from './InfoPopover';
+import { CertificateServerStatus } from './CertificateServerStatus';
 
 function generateRandomString(length: number): string {
   const array = new Uint8Array(length);
@@ -233,6 +234,7 @@ export const Header: React.FC = () => {
         <span className="dev-mock-badge" data-testid="runtime-banner-badge">
           {bannerBadge}
         </span>
+        <CertificateServerStatus />
         <InfoPopover
           title="서버 운영 상태"
           ariaLabel="서버 운영 상태 상세 보기"

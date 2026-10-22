@@ -1,0 +1,130 @@
+--- a/certificate_broker/service.py
++++ b/certificate_broker/service.py
+@@ -10,6 +10,7 @@
+ from certificate_broker.client_store import token_hash, canonical
+ from certificate_broker.credentials import CredentialStore
+ from certificate_broker.proof import validate_proof
++from certificate_broker.activity import ActivityOutbox
+ 
+ 
+ class LoginService:
+@@ -17,6 +18,7 @@
+         self.certificate_factory, self.pacs = certificate_factory, pacs
+         self.vault, self.store, self.pacs_url = vault, store, pacs_url
+         self.credentials = CredentialStore(store.path.parent, vault)
++        self.activity = ActivityOutbox(store, certificate_factory)
+         # Short-lived, process-only cache for simultaneous report-window refreshes.
+         self.refresh_cache = refresh_cache if refresh_cache is not None else {}
+         # Upgrade authenticated older MD files without promoting their old Y values
+@@ -137,6 +139,7 @@
+         # uses password-login, then authenticate against that authenticated token.
+         receipt = self.verify(body.verificationCode)
+         result = {}
++        attempted_user = None
+         try:
+             with self.store.transaction() as data:
+                 account = self.matching_account(data, receipt)
+@@ -147,13 +150,18 @@
+                     password = self.credentials.get(account['pacsCredentialRef'], self.context(account['user']))
+                 else:
+                     raise HTTPException(422, '이 PC에서 최초 공동인증서 로그인은 PACS ID/PW를 입력하세요.')
++                self.activity.record(receipt, account['user'], 'LOGIN_ATTEMPTED')
++                attempted_user = account['user']
+                 result = self.pacs('POST', '/user/auth/login', {
+                     'user_id': user_id, 'user_passwd': password, 'user_overwrite': False})
+                 user = self.successful_login(result, user_id)
+                 self.new_session(data, result, user, password, receipt)
+         except Exception:
+             self.close_failed_login(result)
++            if attempted_user:
++                self.activity.record(receipt, attempted_user, 'LOGIN_FAILED')
+             raise
++        self.activity.record(receipt, user, 'LOGIN_SUCCEEDED')
+         return {**result, 'credentialSaved': True, 'certificateAuthenticated': True}
+ 
+     def session(self, data, token):
+@@ -180,18 +188,29 @@
+ 
+     def authenticate(self, body, token):
+         with self.store.lock:
+-            self.session(self.store.read(), token)
++            existing = self.session(self.store.read(), token)
++            user = existing['user']
++            first_login = existing['receipt'].get('인증') != 'Y'
+         receipt = self.verify(body.verificationCode)
+-        with self.store.transaction() as data:
+-            session = self.session(data, token)
+-            previous = session['receipt'].get('serverResponse', {})
+-            if previous.get('verificationId') == receipt['serverResponse']['verificationId']:
+-                raise ValueError('A fresh verification ID is required')
+-            account = self.matching_account(data, receipt)
+-            if (account and account['receipt']['serverResponse']['verificationId']
+-                    == receipt['serverResponse']['verificationId']):
+-                raise ValueError('A previous login proof cannot be reused')
+-            self.bind(data, session, receipt)
++        if first_login:
++            self.activity.record(receipt, user, 'LOGIN_ATTEMPTED')
++        try:
++            with self.store.transaction() as data:
++                session = self.session(data, token)
++                previous = session['receipt'].get('serverResponse', {})
++                if previous.get('verificationId') == receipt['serverResponse']['verificationId']:
++                    raise ValueError('A fresh verification ID is required')
++                account = self.matching_account(data, receipt)
++                if (account and account['receipt']['serverResponse']['verificationId']
++                        == receipt['serverResponse']['verificationId']):
++                    raise ValueError('A previous login proof cannot be reused')
++                self.bind(data, session, receipt)
++        except Exception:
++            if first_login:
++                self.activity.record(receipt, user, 'LOGIN_FAILED')
++            raise
++        if first_login:
++            self.activity.record(receipt, user, 'LOGIN_SUCCEEDED')
+         return {'active': True, 'userIdx': session['user']['user_idx'], 'credentialSaved': True}
+ 
+     def logout(self, token):
+@@ -244,6 +263,9 @@
+         with self.store.lock:
+             data = self.store.read()
+             session = self.session(data, token)
++            if session['receipt'].get('serverResponse'):
++                self.activity.record(session['receipt'], session['user'], 'APPROVAL_REQUESTED',
++                    [self.pacs_url, body['study_idx'], report_idx or body.get('report_idx') or 'primary'])
+             try:
+                 receipt = self.current_proof(data, session)
+             except (ValueError, KeyError, TypeError, OSError, HTTPException):
+--- a/certificate_broker/main.py
++++ b/certificate_broker/main.py
+@@ -1,4 +1,5 @@
+ import json
++import asyncio
+ import os
+ import ssl
+ from contextlib import asynccontextmanager
+@@ -28,7 +29,24 @@
+     app.state.store = ClientStore(os.environ['BROKER_DATA_DIR'], key)
+     app.state.refresh_cache = {}
+     app.state.pacs_origin = validate_endpoint(os.environ['BROKER_PACS_ORIGIN'])
+-    yield
++    from certificate_broker.activity import ActivityOutbox
++    outbox = ActivityOutbox(app.state.store, lambda: VisionCertiClient(read_endpoint(os.environ['BROKER_CONFIG_DIR']), proof_only=True))
++    async def publish_activity():
++        while True:
++            try:
++                await asyncio.to_thread(outbox.flush)
++            except Exception:
++                pass  # Keep the durable queue. Never print account data or credentials.
++            await asyncio.sleep(30)
++    worker = asyncio.create_task(publish_activity())
++    try:
++        yield
++    finally:
++        worker.cancel()
++        try:
++            await worker
++        except asyncio.CancelledError:
++            pass
+ 
+ 
+ app = FastAPI(title='SaintView Certificate Broker', lifespan=lifespan, docs_url=None, redoc_url=None)

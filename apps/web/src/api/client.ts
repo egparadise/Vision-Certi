@@ -153,9 +153,11 @@ export class ApiClient {
     return response.json();
   }
 
-  async getHealth(): Promise<HealthInfo> {
+  async getHealth(signal?: AbortSignal): Promise<HealthInfo> {
     const res = await fetch(`${this.baseUrl}/health`, {
       method: 'GET',
+      cache: 'no-store',
+      signal,
     });
     return this.handleResponse<HealthInfo>(res);
   }

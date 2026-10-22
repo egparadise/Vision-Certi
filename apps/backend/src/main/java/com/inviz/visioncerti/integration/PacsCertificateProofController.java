@@ -50,6 +50,14 @@ public final class PacsCertificateProofController {
                 .body(proofs.status(client(request), verificationId, PacsRequestContext.from(request)));
     }
 
+    @PostMapping("/v1/integrations/pacs/certificate-proofs/{verificationId}/events")
+    ResponseEntity<PacsCertificateProofService.ClientEventResponse> clientEvent(HttpServletRequest request,
+            @PathVariable UUID verificationId,
+            @RequestBody(required = false) PacsCertificateProofService.ClientEventRequest body) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(proofs.clientEvent(client(request), verificationId, body, PacsRequestContext.from(request)));
+    }
+
     private static IntegrationClient client(HttpServletRequest request) {
         Object client = request.getAttribute(IntegrationAuthFilter.CLIENT_ATTRIBUTE);
         if (!(client instanceof IntegrationClient c)) throw IntegrationAuthFilter.authInvalid();

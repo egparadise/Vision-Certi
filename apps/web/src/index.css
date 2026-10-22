@@ -547,6 +547,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   overflow: visible;
 }
 
+.metric-navigation-action {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+  z-index: 1;
+}
+.metric-navigation-action:focus-visible { outline: 3px solid #0284c7; outline-offset: 3px; }
+.metric-navigation .info-popover-container { z-index: 2; }
+.certificate-server-status { display: inline-flex; align-items: center; gap: 6px; }
+.server-connection { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 20px; font-size: .8rem; background: #f1f5f9; color: #334155; }
+.server-connection.online { background: #dcfce7; color: #14532d; }
+.server-connection.offline { background: #fff1f2; color: #9f1239; }
+.server-connection-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
 .metric-label {
   font-size: 0.775rem;
   color: #64748b;

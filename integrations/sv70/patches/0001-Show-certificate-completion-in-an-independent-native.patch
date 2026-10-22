@@ -1,0 +1,439 @@
+From 7cc8ad83b2b2f387a8c66e3ae2515686297f54d2 Mon Sep 17 00:00:00 2001
+From: egparadise <egparadise@hanafos.com>
+Date: Thu, 22 Oct 2026 11:42:32 +0900
+Subject: [PATCH] Show certificate completion in an independent native window
+
+---
+ client/package.json                           |  2 +-
+ client/public/certificate-complete.html       | 26 +++++++
+ client/src-tauri/src/domains/certificate.rs   | 71 +++++++++++++++++++
+ client/src-tauri/src/ipc_stub.rs              |  5 ++
+ client/src-tauri/tauri.conf.json              |  2 +-
+ client/src/libs/certificateBroker.test.ts     | 20 ++++--
+ client/src/libs/visionCerti.ts                | 37 ++++++++--
+ server/certificate_broker/defaults.py         | 19 +++++
+ server/certificate_broker/launcher.py         |  4 ++
+ .../tests/test_certificate_broker_defaults.py | 27 +++++++
+ 10 files changed, 200 insertions(+), 13 deletions(-)
+ create mode 100644 client/public/certificate-complete.html
+ create mode 100644 server/certificate_broker/defaults.py
+ create mode 100644 server/tests/test_certificate_broker_defaults.py
+
+diff --git a/client/package.json b/client/package.json
+index 6e0e72e..ff10968 100644
+--- a/client/package.json
++++ b/client/package.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "saint-pacs-tauri",
+   "private": true,
+-  "version": "3.40.5",
++  "version": "3.40.6",
+   "type": "module",
+   "scripts": {
+     "version:sync": "node scripts/release-version.mjs --write",
+diff --git a/client/public/certificate-complete.html b/client/public/certificate-complete.html
+new file mode 100644
+index 0000000..4b8e332
+--- /dev/null
++++ b/client/public/certificate-complete.html
+@@ -0,0 +1,26 @@
++<!doctype html>
++<html lang="ko">
++<head>
++  <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
++  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
++  <title>인증 완료 — Vision-Certi</title>
++  <style>
++    * { box-sizing: border-box; }
++    body { margin: 0; background: #f4f7fb; color: #153153; font: 16px/1.6 'Malgun Gothic', sans-serif; }
++    main { margin: 24px; padding: 24px; background: white; border: 1px solid #dce5ef; border-radius: 16px; text-align: center; }
++    .check { color: #00856a; font-size: 44px; line-height: 1.2; }
++    h1 { margin: 12px 0; font-size: 28px; }
++    p { margin: 10px 0; }
++    small { color: #64748b; }
++  </style>
++</head>
++<body>
++  <main role="status">
++    <div class="check" aria-hidden="true">✓</div>
++    <h1>인증되었습니다.</h1>
++    <p>공동인증서 확인 결과를 PACS에 전달했습니다.<br>PACS 화면에서 계속 진행해 주세요.</p>
++    <small>오른쪽 위 X를 누르면 이 창이 닫힙니다.</small>
++  </main>
++</body>
++</html>
+diff --git a/client/src-tauri/src/domains/certificate.rs b/client/src-tauri/src/domains/certificate.rs
+index 4aaf333..1d0b2b3 100644
+--- a/client/src-tauri/src/domains/certificate.rs
++++ b/client/src-tauri/src/domains/certificate.rs
+@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
+ use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+ use tauri::webview::{NewWindowFeatures, NewWindowResponse};
+ use tauri::Manager;
++use tauri::webview::PageLoadEvent;
++use serde_json::Value;
+ 
+ pub fn start_local_broker(app: &AppHandle) {
+     #[cfg(target_os = "windows")]
+@@ -23,6 +25,57 @@ pub fn start_local_broker(app: &AppHandle) {
+ 
+ static NEXT_POPUP: AtomicU64 = AtomicU64::new(1);
+ 
++fn matches_proof_popup(url: &url::Url, origin: &str, nonce: &str) -> bool {
++    if url.scheme() != "https" || url.origin().ascii_serialization() != origin { return false; }
++    let Some((route, query)) = url.fragment().and_then(|value| value.split_once('?')) else { return false; };
++    route == "/certificates/pacs-proof" &&
++        url::form_urlencoded::parse(query.as_bytes()).filter(|(key, _)| key == "nonce")
++            .map(|(_, value)| value == nonce).collect::<Vec<_>>() == vec![true]
++}
++
++/// Presentation only. This never creates a certificate receipt or PACS session.
++/// The main renderer calls it after validating the server popup's message.
++pub fn show_complete(app: &AppHandle, args: &[Value]) -> Result<(), String> {
++    let value = args.first().ok_or("Missing completion context")?;
++    let nonce = value.get("nonce").and_then(Value::as_str).ok_or("Missing nonce")?;
++    let origin = value.get("origin").and_then(Value::as_str).ok_or("Missing origin")?;
++    if nonce.len() != 64 || !nonce.bytes().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()) {
++        return Err("Invalid nonce".into());
++    }
++    let original = app.webview_windows().into_iter().find_map(|(label, window)| {
++        if label.starts_with("certificate-popup-") && window.url().ok()
++            .map(|url| matches_proof_popup(&url, origin, nonce)).unwrap_or(false) { Some(window) } else { None }
++    }).ok_or("Matching certificate popup no longer exists")?;
++    let original_label = original.label().to_string();
++    let completion_label = format!("certificate-complete-{}", NEXT_POPUP.fetch_add(1, Ordering::Relaxed));
++    let parent = app.clone();
++    let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
++    // No window_features/opener and no IPC capabilities: the result page survives
++    // the original remote WebView's closure, navigation, network or script failure.
++    WebviewWindowBuilder::new(app, completion_label, WebviewUrl::App("certificate-complete.html".into()))
++        .title("인증 완료 — Vision-Certi")
++        .inner_size(560.0, 360.0).min_inner_size(480.0, 300.0)
++        .center().visible(false)
++        .on_navigation(|url| matches!(url.scheme(), "http" | "https" | "tauri") &&
++            matches!(url.host_str(), Some("tauri.localhost") | Some("localhost")) &&
++            url.path() == "/certificate-complete.html")
++        .on_new_window(|_, _| NewWindowResponse::Deny)
++        .on_page_load(move |webview, payload| {
++            if payload.event() == PageLoadEvent::Finished && payload.url().path() == "/certificate-complete.html" &&
++                !ready.swap(true, Ordering::AcqRel) {
++                if let Some(window) = parent.get_webview_window(webview.label()) {
++                    let _ = window.show();
++                    // Destroy the native frame, never window.close() from web content.
++                    if let Some(old) = parent.get_webview_window(&original_label) { let _ = old.destroy(); }
++                    let _ = window.set_focus();
++                    log::info!("[certificate] independent completion displayed; app={}", parent.package_info().version);
++                }
++            }
++        })
++        .build().map_err(|error| format!("Completion window could not open: {error}"))?;
++    Ok(())
++}
++
+ pub fn popup_handler(app: AppHandle) -> impl Fn(url::Url, NewWindowFeatures) -> NewWindowResponse<tauri::Wry> + Send + 'static {
+     move |url, features| {
+         if url.as_str() != "about:blank" && url.scheme() != "https" {
+@@ -50,3 +103,21 @@ pub fn popup_handler(app: AppHandle) -> impl Fn(url::Url, NewWindowFeatures) ->
+         }
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn completion_matches_only_the_requesting_proof_popup() {
++        let nonce = "a".repeat(64);
++        let address = format!("https://vision-certi.web.app/#/certificates/pacs-proof?nonce={nonce}&audience=pacs");
++        let url = url::Url::parse(&address).unwrap();
++        assert!(matches_proof_popup(&url, "https://vision-certi.web.app", &nonce));
++        assert!(!matches_proof_popup(&url, "https://other.example", &nonce));
++        assert!(!matches_proof_popup(&url, "https://vision-certi.web.app", &"b".repeat(64)));
++        for invalid in [address.replace("https:", "http:"), address.replace("pacs-proof", "login"),
++            format!("{address}&nonce={nonce}")] {
++            assert!(!matches_proof_popup(&url::Url::parse(&invalid).unwrap(), "https://vision-certi.web.app", &nonce));
++        }
++    }
++}
+diff --git a/client/src-tauri/src/ipc_stub.rs b/client/src-tauri/src/ipc_stub.rs
+index b885d8c..34a7a7f 100644
+--- a/client/src-tauri/src/ipc_stub.rs
++++ b/client/src-tauri/src/ipc_stub.rs
+@@ -30,6 +30,11 @@ pub async fn ipc_invoke(
+     match channel.as_str() {
+         // ── 도메인 핸들러 (Task 2~6에서 실제 로직으로 채움) ──
+         "user:get-user-info" => Ok(domains::user::get_user_info(&app)),
++        "certificate:show-complete" => {
++            if window.label() != "main" { return Err("Certificate completion requires the main window".into()); }
++            domains::certificate::show_complete(&app, &args)?;
++            Ok(Value::Null)
++        }
+         "user:get-remember-info" => Ok(domains::user::get_remember_info(&app)),
+         "certificate:credentials-get" => Ok(domains::credential::certificate_get(&app,
+             args.first().and_then(|value| value.as_str()).unwrap_or(""))),
+diff --git a/client/src-tauri/tauri.conf.json b/client/src-tauri/tauri.conf.json
+index 4771446..feddbdc 100644
+--- a/client/src-tauri/tauri.conf.json
++++ b/client/src-tauri/tauri.conf.json
+@@ -1,7 +1,7 @@
+ {
+   "$schema": "https://schema.tauri.app/config/2",
+   "productName": "SaintViewPACS",
+-  "version": "3.40.5",
++  "version": "3.40.6",
+   "identifier": "com.saint.v3.app",
+   "build": {
+     "frontendDist": "../dist",
+diff --git a/client/src/libs/certificateBroker.test.ts b/client/src/libs/certificateBroker.test.ts
+index 3c2f53c..7790011 100644
+--- a/client/src/libs/certificateBroker.test.ts
++++ b/client/src/libs/certificateBroker.test.ts
+@@ -1,5 +1,5 @@
+ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+-const mocks = vi.hoisted(() => ({get: vi.fn(), post: vi.fn(), pacsPost: vi.fn(), save: vi.fn(), read: vi.fn()}));
++const mocks = vi.hoisted(() => ({get: vi.fn(), post: vi.fn(), pacsPost: vi.fn(), save: vi.fn(), read: vi.fn(), completion: vi.fn()}));
+ vi.mock('@libs/axios', () => ({default: {post: mocks.pacsPost}}));
+ vi.mock('./certificateTransport', () => ({
+   certificateClient: {get: mocks.get}, certificateBroker: {get: mocks.get, post: mocks.post},
+@@ -12,6 +12,8 @@ import {loginWithCertificate, authenticateWithCertificate, getCertificateSession
+ describe('independent certificate broker routing', () => {
+   beforeEach(() => {
+     vi.resetAllMocks();
++    mocks.completion.mockResolvedValue(null);
++    vi.stubGlobal('electron', {ipcRenderer:{invoke:mocks.completion}});
+     mocks.get.mockResolvedValue({data: {baseUrl: 'https://cert.example', clientId: 'pacs'}});
+     mocks.post.mockResolvedValue({data: {status: 200, token: 'token', refresh_token: 'refresh', active: true, credentialSaved: true}});
+     const popup = {closed: false, close: vi.fn(), location: {}};
+@@ -27,7 +29,7 @@ describe('independent certificate broker routing', () => {
+     }});
+     vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+   });
+-  afterEach(() => vi.restoreAllMocks());
++  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+   it('uses the broker MD vault without frontend credential reads or direct PACS login', async () => {
+     await loginWithCertificate();
+     expect(mocks.post).toHaveBeenCalledWith('/vision-certi/login', {verificationCode: 'code', pacsOrigin: 'https://pacs.example'});
+@@ -36,6 +38,13 @@ describe('independent certificate broker routing', () => {
+     expect(mocks.save).not.toHaveBeenCalled();
+     const popup = vi.mocked(window.open).mock.results[0].value;
+     expect(popup.close).not.toHaveBeenCalled();
++    expect(mocks.completion).toHaveBeenCalledExactlyOnceWith('certificate:show-complete',
++      {origin:'https://cert.example',nonce:expect.stringMatching(/^[a-f0-9]{64}$/)});
++  });
++  it('continues certificate handoff if the optional native completion screen fails', async () => {
++    mocks.completion.mockRejectedValue(new Error('window unavailable'));
++    await expect(loginWithCertificate()).resolves.toHaveProperty('status', 200);
++    expect(vi.mocked(window.open).mock.results[0].value.close).not.toHaveBeenCalled();
+   });
+   it('first login authenticates PACS before opening the proof site and binds its token', async () => {
+     const credentials = {user_id: 'doctor', user_passwd: 'test-password'};
+@@ -69,8 +78,9 @@ describe('independent certificate broker routing', () => {
+     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+     await expect(loginWithCertificate({user_id: 'doctor', user_passwd: 'wrong'})).rejects.toThrow('wrong password');
+     expect(popup.location.href).toBe('');
+-    expect(popup.close).toHaveBeenCalled();
++    expect(popup.close).not.toHaveBeenCalled();
+     expect(mocks.get).not.toHaveBeenCalled();
++    expect(mocks.completion).not.toHaveBeenCalled();
+   });
+   it('failed proof after password success revokes the provisional PACS login', async () => {
+     mocks.post.mockResolvedValueOnce({data: {status: 200, token: 'provisional', refresh_token: 'refresh'}})
+@@ -116,7 +126,7 @@ describe('independent certificate broker routing', () => {
+     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+     await expect(loginWithCertificate()).rejects.toThrow('로컬 인증 서비스');
+     expect(popup.location.href).toBe('');
+-    expect(popup.close).toHaveBeenCalled();
++    expect(popup.close).not.toHaveBeenCalled();
+     expect(mocks.pacsPost).not.toHaveBeenCalled();
+     expect(mocks.post).not.toHaveBeenCalled();
+   });
+@@ -126,7 +136,7 @@ describe('independent certificate broker routing', () => {
+     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
+     await expect(loginWithCertificate()).rejects.toThrow('연동 설정');
+     expect(popup.location.href).toBe('');
+-    expect(popup.close).toHaveBeenCalled();
++    expect(popup.close).not.toHaveBeenCalled();
+     expect(mocks.post).not.toHaveBeenCalled();
+   });
+   it('reopens verification and retries approval only for a definitive pre-write proof rejection', async () => {
+diff --git a/client/src/libs/visionCerti.ts b/client/src/libs/visionCerti.ts
+index 9a26d15..339998e 100644
+--- a/client/src/libs/visionCerti.ts
++++ b/client/src/libs/visionCerti.ts
+@@ -14,9 +14,30 @@ export function isCertificateMessage(event: MessageEvent, popup: Window, origin:
+ export function openCertificatePopup(): Window {
+   const popup = window.open('about:blank', '_blank', 'width=720,height=850');
+   if (!popup) throw new Error('공동인증서 창을 열지 못했습니다. 데스크톱 앱을 재시작해 주세요. 웹에서는 팝업 허용을 확인하세요.');
++  showPendingStatus(popup, '인증 화면을 준비하고 있습니다.', 'PACS 계정과 인증 서버 연결 설정을 확인하고 있습니다.');
+   return popup;
+ }
+ 
++function showPendingStatus(popup: Window, title: string, message: string) {
++  try {
++    // Only write to our own, still blank reservation. Never replace a remote page.
++    if (popup.location.href !== 'about:blank' || !popup.document) return;
++    const doc = popup.document;
++    doc.title = '공동인증서 — Vision-Certi';
++    const panel = doc.createElement('main');
++    panel.style.cssText = 'max-width:520px;margin:48px auto;padding:32px;font:18px/1.7 sans-serif;color:#153153';
++    const heading = doc.createElement('h1'); heading.textContent = title;
++    const detail = doc.createElement('p'); detail.textContent = message;
++    const help = doc.createElement('p'); help.textContent = '이 창은 오른쪽 위 X로 닫을 수 있습니다.';
++    panel.append(heading, detail, help);
++    doc.body.replaceChildren(panel);
++  } catch { /* The remote proof page owns its own loading/error state. */ }
++}
++
++function showPendingFailure(popup: Window) {
++  showPendingStatus(popup, '인증을 시작하지 못했습니다.', 'PACS 로그인 화면의 오류 안내와 인증 연동 설정을 확인해 주세요.');
++}
++
+ type CertificateConfig = {baseUrl: string; clientId: string};
+ type CertificateLoginResult = UserResponse & {credentialSaved: boolean};
+ 
+@@ -29,7 +50,7 @@ export async function certificateHandoff(reserved?: Window, knownConfig?: Certif
+     config.baseUrl = certificateOrigin(config.baseUrl);
+     if (!config.clientId) throw new Error('Missing certificate client ID');
+   } catch {
+-    popup.close();
++    showPendingFailure(popup);
+     throw new Error('로컬 인증 서비스의 연동 설정을 확인해 주세요. Client ID와 인증서 확인용 서버 연결이 필요합니다.');
+   }
+   try {
+@@ -37,11 +58,10 @@ export async function certificateHandoff(reserved?: Window, knownConfig?: Certif
+     const origin = new URL(config.baseUrl).origin;
+     const query = new URLSearchParams({nonce, audience: config.clientId, origin: window.location.origin});
+     return await new Promise<string>((resolve, reject) => {
+-      const cleanup = (closePopup = true) => {
++      const cleanup = () => {
+         window.removeEventListener('message', receive);
+         window.clearInterval(closed);
+         window.clearTimeout(timeout);
+-        if (closePopup) popup.close();
+       };
+       const receive = (event: MessageEvent) => {
+         if (!isCertificateMessage(event, popup, origin, nonce, config.clientId)) return;
+@@ -50,7 +70,12 @@ export async function certificateHandoff(reserved?: Window, knownConfig?: Certif
+             event.data.verificationCode.length > 2048) return;
+         // WebView2 closes the web content but can leave its native popup frame white.
+         // Keep Vision-Certi's completion screen visible; the user closes its titlebar X.
+-        cleanup(false);
++        cleanup();
++        // Use an independent native window: WebView2 popup content can disappear
++        // with its opener even while the outer OS window remains on screen.
++        // Only this origin/source/nonce-validated result reaches the native handler.
++        void window.electron?.ipcRenderer?.invoke('certificate:show-complete', {origin, nonce})
++          .catch(() => console.warn('Certificate completion window unavailable; keeping the web completion page.'));
+         resolve(event.data.verificationCode);
+       };
+       const closed = window.setInterval(() => {
+@@ -63,7 +88,7 @@ export async function certificateHandoff(reserved?: Window, knownConfig?: Certif
+       popup.location.href = `${config.baseUrl}/#/certificates/pacs-proof?${query}`;
+     });
+   } catch (error) {
+-    popup.close();
++    showPendingFailure(popup);
+     throw error;
+   }
+ }
+@@ -111,7 +136,7 @@ export async function loginWithCertificate(entered?: PacsCredentials): Promise<C
+     }
+   } catch (error) {
+     // PACS login errors belong to this client. Preserve the completed certificate screen.
+-    if (!certificateConfirmed) popup.close();
++    if (!certificateConfirmed) showPendingFailure(popup);
+     if (initial?.status === 200 && initial.token) {
+       await broker.post('/vision-certi/logout', {},
+         {headers: {Authorization: `Bearer ${initial.token}`}}).catch(() => {});
+diff --git a/server/certificate_broker/defaults.py b/server/certificate_broker/defaults.py
+new file mode 100644
+index 0000000..38637fb
+--- /dev/null
++++ b/server/certificate_broker/defaults.py
+@@ -0,0 +1,19 @@
++"""Public integration defaults; never provisions signing credentials."""
++DEFAULT_SITE = 'https://vision-certi.web.app'
++DEFAULT_CLIENT_ID = 'vision-certi-pacs'
++KNOWN_SITES = {DEFAULT_SITE, 'https://vision-certi.firebaseapp.com',
++               'https://hahattalk-vision-certi.web.app', 'https://hahattalk-vision-certi.firebaseapp.com'}
++
++
++def apply_public_defaults(config):
++    """Fill the missing audience only for the supplied Vision-Certi deployment.
++
++    Custom endpoints and existing IDs belong to their operator. In particular,
++    an API override can represent a different tenant even with our hosted UI.
++    """
++    base = config.get('VISIONCERTI_BASE_URL', '').rstrip('/')
++    api = config.get('VISIONCERTI_API_BASE_URL', '').rstrip('/')
++    if base in KNOWN_SITES and (not api or api in KNOWN_SITES) and not config.get('VISIONCERTI_PACS_CLIENT_ID'):
++        config['VISIONCERTI_PACS_CLIENT_ID'] = DEFAULT_CLIENT_ID
++        return True
++    return False
+diff --git a/server/certificate_broker/launcher.py b/server/certificate_broker/launcher.py
+index 1a77d68..ba5fb27 100644
+--- a/server/certificate_broker/launcher.py
++++ b/server/certificate_broker/launcher.py
+@@ -32,6 +32,7 @@ def dpapi(value, decrypt=False):
+ 
+ def initialize(directory):
+     from certificate_broker.client_store import ClientStore
++    from certificate_broker.defaults import apply_public_defaults
+     directory.mkdir(parents=True, exist_ok=True)
+     key_file = directory / 'vault-key.dpapi'
+     if not key_file.exists():
+@@ -59,6 +60,7 @@ def initialize(directory):
+                'VISIONCERTI_PACS_CLIENT_SECRET_FILE', 'VISIONCERTI_CA_FILE',
+                'BROKER_PROOF_KEY_FILE', 'BROKER_ALLOWED_ORIGINS'}
+     config = json.loads(config_file.read_text(encoding='utf-8'))
++    public_defaults_changed = apply_public_defaults(config)
+     if config.get('CERTIFICATE_PROOF_PROTOCOL_VERSION') != 1:
+         # One-time move from the previous default login site to the supplied
+         # proof-only site. Preserve custom origins and later explicit choices.
+@@ -72,6 +74,8 @@ def initialize(directory):
+                 from app.integrations.vision_certi import save_endpoint
+                 save_endpoint(str(directory), 'https://vision-certi.web.app')
+         config['CERTIFICATE_PROOF_PROTOCOL_VERSION'] = 1
++        public_defaults_changed = True
++    if public_defaults_changed:
+         fd, temporary = tempfile.mkstemp(dir=directory, suffix='.tmp')
+         try:
+             with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+diff --git a/server/tests/test_certificate_broker_defaults.py b/server/tests/test_certificate_broker_defaults.py
+new file mode 100644
+index 0000000..40faf35
+--- /dev/null
++++ b/server/tests/test_certificate_broker_defaults.py
+@@ -0,0 +1,27 @@
++import unittest
++from certificate_broker.defaults import apply_public_defaults
++
++
++class CertificateBrokerDefaultsTest(unittest.TestCase):
++    def test_fresh_install_and_existing_empty_config(self):
++        for site in ('https://vision-certi.web.app', 'https://hahattalk-vision-certi.web.app/'):
++            config = {'VISIONCERTI_BASE_URL': site, 'VISIONCERTI_PACS_CLIENT_ID': '',
++                      'VISIONCERTI_PACS_CLIENT_SECRET_FILE': ''}
++            self.assertTrue(apply_public_defaults(config))
++            self.assertEqual(config['VISIONCERTI_PACS_CLIENT_ID'], 'vision-certi-pacs')
++            self.assertEqual(config['VISIONCERTI_PACS_CLIENT_SECRET_FILE'], '')
++            self.assertFalse(apply_public_defaults(config))
++
++    def test_preserves_operator_configuration(self):
++        for config in (
++            {'VISIONCERTI_BASE_URL': 'https://other.example', 'VISIONCERTI_PACS_CLIENT_ID': ''},
++            {'VISIONCERTI_BASE_URL': 'https://vision-certi.web.app', 'VISIONCERTI_PACS_CLIENT_ID': 'other-pacs'},
++            {'VISIONCERTI_BASE_URL': 'https://vision-certi.web.app', 'VISIONCERTI_API_BASE_URL': 'https://other.example'},
++        ):
++            before = dict(config)
++            self.assertFalse(apply_public_defaults(config))
++            self.assertEqual(config, before)
++
++
++if __name__ == '__main__':
++    unittest.main()
+-- 
+2.56.0.windows.2
+

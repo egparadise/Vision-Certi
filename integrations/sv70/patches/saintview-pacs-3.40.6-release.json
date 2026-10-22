@@ -1,0 +1,14 @@
+{
+  "version": "3.40.6",
+  "fileName": "saintview-pacs-3.40.6-setup.exe",
+  "url": "https://vision-certi.web.app/downloads/saintview-pacs-3.40.6-setup.exe",
+  "secondaryUrl": "https://hahattalk-vision-certi.web.app/downloads/saintview-pacs-3.40.6-setup.exe",
+  "bytes": 171935754,
+  "sha256": "91dabbdb82c270cf7db2c920e92674a3e2cc238aeb61aadf920034f5a2c459bd",
+  "applicationSha256": "07af28f1933440f4d756c22a9c02f8601b2ca06c0a552b25fb593108401510a7",
+  "brokerSha256": "834854f81268acce10c592687b51513261192d3dd5d1467b3318992431633b1b",
+  "sourceCommit": "7cc8ad83b2b2f387a8c66e3ae2515686297f54d2",
+  "nativeCompletionTest": "passed-with-isolated-signing-login-and-blank-remote-page",
+  "initialFailureTest": "passed-with-native-error-window",
+  "brokerInitializationTest": "passed-in-isolated-windows-profile"
+}

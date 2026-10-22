@@ -1,5 +1,19 @@
 # Vision-Certi 클라우드 운영 구성
 
+## 두 Hosting 사이트 배포 및 확인
+
+운영 대상은 `vision-certi`와 `hahattalk-vision-certi` 두 곳이다. 별칭인 각 `firebaseapp.com` 도메인도 같은 Hosting 버전을 제공한다. 한 곳만 배포하면 다른 곳에는 이전 화면이 남는다. 설치 파일을 `apps/web/public/downloads/`에 준비하고 웹 빌드 후 두 타깃을 함께 배포한다.
+
+```powershell
+npm --prefix apps/web run build
+firebase deploy --only hosting:vision-certi,hosting:vision-certi-legacy --project hahattalk --non-interactive
+node infra/cloud/Check-WebDeployment.cjs
+```
+
+검사 프로그램은 네 운영 도메인의 HTML·자바스크립트가 로컬 빌드와 일치하는지, `no-store` 헤더와 이전 JS 주소의 최신 파일 반환을 확인하며 불일치 시 실패한다. 기존 미리보기 채널까지 갱신할 때는 `firebase hosting:clone vision-certi:live hahattalk-vision-certi:vision-certi-preview --project hahattalk --non-interactive`를 실행한다.
+
+HMAC 키를 PC에 자동 발급하는 기능은 현재 없다. 클라우드의 `vision-certi-pacs-hmac-secret`은 서버에서 `/run/secrets/pacs-hmac/value`로 읽는다. PC 브로커는 `%LOCALAPPDATA%\SaintViewPACS\CertificateAuth\broker-config.json`의 `VISIONCERTI_PACS_CLIENT_SECRET_FILE` 경로를 읽지만 새 설치에는 비밀키가 포함되지 않는다. Client ID `vision-certi-pacs`는 공개 식별자이며, ID 설정만으로 키 설정이나 인증 결과 교환이 완료되는 것은 아니다.
+
 2026-10-19 기준 `hahattalk` 프로젝트에 Vision-Certi 전용 운영 자원을 서울 리전으로 구성했다. 공개 화면과 API 주소는 **https://vision-certi.web.app** 이다. PACS에는 `https://vision-certi.web.app/v1`을 설정한다. Firebase Hosting의 `/v1/**` 요청은 서울 Cloud Run `vision-certi-api`로 전달된다. Cloud Run은 이 PC의 서버를 경유하지 않으므로 PC가 꺼져도 API 주소가 유지된다.
 
 ## 실제 자원

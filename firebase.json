@@ -31,7 +31,7 @@
         { "source": "/v1/**", "headers": [{ "key": "Cache-Control", "value": "no-store, private" }] },
         { "source": "/downloads/vision-certi-bridge-win-x64.zip", "headers": [{ "key": "Content-Disposition", "value": "attachment; filename=vision-certi-bridge-win-x64.zip" }, { "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/downloads/vision-certi-pacs-window-repair.zip", "headers": [{ "key": "Content-Disposition", "value": "attachment; filename=vision-certi-pacs-window-repair.zip" }] },
-        { "source": "/downloads/saintview-pacs-3.40.5-setup.exe", "headers": [{ "key": "Content-Disposition", "value": "attachment; filename=saintview-pacs-3.40.5-setup.exe" }, { "key": "Cache-Control", "value": "no-store, max-age=0" }] },
+        { "source": "/downloads/saintview-pacs-*.exe", "headers": [{ "key": "Content-Disposition", "value": "attachment" }, { "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "**", "headers": [
           { "key": "X-Content-Type-Options", "value": "nosniff" },
           { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
@@ -48,6 +48,7 @@
         { "source": "/v1/**", "run": { "serviceId": "vision-certi-api", "region": "asia-northeast3" } }
       ],
       "headers": [
+        { "source": "/downloads/saintview-pacs-*.exe", "headers": [{ "key": "Content-Disposition", "value": "attachment" }, { "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "**/*.html", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/assets/index-*.js", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },

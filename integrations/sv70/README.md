@@ -1,5 +1,13 @@
 # SV70 PACS 연동 배포 묶음
 
+## SaintViewPACS 3.40.6 — 독립 완료 창과 기본 Client ID
+
+3.40.5에서도 다른 PC에 흰 창이 남는 보고에 대응해 [3.40.6 추가 패치](patches/0001-Show-certificate-completion-in-an-independent-native.patch)를 준비했다. 3.40.5 패치 다음에 적용한다. 정상 결과를 받은 PACS가 네트워크·React·opener에 의존하지 않는 내장 완료 창을 연다. 인증 시작 단계의 실패에는 안내를 표시한다. 기본 Vision-Certi 서버를 사용하는 새 PC의 누락된 Client ID는 `vision-certi-pacs`로 채우며, 사용자 지정 설정과 비밀키는 보존한다.
+
+HMAC 키를 자동 발급하거나 설치 파일에 포함하는 기능은 아니다. [두 배포 점검 및 검증 기록](../../docs/obsidian/2026-10-22_두_웹배포_점검과_PC_완료창.md)에 웹 배포 불일치, 시험 범위와 HMAC 설정 현황을 기록했다.
+
+[3.40.6 Windows 설치 파일](https://vision-certi.web.app/downloads/saintview-pacs-3.40.6-setup.exe) 및 [보조 사이트 다운로드](https://hahattalk-vision-certi.web.app/downloads/saintview-pacs-3.40.6-setup.exe)를 사용한다. [릴리스 정보](patches/saintview-pacs-3.40.6-release.json)에 실행 파일·브로커·설치 파일 해시와 검증 범위를 기록했다. 설치 파일은 Git에 넣지 않으므로 새 체크아웃에서 웹을 배포할 때 `apps/web/public/downloads/`에 기존 설치 파일들을 복원해 둔다.
+
 ## SaintViewPACS 3.40.4의 인증 완료 흰 창 수정
 
 현재 Tauri PACS에는 [3.40.5 소스 패치](patches/0001-Keep-certificate-completion-visible-after-PACS-hando.patch)를 적용한다. 기준 커밋은 `Saintview-Web-PACS` 저장소 `기능-개선` 브랜치의 `0c08163`이다. 정상 인증 결과를 받았을 때 `popup.close()`를 호출하지 않도록 수정하며 관련 테스트와 버전 변경을 포함한다. 기존 3.3.7용 파일 덮어쓰기 도구를 이 버전에 사용하지 않는다.

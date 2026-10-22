@@ -48,7 +48,7 @@ describe('PACS certificate-only proof', () => {
       challengeId: 'challenge-1', fingerprintSha256: 'f'.repeat(64), certificate: 'public-cert',
     }));
     expect(JSON.stringify(opener.postMessage.mock.calls)).not.toContain('public-cert');
-    expect(await screen.findByRole('heading', { name: '인증이 완료되었습니다.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '인증되었습니다.' })).toBeInTheDocument();
   });
 
   it('does not start verification for an untrusted caller', () => {
@@ -58,5 +58,22 @@ describe('PACS certificate-only proof', () => {
     render(<PacsCertificateProof />);
     expect(screen.getByRole('alert')).toHaveTextContent('PACS');
     expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it.each(['invalid-date', new Date(0).toISOString()])('never displays completion for an invalid expiry: %s', async expiresAt => {
+    mocks.verify.mockResolvedValue({ verificationCode: 'A'.repeat(43), audience: 'pacs-sv70', expiresAt });
+    render(<PacsCertificateProof />);
+    fireEvent.click(await screen.findByRole('button', { name: '인증서 확인' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('전달할 수 없습니다'));
+    expect(screen.queryByRole('heading', { name: '인증되었습니다.' })).not.toBeInTheDocument();
+    expect(opener.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'VC_CERTIFICATE_PROOF_CODE' }), expect.anything());
+  });
+
+  it('keeps a failed verification on the input screen instead of showing success', async () => {
+    mocks.verify.mockRejectedValue(new Error('서명 검증에 실패했습니다.'));
+    render(<PacsCertificateProof />);
+    fireEvent.click(await screen.findByRole('button', { name: '인증서 확인' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('서명 검증에 실패'));
+    expect(screen.queryByRole('heading', { name: '인증되었습니다.' })).not.toBeInTheDocument();
   });
 });

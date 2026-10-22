@@ -19,6 +19,8 @@ SaintViewPACS-handover-full-*/
 SaintViewPACS-handover-full-*.zip
 Inviz_*.pdf
 outputs/
+# PACS installers are release artifacts; source lives in Saintview-Web-PACS.
+apps/web/public/downloads/saintview-pacs-*-setup.exe
 **/__pycache__/
 **/.venv/
 **/venv/

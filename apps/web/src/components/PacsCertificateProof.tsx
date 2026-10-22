@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ExternalCertificateProof } from './ExternalCertificateProof';
+import { CertificateComplete } from './CertificateComplete';
 import { computeCertificateFingerprint } from '../utils/cryptoCert';
 import type { CertificateChallenge } from '../types/api';
 import type { LocalSignResult } from '../services/localCertSdkAdapter';
@@ -38,7 +39,7 @@ export function PacsCertificateProof() {
     try {
       const next = await client.createPacsCertificateProofChallenge(context.audience);
       if (next.purpose !== 'PACS_CERTIFICATE_PROOF' || !next.signedPayload.includes(`audience=${context.audience}\n`)
-        || Date.parse(next.expiresAt) <= Date.now()) throw new Error('인증서 검증 요청이 유효하지 않습니다.');
+        || !Number.isFinite(Date.parse(next.expiresAt)) || Date.parse(next.expiresAt) <= Date.now()) throw new Error('인증서 검증 요청이 유효하지 않습니다.');
       setChallenge(next);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : '인증서 검증 요청에 실패했습니다.');
@@ -60,7 +61,7 @@ export function PacsCertificateProof() {
         signatureAlgorithm: proof.signatureAlgorithm,
       });
       if (result.audience !== context.audience || !/^[A-Za-z0-9_-]{43}$/.test(result.verificationCode)
-        || Date.parse(result.expiresAt) <= Date.now() || context.opener.closed) {
+        || !Number.isFinite(Date.parse(result.expiresAt)) || Date.parse(result.expiresAt) <= Date.now() || context.opener.closed) {
         throw new Error('검증 결과를 PACS에 전달할 수 없습니다.');
       }
       context.opener.postMessage({ type: 'VC_CERTIFICATE_PROOF_CODE', nonce: context.nonce,
@@ -76,10 +77,7 @@ export function PacsCertificateProof() {
   }, [challenge, client, context]);
 
   if (!context) return <section role="alert">PACS에서 인증서 확인을 다시 시작해 주세요.</section>;
-  if (delivered) return <section className="certificate-complete" role="status">
-    <h1>인증이 완료되었습니다.</h1>
-    <p>공동인증서 확인 결과를 PACS에 전달했습니다. PACS 로그인 화면에서 결과를 확인해 주세요.</p>
-  </section>;
+  if (delivered) return <CertificateComplete />;
   return <section className="personal-certificate-page">
     <h2>공동인증서 확인</h2>
     <p>PACS 계정 비밀번호는 PACS에서만 확인합니다. 이 화면은 공동인증서와 개인키 소유만 확인합니다.</p>

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { CertificateEnrollmentView } from './CertificateEnrollmentView';
+import { CertificateComplete } from './CertificateComplete';
 
 type PacsLoginContext = { origin: string; nonce: string; audience: string; opener: Window };
 
@@ -53,10 +54,7 @@ export function PacsCertificateLogin() {
   }, [context]);
 
   if (!context) return <section role="alert">PACS 로그인 요청이 유효하지 않습니다. PACS 로그인 화면에서 다시 시작해 주세요.</section>;
-  if (delivered) return <section className="certificate-complete" role="status">
-    <h1>인증이 완료되었습니다.</h1>
-    <p>공동인증서 확인 결과를 PACS에 전달했습니다. PACS 로그인 화면에서 결과를 확인해 주세요.</p>
-  </section>;
+  if (delivered) return <CertificateComplete />;
   return <CertificateEnrollmentView initialMode="PC_LOGIN" proofMethod="external"
     onLoginComplete={complete} onLoginFailed={fail} />;
 }

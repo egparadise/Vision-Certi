@@ -1,5 +1,19 @@
 # SV70 PACS 연동 배포 묶음
 
+## SaintViewPACS 3.40.4의 인증 완료 흰 창 수정
+
+현재 Tauri PACS에는 [3.40.5 소스 패치](patches/0001-Keep-certificate-completion-visible-after-PACS-hando.patch)를 적용한다. 기준 커밋은 `Saintview-Web-PACS` 저장소 `기능-개선` 브랜치의 `0c08163`이다. 정상 인증 결과를 받았을 때 `popup.close()`를 호출하지 않도록 수정하며 관련 테스트와 버전 변경을 포함한다. 기존 3.3.7용 파일 덮어쓰기 도구를 이 버전에 사용하지 않는다.
+
+```powershell
+git am C:\Project\Vision-Certi\integrations\sv70\patches\0001-Keep-certificate-completion-visible-after-PACS-hando.patch
+```
+
+구현·검증 범위는 [현재 인증서 확인 전용 연동 문서](../../docs/PACS_공동인증서_확인전용_연동.md)를 따른다. 아래 내용은 과거 인수인계 버전용 묶음의 설명이다.
+
+Windows 설치 파일은 [3.40.5 다운로드](https://vision-certi.web.app/downloads/saintview-pacs-3.40.5-setup.exe)로 제공한다. [릴리스 정보](patches/saintview-pacs-3.40.5-release.json)에 크기와 SHA-256을 기록했다. 대용량 설치 파일은 Git에 포함하지 않는다. 깨끗한 체크아웃에서 Firebase를 다시 배포할 때는 이 파일을 내려받아 해시를 확인하고 `apps/web/public/downloads/`에 둔 뒤 웹을 빌드해야 기존 다운로드가 유지된다.
+
+## 과거 3.3.7 인수인계 소스용 묶음
+
 원본 인수인계 패키지 전체를 공개하지 않고, 이번 인증·판독문 서명 연동에서 바뀐 파일만 제공합니다. `03-secrets`, 환경별 설정, 개인키, 설치 파일, 환자 데이터는 포함하지 않습니다.
 
 기준 소스는 2026-07-21 SaintViewPACS 3.3.7 인수인계 패키지입니다. `manifest.json`은 원본과 변경 파일의 SHA-256을 기록하며 `server.patch`, `client.patch`로 변경을 검토할 수 있습니다. 기존 파일이 수정되어 있으면 자동 덮어쓰기를 거부합니다.

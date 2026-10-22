@@ -1,0 +1,10 @@
+{
+  "version": "3.40.5",
+  "fileName": "saintview-pacs-3.40.5-setup.exe",
+  "url": "https://vision-certi.web.app/downloads/saintview-pacs-3.40.5-setup.exe",
+  "bytes": 171459232,
+  "sha256": "59029882fa5839ae34f4bd890a1fa17003fc85dd1716d3f0b269c8b20a7167f5",
+  "applicationSha256": "ce0351b35970e9bbbdd8a6968b5ad37c833e614c2b63e5aa9592e3a2ade46d09",
+  "sourceCommit": "a8813a7",
+  "nativeCompletionTest": "passed-with-isolated-fixture-and-live-web-assets"
+}

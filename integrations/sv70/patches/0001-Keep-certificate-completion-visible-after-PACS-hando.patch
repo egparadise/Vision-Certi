@@ -1,0 +1,120 @@
+From a8813a7337c040ac6ccf2032508dee2169150ccc Mon Sep 17 00:00:00 2001
+From: egparadise <egparadise@hanafos.com>
+Date: Thu, 22 Oct 2026 09:19:14 +0900
+Subject: [PATCH] Keep certificate completion visible after PACS handoff
+
+---
+ client/package.json                       |  2 +-
+ client/src-tauri/tauri.conf.json          |  2 +-
+ client/src/libs/certificateBroker.test.ts |  6 ++++++
+ client/src/libs/visionCerti.ts            | 14 ++++++++++----
+ 4 files changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/client/package.json b/client/package.json
+index a848127..6e0e72e 100644
+--- a/client/package.json
++++ b/client/package.json
+@@ -1,7 +1,7 @@
+ {
+   "name": "saint-pacs-tauri",
+   "private": true,
+-  "version": "3.40.4",
++  "version": "3.40.5",
+   "type": "module",
+   "scripts": {
+     "version:sync": "node scripts/release-version.mjs --write",
+diff --git a/client/src-tauri/tauri.conf.json b/client/src-tauri/tauri.conf.json
+index 7e2492f..4771446 100644
+--- a/client/src-tauri/tauri.conf.json
++++ b/client/src-tauri/tauri.conf.json
+@@ -1,7 +1,7 @@
+ {
+   "$schema": "https://schema.tauri.app/config/2",
+   "productName": "SaintViewPACS",
+-  "version": "3.40.4",
++  "version": "3.40.5",
+   "identifier": "com.saint.v3.app",
+   "build": {
+     "frontendDist": "../dist",
+diff --git a/client/src/libs/certificateBroker.test.ts b/client/src/libs/certificateBroker.test.ts
+index 0edae16..3c2f53c 100644
+--- a/client/src/libs/certificateBroker.test.ts
++++ b/client/src/libs/certificateBroker.test.ts
+@@ -34,6 +34,8 @@ describe('independent certificate broker routing', () => {
+     expect(mocks.pacsPost).not.toHaveBeenCalled();
+     expect(mocks.read).not.toHaveBeenCalled();
+     expect(mocks.save).not.toHaveBeenCalled();
++    const popup = vi.mocked(window.open).mock.results[0].value;
++    expect(popup.close).not.toHaveBeenCalled();
+   });
+   it('first login authenticates PACS before opening the proof site and binds its token', async () => {
+     const credentials = {user_id: 'doctor', user_passwd: 'test-password'};
+@@ -76,6 +78,10 @@ describe('independent certificate broker routing', () => {
+     await expect(loginWithCertificate({user_id: 'doctor', user_passwd: 'password'})).rejects.toThrow('proof expired');
+     expect(mocks.post).toHaveBeenLastCalledWith('/vision-certi/logout', {},
+       {headers: {Authorization: 'Bearer provisional'}});
++    // The certificate proof was already delivered. A downstream broker error
++    // must not erase Vision-Certi's completed authentication page.
++    const popup = vi.mocked(window.open).mock.results[0].value;
++    expect(popup.close).not.toHaveBeenCalled();
+   });
+   it('reads current-session authentication only from the local MD helper', async () => {
+     mocks.get.mockResolvedValue({data: {active: true, userIdx: 7}});
+diff --git a/client/src/libs/visionCerti.ts b/client/src/libs/visionCerti.ts
+index d0b1b22..9a26d15 100644
+--- a/client/src/libs/visionCerti.ts
++++ b/client/src/libs/visionCerti.ts
+@@ -37,18 +37,20 @@ export async function certificateHandoff(reserved?: Window, knownConfig?: Certif
+     const origin = new URL(config.baseUrl).origin;
+     const query = new URLSearchParams({nonce, audience: config.clientId, origin: window.location.origin});
+     return await new Promise<string>((resolve, reject) => {
+-      const cleanup = () => {
++      const cleanup = (closePopup = true) => {
+         window.removeEventListener('message', receive);
+         window.clearInterval(closed);
+         window.clearTimeout(timeout);
+-        popup.close();
++        if (closePopup) popup.close();
+       };
+       const receive = (event: MessageEvent) => {
+         if (!isCertificateMessage(event, popup, origin, nonce, config.clientId)) return;
+         if (event.data?.type !== 'VC_CERTIFICATE_PROOF_CODE' ||
+             typeof event.data.verificationCode !== 'string' || !event.data.verificationCode ||
+             event.data.verificationCode.length > 2048) return;
+-        cleanup();
++        // WebView2 closes the web content but can leave its native popup frame white.
++        // Keep Vision-Certi's completion screen visible; the user closes its titlebar X.
++        cleanup(false);
+         resolve(event.data.verificationCode);
+       };
+       const closed = window.setInterval(() => {
+@@ -85,6 +87,7 @@ export async function loginWithCertificate(entered?: PacsCredentials): Promise<C
+   const popup = openCertificatePopup();
+   let initial: UserResponse | undefined;
+   let data: CertificateLoginResult;
++  let certificateConfirmed = false;
+   try {
+     if (entered?.user_id && entered.user_passwd) {
+       // Reserve a blank popup on the click, but contact PACS first. Do not open
+@@ -95,17 +98,20 @@ export async function loginWithCertificate(entered?: PacsCredentials): Promise<C
+         throw new Error('PACS ID/PW 인증에 실패했습니다. 계정 또는 중복 로그인을 확인하세요.');
+       }
+       const verificationCode = await certificateHandoff(popup);
++      certificateConfirmed = true;
+       const verified = await broker.post('/vision-certi/authenticate',
+         {verificationCode, ...brokerContext()}, {headers: {Authorization: `Bearer ${initial.token}`}});
+       if (verified.data.active !== true) throw new Error('인증 서버의 확인이 완료되지 않았습니다.');
+       data = {...initial, credentialSaved: verified.data.credentialSaved === true};
+     } else {
+       const verificationCode = await certificateHandoff(popup);
++      certificateConfirmed = true;
+       data = (await broker.post<CertificateLoginResult>('/vision-certi/login',
+         {verificationCode, ...brokerContext()})).data;
+     }
+   } catch (error) {
+-    popup.close();
++    // PACS login errors belong to this client. Preserve the completed certificate screen.
++    if (!certificateConfirmed) popup.close();
+     if (initial?.status === 200 && initial.token) {
+       await broker.post('/vision-certi/logout', {},
+         {headers: {Authorization: `Bearer ${initial.token}`}}).catch(() => {});

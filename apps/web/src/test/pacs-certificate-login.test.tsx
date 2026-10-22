@@ -41,7 +41,7 @@ describe('PACS certificate login handoff', () => {
     }, 'https://pacs.internal'));
     expect(mocks.createPacsHandoff).toHaveBeenCalledWith('server-verified-certificate-session', 'pacs-sv70');
     expect(screen.getByRole('status')).toHaveTextContent('PACS');
-    expect(screen.getByRole('heading', { name: '인증이 완료되었습니다.' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '인증되었습니다.' })).toBeInTheDocument();
     expect(JSON.stringify(opener.postMessage.mock.calls)).not.toContain('server-verified-certificate-session');
   });
 

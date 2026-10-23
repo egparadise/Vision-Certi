@@ -7,6 +7,7 @@ import type { PacsActivityPage } from '../types/pacsActivity';
 const actions: Record<string, string> = {
   REQUESTED: '인증 요청', ATTEMPTED: '서명 검증 시도', VERIFIED: '인증 성공',
   REDEEMED: 'PACS 결과 수신', CHECKED: '유효 상태 재확인', DENIED: '거절',
+  ACCOUNT_ACTIVATED: '계정 36시간 인증 시작', ACCOUNT_ENDED: '최초 PC 인증 연결 종료',
   LOGIN_ATTEMPTED: 'PACS 로그인 시도', LOGIN_SUCCEEDED: 'PACS 로그인 완료', LOGIN_FAILED: 'PACS 로그인 실패', APPROVAL_REQUESTED: '판독 승인 요청',
 };
 const fields: Record<string, string> = {
@@ -19,6 +20,7 @@ const fields: Record<string, string> = {
   pacsLoginId: 'PACS 로그인 ID', pacsAccountId: 'PACS 계정 번호', computerName: 'PC 이름', deviceId: 'PC 식별자',
   clientInfoSource: '계정·PC 정보 출처', reportKeySha256: '판독문 식별 해시', eventId: 'PACS 이벤트 ID', eventFingerprint: '이벤트 중복 확인 해시',
   exchangeMethod: '결과 교환 방식',
+  policy: '인증 유지 규칙',
   revocationStatus: '인증서 폐지 조회 상태', crlDistributionPoints: '발급기관 폐지 목록 위치',
 };
 const date = (value?: string | null) => value ? new Date(value).toLocaleString('ko-KR') : '기록 없음';

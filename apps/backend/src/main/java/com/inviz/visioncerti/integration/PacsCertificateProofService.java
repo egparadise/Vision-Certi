@@ -44,7 +44,27 @@ public final class PacsCertificateProofService {
     record Proof(UUID id, String clientId, String codeHash, String fingerprint, String subjectDn, String issuerDn,
             Instant certificateNotAfter, String certificateDer, List<String> chainDer, Instant verifiedAt,
             Instant codeExpiresAt, Instant expiresAt, Instant redeemedAt, String tenantId,
-            String pcNonce, String codeChallenge) { }
+            String pcNonce, String codeChallenge, AccountLease lease) { }
+
+    record AccountLease(String accountKeyHash, ClientInfo owner, String bootId, Instant lastSeenAt, boolean ended) { }
+    private static final Duration ACCOUNT_TTL = Duration.ofHours(36);
+    private static final Duration OWNER_TIMEOUT = Duration.ofSeconds(90);
+    public record AccountActivateRequest(String audience, UUID verificationId, String codeVerifier,
+            String accountKey, String bootId, ClientInfo clientInfo) {
+        @Override public String toString() { return "AccountActivateRequest[<redacted>]"; }
+    }
+    public record AccountStatusRequest(String audience, String accountKey, ClientInfo clientInfo) {
+        @Override public String toString() { return "AccountStatusRequest[<redacted>]"; }
+    }
+    public record AccountHeartbeatRequest(String audience, UUID verificationId, String codeVerifier,
+            String bootId, String deviceId, boolean close) {
+        @Override public String toString() { return "AccountHeartbeatRequest[<redacted>]"; }
+    }
+    public record AccountEventRequest(AccountStatusRequest account, ClientEventRequest event) {
+        @Override public String toString() { return "AccountEventRequest[<redacted>]"; }
+    }
+    public record AccountStatus(boolean active, String reason, Instant serverTime, Instant verifiedAt,
+            Instant expiresAt, Instant sourceOnlineUntil, String originComputerName, Receipt receipt) { }
 
     static final Kind<Challenge> CHALLENGES = Kind.of("pacs_proof_challenges", Challenge.class)
             .id(Challenge::id).expiresAt(Challenge::retainUntil).column("client_id", Challenge::clientId).build();
@@ -248,7 +268,7 @@ public final class PacsCertificateProofService {
                 leaf.getSubjectX500Principal().getName(), leaf.getIssuerX500Principal().getName(),
                 leaf.getNotAfter().toInstant(), request.certificate(), List.copyOf(request.chain() == null
                         ? List.of() : request.chain()), verifiedAt, verifiedAt.plus(CODE_TTL),
-                verifiedAt.plus(PROOF_TTL), null, tenant, challenge.pcNonce(), challenge.codeChallenge());
+                verifiedAt.plus(PROOF_TTL), null, tenant, challenge.pcNonce(), challenge.codeChallenge(), null);
         Map<String, String> evidence = evidence(proof);
         evidence.put("challengeId", challenge.id().toString());
         evidence.put("certificateNotBefore", leaf.getNotBefore().toInstant().toString());
@@ -290,7 +310,7 @@ public final class PacsCertificateProofService {
             tx.update(PROOFS, new Proof(found.id(), found.clientId(), found.codeHash(), found.fingerprint(),
                     found.subjectDn(), found.issuerDn(), found.certificateNotAfter(), found.certificateDer(),
                     found.chainDer(), found.verifiedAt(), found.codeExpiresAt(), found.expiresAt(), now, found.tenantId(),
-                    found.pcNonce(), found.codeChallenge()));
+                    found.pcNonce(), found.codeChallenge(), found.lease()));
             return found;
         });
         Receipt receipt = statusChecked(client, proof.id());
@@ -389,7 +409,7 @@ public final class PacsCertificateProofService {
             tx.update(PROOFS, new Proof(found.id(), found.clientId(), found.codeHash(), found.fingerprint(),
                     found.subjectDn(), found.issuerDn(), found.certificateNotAfter(), found.certificateDer(),
                     found.chainDer(), found.verifiedAt(), found.codeExpiresAt(), found.expiresAt(), now, found.tenantId(),
-                    found.pcNonce(), found.codeChallenge()));
+                    found.pcNonce(), found.codeChallenge(), found.lease()));
             return found;
         });
         Receipt receipt = statusChecked(client, proof.id());
@@ -476,7 +496,7 @@ public final class PacsCertificateProofService {
     private Receipt statusChecked(IntegrationClient client, UUID verificationId) {
         Proof proof = store.tx(tx -> tx.get(PROOFS, verificationId).orElse(null));
         if (proof == null || proof.redeemedAt() == null || !proof.clientId().equals(client.clientId())
-                || !clock.instant().isBefore(proof.expiresAt())) {
+                || !clock.instant().isBefore(proof.expiresAt()) || !ownerOnline(proof, clock.instant())) {
             throw ApiException.forbidden("CERTIFICATE_PROOF_INACTIVE", "Certificate proof is missing or expired");
         }
         X509Certificate leaf = validator.parse(proof.certificateDer());
@@ -486,6 +506,141 @@ public final class PacsCertificateProofService {
         validator.checkLeafPolicy(leaf);
         CertificateValidator.requireGood(validator.validate(leaf, validator.parseChain(proof.chainDer())).revocation());
         return receipt(proof);
+    }
+
+    /** One account lease is shared using a credential-derived capability, never a public login ID. */
+    public AccountStatus activateAccount(AccountActivateRequest request, PacsRequestContext context) {
+        IntegrationClient client = clients.require();
+        if (request == null) throw invalidCode();
+        String key = accountKeyHash(request.accountKey());
+        requireAccountInfo(request.clientInfo(), true);
+        if (request.bootId() == null || !request.bootId().matches("[0-9a-f]{64}")) throw invalidCode();
+        Proof proof = requirePcProof(client, request.audience(), request.verificationId(), request.codeVerifier());
+        statusChecked(client, proof.id()); // Network validation outside the storage transaction.
+        Instant now = clock.instant();
+        Proof activated = store.tx(tx -> {
+            tx.lock("pacs-account|" + client.clientId() + "|" + key);
+            Proof found = tx.lockGet(PROOFS, proof.id()).orElseThrow(PacsCertificateProofService::invalidCode);
+            if (found.lease() != null) {
+                if (!constantEquals(found.lease().accountKeyHash(), key)
+                        || !constantEquals(found.lease().bootId(), request.bootId())
+                        || !found.lease().owner().equals(request.clientInfo()) || !ownerOnline(found, now)) throw invalidCode();
+                return found; // Retry never moves the initial authentication time or expiry.
+            }
+            if (found.redeemedAt() == null || !now.isBefore(found.verifiedAt().plus(Duration.ofMinutes(5)))) throw invalidCode();
+            for (Proof old : tx.find(PROOFS, "client_id", client.clientId())) {
+                if (old.lease() != null && key.equals(old.lease().accountKeyHash())) {
+                    Proof locked = tx.lockGet(PROOFS, old.id()).orElseThrow();
+                    tx.update(PROOFS, withLease(locked, locked.expiresAt(), new AccountLease(key,
+                            locked.lease().owner(), locked.lease().bootId(), locked.lease().lastSeenAt(), true)));
+                }
+            }
+            Instant expiry = found.verifiedAt().plus(ACCOUNT_TTL);
+            if (expiry.isAfter(found.certificateNotAfter())) expiry = found.certificateNotAfter();
+            Proof next = withLease(found, expiry, new AccountLease(key, request.clientInfo(), request.bootId(), now, false));
+            tx.update(PROOFS, next);
+            Map<String, String> details = evidence(next);
+            details.putAll(request.clientInfo().details());
+            details.put("policy", "ACCOUNT_36H_OR_OWNER_OFFLINE");
+            record(tenant(client, next.tenantId()), client.clientId(), "ACCOUNT_ACTIVATED", next.id().toString(),
+                    AuditService.SUCCESS, context, details);
+            return next;
+        });
+        return accountResponse(activated, now);
+    }
+
+    public AccountStatus accountStatus(AccountStatusRequest request, PacsRequestContext context) {
+        IntegrationClient client = clients.require();
+        Proof proof = accountProof(client, request);
+        Instant now = clock.instant();
+        AccountStatus state = accountResponse(proof, now);
+        if (state.active()) {
+            statusChecked(client, proof.id()); // Includes live revocation/validity checks.
+            Proof latest = store.tx(tx -> tx.get(PROOFS, proof.id()).orElse(null));
+            return accountResponse(latest, clock.instant());
+        }
+        return state;
+    }
+
+    public AccountStatus heartbeatAccount(AccountHeartbeatRequest request, PacsRequestContext context) {
+        IntegrationClient client = clients.require();
+        if (request == null) throw invalidCode();
+        Proof proof = requirePcProof(client, request.audience(), request.verificationId(), request.codeVerifier());
+        Instant now = clock.instant();
+        Proof updated = store.tx(tx -> {
+            Proof found = tx.lockGet(PROOFS, proof.id()).orElseThrow(PacsCertificateProofService::invalidCode);
+            AccountLease lease = found.lease();
+            if (lease == null || !constantEquals(lease.bootId(), request.bootId())
+                    || !constantEquals(lease.owner().deviceId(), request.deviceId())) throw invalidCode();
+            if (!ownerOnline(found, now) || !now.isBefore(found.expiresAt())) return found;
+            Proof next = withLease(found, found.expiresAt(), new AccountLease(lease.accountKeyHash(), lease.owner(),
+                    lease.bootId(), now, request.close()));
+            tx.update(PROOFS, next);
+            if (request.close()) {
+                Map<String, String> details = evidence(next);
+                details.putAll(lease.owner().details());
+                record(tenant(client, next.tenantId()), client.clientId(), "ACCOUNT_ENDED", next.id().toString(),
+                        AuditService.SUCCESS, context, details);
+            }
+            return next;
+        });
+        return accountResponse(updated, now);
+    }
+
+    public ClientEventResponse accountEvent(AccountEventRequest request, PacsRequestContext context) {
+        IntegrationClient client = clients.require();
+        if (request == null || request.event() == null) throw invalidCode();
+        Proof proof = accountProof(client, request.account());
+        if (!accountResponse(proof, clock.instant()).active()) throw invalidCode();
+        if (!request.account().clientInfo().equals(request.event().clientInfo())) throw invalidCode();
+        statusChecked(client, proof.id());
+        return clientEvent(client, proof.id(), request.event(), context);
+    }
+
+    private Proof accountProof(IntegrationClient client, AccountStatusRequest request) {
+        if (request == null || !client.clientId().equals(request.audience())) throw invalidCode();
+        String key = accountKeyHash(request.accountKey());
+        requireAccountInfo(request.clientInfo(), false);
+        return store.tx(tx -> tx.find(PROOFS, "client_id", client.clientId()).stream()
+                .filter(p -> p.lease() != null && constantEquals(p.lease().accountKeyHash(), key)
+                        && p.lease().owner().pacsLoginId().equals(request.clientInfo().pacsLoginId())
+                        && (request.clientInfo().pacsAccountId() == null || request.clientInfo().pacsAccountId().isBlank()
+                            || p.lease().owner().pacsAccountId().equals(request.clientInfo().pacsAccountId())))
+                .max(java.util.Comparator.comparing(Proof::verifiedAt)).orElse(null));
+    }
+
+    private static String accountKeyHash(String key) {
+        if (key == null || !key.matches("[0-9a-f]{64}")) throw invalidCode();
+        return Hashing.sha256Hex("vision-certi-account-v1|" + key);
+    }
+
+    private static void requireAccountInfo(ClientInfo info, boolean activation) {
+        if (info == null) throw invalidCode();
+        Map<String, String> fields = info.details();
+        if (!fields.containsKey("pacsLoginId") || (activation && !fields.containsKey("pacsAccountId"))
+                || !fields.containsKey("deviceId")) throw invalidCode();
+    }
+
+    private static boolean ownerOnline(Proof proof, Instant now) {
+        return proof.lease() == null || (!proof.lease().ended()
+                && now.isBefore(proof.lease().lastSeenAt().plus(OWNER_TIMEOUT)));
+    }
+
+    private AccountStatus accountResponse(Proof proof, Instant now) {
+        if (proof == null || proof.lease() == null) return new AccountStatus(false, "NOT_AUTHENTICATED", now,
+                null, null, null, null, null);
+        boolean expired = !now.isBefore(proof.expiresAt());
+        boolean online = ownerOnline(proof, now);
+        boolean active = !expired && online;
+        return new AccountStatus(active, active ? "ACTIVE" : expired ? "EXPIRED" : "SOURCE_OFFLINE", now,
+                proof.verifiedAt(), proof.expiresAt(), proof.lease().lastSeenAt().plus(OWNER_TIMEOUT),
+                proof.lease().owner().computerName(), active ? receipt(proof) : null);
+    }
+
+    private static Proof withLease(Proof p, Instant expiry, AccountLease lease) {
+        return new Proof(p.id(), p.clientId(), p.codeHash(), p.fingerprint(), p.subjectDn(), p.issuerDn(),
+                p.certificateNotAfter(), p.certificateDer(), p.chainDer(), p.verifiedAt(), p.codeExpiresAt(),
+                expiry, p.redeemedAt(), p.tenantId(), p.pcNonce(), p.codeChallenge(), lease);
     }
 
     private static Receipt receipt(Proof proof) {

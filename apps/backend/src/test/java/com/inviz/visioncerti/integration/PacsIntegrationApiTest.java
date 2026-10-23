@@ -59,6 +59,34 @@ class PacsIntegrationApiTest {
     private static final String PC_NONCE = "a".repeat(64);
     private static final String PC_BASE = "/v1/pacs-certificate-proofs";
 
+    @Test
+    void accountLeaseHttpWorksAcrossDevicesAndStopsOnOwnerClose() throws Exception {
+        String code = pcProofCode();
+        String redeemed = mvc.perform(post(PC_BASE + "/pc/redeem").contentType(MediaType.APPLICATION_JSON)
+                .content(pcRedeemBody(code))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(redeemed, "$.receipt.verificationId");
+        String key = Hashing.sha256Hex(UUID.randomUUID().toString());
+        String info = "{\"pacsLoginId\":\"lease-reader\",\"pacsAccountId\":\"42\",\"computerName\":\"PC-A\",\"deviceId\":\"a\"}";
+        String ownerAccess = "{\"audience\":\"" + CLIENT + "\",\"verificationId\":\"" + id
+                + "\",\"codeVerifier\":\"" + PC_VERIFIER + "\",\"bootId\":\"" + "b".repeat(64) + "\"";
+        String activate = ownerAccess + ",\"accountKey\":\"" + key + "\",\"clientInfo\":" + info + "}";
+        mvc.perform(post(PC_BASE + "/pc/account/activate").contentType(MediaType.APPLICATION_JSON).content(activate))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(true))
+                .andExpect(header().string("Cache-Control", "no-store"));
+        String lookup = "{\"audience\":\"" + CLIENT + "\",\"accountKey\":\"" + key
+                + "\",\"clientInfo\":" + info.replace("PC-A", "PC-B").replace("\"deviceId\":\"a\"", "\"deviceId\":\"b\"") + "}";
+        mvc.perform(post(PC_BASE + "/pc/account/status").contentType(MediaType.APPLICATION_JSON).content(lookup))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(true));
+        mvc.perform(post(PC_BASE + "/pc/account/heartbeat").contentType(MediaType.APPLICATION_JSON)
+                .content(ownerAccess + ",\"deviceId\":\"b\",\"close\":false}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(PC_BASE + "/pc/account/heartbeat").contentType(MediaType.APPLICATION_JSON)
+                .content(ownerAccess + ",\"deviceId\":\"a\",\"close\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(false));
+        mvc.perform(post(PC_BASE + "/pc/account/status").contentType(MediaType.APPLICATION_JSON).content(lookup))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.reason").value("SOURCE_OFFLINE"));
+    }
+
     private String pcProofCode() throws Exception {
         String start = mvc.perform(post(PC_BASE + "/challenges").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"audience\":\"" + CLIENT + "\",\"pcNonce\":\"" + PC_NONCE

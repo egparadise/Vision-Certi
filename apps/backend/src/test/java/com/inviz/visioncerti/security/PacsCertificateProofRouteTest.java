@@ -10,7 +10,9 @@ class PacsCertificateProofRouteTest {
     void onlyExactCertificateProofPostsArePublicInProductionAndDevelopment() {
         for (String path : new String[]{"/v1/pacs-certificate-proofs/challenges",
                 "/v1/pacs-certificate-proofs/verify", "/v1/pacs-certificate-proofs/pc/redeem",
-                "/v1/pacs-certificate-proofs/pc/status", "/v1/pacs-certificate-proofs/pc/events"}) {
+                "/v1/pacs-certificate-proofs/pc/status", "/v1/pacs-certificate-proofs/pc/events",
+                "/v1/pacs-certificate-proofs/pc/account/activate", "/v1/pacs-certificate-proofs/pc/account/status",
+                "/v1/pacs-certificate-proofs/pc/account/heartbeat", "/v1/pacs-certificate-proofs/pc/account/events"}) {
             var post = new MockHttpServletRequest("POST", path);
             var get = new MockHttpServletRequest("GET", path);
             assertThat(DevHeaderAuthFilter.isPacsCertificateProofPublicRoute(post, path)).isTrue();

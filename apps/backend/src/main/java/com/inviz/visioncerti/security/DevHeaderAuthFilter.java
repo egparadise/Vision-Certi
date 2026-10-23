@@ -101,7 +101,11 @@ public class DevHeaderAuthFilter extends OncePerRequestFilter {
                         || path.equals("/v1/pacs-certificate-proofs/verify")
                         || path.equals("/v1/pacs-certificate-proofs/pc/redeem")
                         || path.equals("/v1/pacs-certificate-proofs/pc/status")
-                        || path.equals("/v1/pacs-certificate-proofs/pc/events"));
+                        || path.equals("/v1/pacs-certificate-proofs/pc/events")
+                        || path.equals("/v1/pacs-certificate-proofs/pc/account/activate")
+                        || path.equals("/v1/pacs-certificate-proofs/pc/account/status")
+                        || path.equals("/v1/pacs-certificate-proofs/pc/account/heartbeat")
+                        || path.equals("/v1/pacs-certificate-proofs/pc/account/events"));
     }
 
     @Override

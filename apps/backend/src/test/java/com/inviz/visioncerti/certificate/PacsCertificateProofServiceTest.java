@@ -61,6 +61,89 @@ class PacsCertificateProofServiceTest {
                 "SHA256withRSA");
     }
 
+    private static final String ACCOUNT_KEY = "b".repeat(64);
+    private static final String BOOT = "c".repeat(64);
+    private final PacsCertificateProofService.ClientInfo owner = new PacsCertificateProofService.ClientInfo("reader", "42", "PC-A", "device-a");
+    private final PacsCertificateProofService.ClientInfo other = new PacsCertificateProofService.ClientInfo("reader", "42", "PC-B", "device-b");
+
+    private PacsCertificateProofService.AccountStatus activateLease() {
+        var challenge = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId(), null,
+                PC_NONCE, PC_CHALLENGE, "S256"), "127.0.0.1");
+        var code = service.verify(signed(challenge, pki.leaf(TestPki.rsa(2048)))).verificationCode();
+        var proof = service.redeemPc(new PacsCertificateProofService.PcRedeemRequest(pacs.clientId(), code,
+                PC_VERIFIER, PC_NONCE), PacsRequestContext.EMPTY).receipt();
+        return service.activateAccount(new PacsCertificateProofService.AccountActivateRequest(pacs.clientId(),
+                proof.verificationId(), PC_VERIFIER, ACCOUNT_KEY, BOOT, owner), PacsRequestContext.EMPTY);
+    }
+
+    private PacsCertificateProofService.AccountStatus sharedStatus(String key, PacsCertificateProofService.ClientInfo info) {
+        return service.accountStatus(new PacsCertificateProofService.AccountStatusRequest(pacs.clientId(), key, info), PacsRequestContext.EMPTY);
+    }
+
+    @Test
+    void accountLeaseSharesOnlyMatchingCredentialCapabilityAndAccount() {
+        var state = activateLease();
+        assertThat(state.expiresAt()).isEqualTo(state.verifiedAt().plus(Duration.ofHours(36)));
+        assertThat(sharedStatus(ACCOUNT_KEY, other).active()).isTrue();
+        assertThat(sharedStatus("d".repeat(64), other).active()).isFalse();
+        assertThat(sharedStatus(ACCOUNT_KEY, new PacsCertificateProofService.ClientInfo("different", "42", "PC-B", "device-b")).active()).isFalse();
+        assertThat(sharedStatus(ACCOUNT_KEY, new PacsCertificateProofService.ClientInfo("reader", "43", "PC-B", "device-b")).active()).isFalse();
+        assertThat(audit.list("hospital-a").toString()).doesNotContain(ACCOUNT_KEY, PC_VERIFIER, BOOT);
+    }
+
+    @Test
+    void originOfflineCannotBeRevivedByLateHeartbeatOrReactivation() {
+        var state = activateLease();
+        clock.advance(Duration.ofSeconds(90));
+        assertThat(sharedStatus(ACCOUNT_KEY, other).reason()).isEqualTo("SOURCE_OFFLINE");
+        assertThat(service.heartbeatAccount(new PacsCertificateProofService.AccountHeartbeatRequest(pacs.clientId(),
+                state.receipt().verificationId(), PC_VERIFIER, BOOT, "device-a", false), PacsRequestContext.EMPTY).active()).isFalse();
+        assertThatThrownBy(() -> service.activateAccount(new PacsCertificateProofService.AccountActivateRequest(pacs.clientId(),
+                state.receipt().verificationId(), PC_VERIFIER, ACCOUNT_KEY, BOOT, owner), PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void secondaryDeviceOrRestartCannotMaintainLeaseAndCloseEndsImmediately() {
+        var state = activateLease();
+        var id = state.receipt().verificationId();
+        assertThatThrownBy(() -> service.heartbeatAccount(new PacsCertificateProofService.AccountHeartbeatRequest(pacs.clientId(),
+                id, PC_VERIFIER, BOOT, "device-b", false), PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.heartbeatAccount(new PacsCertificateProofService.AccountHeartbeatRequest(pacs.clientId(),
+                id, PC_VERIFIER, "e".repeat(64), "device-a", false), PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.heartbeatAccount(new PacsCertificateProofService.AccountHeartbeatRequest(pacs.clientId(),
+                id, "wrong", BOOT, "device-a", false), PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+        service.heartbeatAccount(new PacsCertificateProofService.AccountHeartbeatRequest(pacs.clientId(), id,
+                PC_VERIFIER, BOOT, "device-a", true), PacsRequestContext.EMPTY);
+        assertThat(sharedStatus(ACCOUNT_KEY, other).active()).isFalse();
+        assertThatThrownBy(() -> service.statusPc(new PacsCertificateProofService.PcStatusRequest(pacs.clientId(), id, PC_VERIFIER),
+                PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void heartbeatsNeverExtendAbsolute36HoursAndRenewalRequiresFreshProof() {
+        var state = activateLease();
+        for (int minute = 1; minute <= 36 * 60; minute++) {
+            clock.advance(Duration.ofMinutes(1));
+            var pulse = service.heartbeatAccount(new PacsCertificateProofService.AccountHeartbeatRequest(pacs.clientId(),
+                    state.receipt().verificationId(), PC_VERIFIER, BOOT, "device-a", false), PacsRequestContext.EMPTY);
+            assertThat(pulse.expiresAt()).isEqualTo(state.expiresAt());
+            assertThat(pulse.active()).isEqualTo(minute < 36 * 60);
+        }
+        assertThat(sharedStatus(ACCOUNT_KEY, other).reason()).isEqualTo("EXPIRED");
+    }
+
+    @Test
+    void accountApprovalEventsAreAttributedAndDeduplicated() {
+        activateLease();
+        var account = new PacsCertificateProofService.AccountStatusRequest(pacs.clientId(), ACCOUNT_KEY, other);
+        var event = new PacsCertificateProofService.ClientEventRequest(java.util.UUID.randomUUID(), "APPROVAL_REQUESTED", other, "f".repeat(64));
+        var request = new PacsCertificateProofService.AccountEventRequest(account, event);
+        assertThat(service.accountEvent(request, PacsRequestContext.EMPTY).duplicate()).isFalse();
+        assertThat(service.accountEvent(request, PacsRequestContext.EMPTY).duplicate()).isTrue();
+        clock.advance(Duration.ofSeconds(90));
+        assertThatThrownBy(() -> service.accountEvent(request, PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);
+    }
+
     @Test
     void pcProofRequiresOriginalVerifierNonceAndFreshCodeWithoutAnySharedKey() {
         var challenge = service.start(new PacsCertificateProofService.StartRequest(pacs.clientId(), null,
@@ -186,6 +269,8 @@ class PacsCertificateProofServiceTest {
             var code = durable.verify(signed(challenge, pki.leaf(TestPki.rsa(2048))));
             proofId = durable.redeemPc(new PacsCertificateProofService.PcRedeemRequest(pacs.clientId(),
                     code.verificationCode(), PC_VERIFIER, PC_NONCE), PacsRequestContext.EMPTY).receipt().verificationId();
+            durable.activateAccount(new PacsCertificateProofService.AccountActivateRequest(pacs.clientId(),
+                    proofId, PC_VERIFIER, ACCOUNT_KEY, BOOT, owner), PacsRequestContext.EMPTY);
             var legacy = durable.start(new PacsCertificateProofService.StartRequest(pacs.clientId()), "127.0.0.1");
             try (var connection = db.adminConnect(); var sql = connection.prepareStatement(
                     "UPDATE certi_rt.pacs_proof_challenges SET payload = payload - 'pcNonce' - 'codeChallenge' WHERE id = ?")) {
@@ -194,7 +279,7 @@ class PacsCertificateProofServiceTest {
             }
             legacyCode = durable.verify(signed(legacy, pki.leaf(TestPki.rsa(2048)))).verificationCode();
             try (var connection = db.adminConnect(); var sql = connection.createStatement()) {
-                assertThat(sql.executeUpdate("UPDATE certi_rt.pacs_certificate_proofs SET payload = payload - 'pcNonce' - 'codeChallenge'"
+                assertThat(sql.executeUpdate("UPDATE certi_rt.pacs_certificate_proofs SET payload = payload - 'pcNonce' - 'codeChallenge' - 'lease'"
                         + " WHERE payload->>'codeChallenge' IS NULL")).isEqualTo(1);
             }
         }
@@ -206,6 +291,8 @@ class PacsCertificateProofServiceTest {
                     new CertificateValidator(trust, clock), doctors, durableAudit, clock, "test");
             var status = new PacsCertificateProofService.PcStatusRequest(pacs.clientId(), proofId, PC_VERIFIER);
             assertThat(reopened.statusPc(status, PacsRequestContext.EMPTY).verified()).isTrue();
+            assertThat(reopened.accountStatus(new PacsCertificateProofService.AccountStatusRequest(pacs.clientId(), ACCOUNT_KEY, other),
+                    PacsRequestContext.EMPTY).active()).isTrue();
             assertThat(reopened.redeem(pacs, new PacsCertificateProofService.RedeemRequest(legacyCode)).verified()).isTrue();
             clock.advance(Duration.ofHours(2));
             assertThatThrownBy(() -> reopened.statusPc(status, PacsRequestContext.EMPTY)).isInstanceOf(ApiException.class);

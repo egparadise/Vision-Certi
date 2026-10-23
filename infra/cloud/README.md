@@ -1,5 +1,7 @@
 # Vision-Certi 클라우드 운영 구성
 
+2026-10-23: PACS 4.40.11용 `VC-ACCOUNT-36H-V1`을 운영 API에 반영했다. 최초 인증 후 최대 36시간, 최초 PC의 20초 유지 신호와 90초 연결 끊김 판정을 적용한다. 두 Hosting 사이트가 같은 API를 사용하며 기존 S256/HMAC 2시간 규격도 유지한다. [계정 인증 유지 규격](../../docs/PACS_36시간_계정인증_연동.md)을 따른다.
+
 ## 두 Hosting 사이트 배포 및 확인
 
 운영 대상은 `vision-certi`와 `hahattalk-vision-certi` 두 곳이다. 별칭인 각 `firebaseapp.com` 도메인도 같은 Hosting 버전을 제공한다. 한 곳만 배포하면 다른 곳에는 이전 화면이 남는다. 설치 파일을 `apps/web/public/downloads/`에 준비하고 웹 빌드 후 두 타깃을 함께 배포한다.

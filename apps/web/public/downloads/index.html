@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>설치 프로그램 다운로드 | Vision-Certi</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f3f6fa;color:#162942;font:16px/1.65 system-ui,"Malgun Gothic",sans-serif}
+    main{max-width:760px;margin:48px auto;padding:0 20px 40px}a{color:#0369a1}header a{text-decoration:none;font-weight:750;color:#087f8c}
+    h1{font-size:30px;line-height:1.3;margin:16px 0}h2{font-size:21px;margin:0 0 8px}p{margin:8px 0;color:#475569}
+    section{margin-top:24px;padding:26px;background:#fff;border:1px solid #dbe4ee;border-radius:14px}
+    .button{display:inline-block;margin:16px 0 10px;padding:11px 18px;border-radius:7px;background:#0369a1;color:white;font-weight:650;text-decoration:none}
+    .button:hover{background:#075985}.button:focus-visible{outline:3px solid #38bdf8;outline-offset:3px}code{overflow-wrap:anywhere;font-size:12px}
+    summary{cursor:pointer;color:#475569}ol{padding-left:24px;margin-bottom:0}small{color:#64748b}@media(max-width:480px){main{margin-top:24px}section{padding:20px}h1{font-size:26px}}
+  </style>
+</head>
+<body><main>
+  <header><a href="/">Vision-Certi</a><h1>설치 프로그램 다운로드</h1><p>사용할 Windows PC에서 프로그램을 내려받아 설치해 주세요.</p></header>
+  <section aria-labelledby="pacs-title">
+    <h2 id="pacs-title">SaintView PACS <span id="version">4.40.12</span></h2>
+    <p>최초 공동인증 후 최대 72시간 동안 같은 계정으로 다른 PC에서도 로그인합니다. 최초 인증 PC가 종료되거나 인증이 만료되면 다시 인증합니다.</p>
+    <a class="button" id="pacs-download" href="/downloads/saintview-pacs-4.40.12-setup.exe" download>PACS 설치 파일 다운로드</a><br>
+    <small>Windows 64비트 · 약 165 MB · 함께 사용할 PC에 모두 설치해 주세요.</small>
+    <p>상단 인증 배지에 마우스를 올리면 인증 여부와 종료까지 남은 시간을 확인할 수 있습니다. 24시간부터 주황색, 48시간부터 빨간색과 재인증 경고를 표시합니다.</p>
+    <ol><li>PACS를 종료한 뒤 내려받은 설치 파일을 실행합니다.</li><li>설치 후 기존 ID/PW로 로그인하고 공동인증서를 확인합니다.</li><li>최초 인증 PC를 켜 둔 상태에서 다른 PC에 같은 ID/PW로 로그인합니다.</li></ol>
+    <details><summary>파일 검증 정보</summary><p id="checksum">검증 정보는 <a href="pacs-release.json">릴리스 정보</a>에서 확인할 수 있습니다.</p></details>
+  </section>
+  <section aria-labelledby="bridge-title">
+    <h2 id="bridge-title">Windows 인증서 프로그램</h2>
+    <p>인증창에서 이 PC의 하드디스크·이동식 디스크 인증서를 자동으로 찾는 프로그램입니다. 설치 안내가 나타나는 PC에서 설치해 주세요.</p>
+    <a class="button" href="/downloads/vision-certi-bridge-win-x64.zip" download>인증서 프로그램 다운로드</a>
+    <p>ZIP 압축을 풀고 <strong>Install.cmd</strong>를 실행하세요. 설치가 끝나면 인증창으로 돌아가 다시 검색합니다.</p>
+  </section>
+  <p><a href="/downloads/vision-certi-pacs-window-repair.zip" download>인증창 복구 도구 다운로드</a> · <a href="/">사이트로 돌아가기</a></p>
+</main>
+<script>
+fetch('pacs-release.json', {cache:'no-store'}).then(r => {if(!r.ok) throw new Error('manifest'); return r.json();}).then(data => {
+  if (!/^\d+\.\d+\.\d+$/.test(data.version) || !/^[a-f0-9]{64}$/.test(data.sha256)
+    || data.url !== '/downloads/saintview-pacs-' + data.version + '-setup.exe') return;
+  document.getElementById('version').textContent=data.version;
+  document.getElementById('pacs-download').href=data.url;
+  const code=document.createElement('code'); code.textContent='SHA-256: ' + data.sha256;
+  document.getElementById('checksum').replaceChildren(code);
+}).catch(() => {});
+</script></body></html>

@@ -10,6 +10,13 @@ const mocks = vi.hoisted(() => ({ client: {
 } }));
 vi.mock('../context/AppContext', () => ({ useApp: () => ({ client: mocks.client }) }));
 vi.mock('../components/CertificateEnrollmentView', () => ({ CertificateEnrollmentView: ({ proofMethod }: {proofMethod: string}) => <div>인증서 확인 방식: {proofMethod}</div> }));
+// The proof screen probes the PC certificate program on 127.0.0.1:18187; keep the test independent of this PC.
+vi.mock('../services/localCertificateBridge', () => ({
+  discoverBridgeCertificates: vi.fn(async () => []), probeLocalCertificateBridge: vi.fn(async () => true),
+}));
+vi.mock('../services/localCertificateDiscovery', () => ({
+  getRememberedDirectory: vi.fn(async () => undefined), rememberDirectory: vi.fn(), scanCertificateDirectory: vi.fn(async () => []),
+}));
 const receipt = { enrollmentToken: 'vca1.secret-test-token', expiresAt: new Date(Date.now()+600000).toISOString(), account: {
   accountId: 'account', username: 'physician123', scope: 'ENROLLMENT_ONLY', phoneVerified: false,
   doctor: { id: 'doctor', name: '시험의사', status: 'PENDING' },
@@ -71,7 +78,7 @@ describe('External proof input', () => {
   it('requires a local certificate and password before sending any proof', async () => {
     const onProof = vi.fn();
     render(<ExternalCertificateProof challenge={challenge} busy={false} onProof={onProof} />);
-    await screen.findByText('처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.');
+    await screen.findByText(/하드디스크에서 인증서를 찾지 못했습니다/);
     expect(screen.getByLabelText('PFX/P12 파일')).toBeInTheDocument();
     expect(screen.getByLabelText('인증서 비밀번호')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '확인' })).toBeDisabled();
@@ -83,7 +90,7 @@ describe('External proof input', () => {
   it('does not submit after challenge expiry', async () => {
     const onProof = vi.fn();
     render(<ExternalCertificateProof challenge={{ ...challenge, expiresAt: new Date(Date.now()-1000).toISOString() }} busy={false} onProof={onProof} />);
-    await screen.findByText('처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.');
+    await screen.findByText(/하드디스크에서 인증서를 찾지 못했습니다/);
     expect(screen.getByRole('status')).toHaveTextContent('만료');
     expect(screen.getByRole('button', { name: '확인' })).toBeDisabled();
     expect(onProof).not.toHaveBeenCalled();

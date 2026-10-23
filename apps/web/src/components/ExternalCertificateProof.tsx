@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { FolderSearch, HardDrive, Keyboard, Usb, X } from 'lucide-react';
 import appPackage from '../../package.json';
 import { CertificateVirtualKeyboard } from './CertificateVirtualKeyboard';
+import { InfoPopover } from './InfoPopover';
 import type { CertificateChallenge } from '../types/api';
 import type { LocalSignResult } from '../services/localCertSdkAdapter';
 import { PASSWORD_MISMATCH, signWithCertificateFiles, type CertificateFiles } from '../services/certificateFileSigner';
@@ -274,16 +275,33 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
 
   return <section className="account-proof cert-dialog" aria-label={actionLabel ?? '공동인증서 선택 및 로그인'}>
     <div className="cert-dialog-titlebar">
-      <strong>공동인증서 인증</strong>
-      <span>v{appPackage.version}</span>
-      <button type="button" aria-label="인증서 선택 취소" onClick={cancel}><X size={19} /></button>
+      <div className="cert-dialog-title-left">
+        <strong>공동인증서 인증</strong>
+        <span className="cert-dialog-version">v{appPackage.version}</span>
+        <InfoPopover
+          title="공동인증서 인증 보안 안내"
+          badge="보안 안내"
+          align="left"
+          iconSize={13}
+          description="PACS 계정 비밀번호는 PACS에서만 확인하며, 이 화면에서는 공동인증서와 개인키 소유 여부만 안전하게 확인합니다."
+          bullets={[
+            '개인키와 인증서 비밀번호는 서버나 외부로 절대 전송되지 않습니다.',
+            '인비즈 PC 인증서 프로그램이 실행 중이면 NPKI 인증서를 자동으로 표시합니다.',
+            '인증서가 목록에 없으면 [인증서 찾기] 또는 [인증서 파일 직접 선택]을 이용해 주세요.',
+          ]}
+        />
+      </div>
+      <button type="button" aria-label="인증서 선택 취소" onClick={cancel}><X size={16} /></button>
     </div>
     <div className="cert-dialog-content">
     <div className="cert-brand-banner">
       <img src="/inviz-logo-transparent.png" alt="INVIZ" />
     </div>
-    <p className="cert-dialog-instruction">인증서 저장위치를 선택해 주세요.</p>
-    <p role="status" className="cert-dialog-timer">{expired ? '인증 요청이 만료되었습니다. 새 요청을 시작해 주세요.' : `남은 시간 ${Math.ceil((expires - now) / 1000)}초`}</p>
+    <div className="cert-dialog-subbar">
+      <p className="cert-dialog-instruction">인증서 저장위치를 선택해 주세요.</p>
+      <p role="status" className="cert-dialog-timer">{expired ? '인증 요청이 만료되었습니다. 새 요청을 시작해 주세요.' : `남은 시간 ${Math.ceil((expires - now) / 1000)}초`}</p>
+    </div>
+    {expired && onRestart && <button type="button" className="enroll-primary" disabled={busy} onClick={() => onRestart()}>새 인증 요청 시작</button>}
     {expiryWarning && <p role="alert">선택한 공동인증서가 30일 이내에 만료됩니다. 만료일: {selected.expiresAt!.toLocaleDateString('ko-KR')}</p>}
     {passwordLocked && <p role="alert">비밀번호 입력이 잠겼습니다. {Math.ceil((lockedUntil - now) / 60000)}분 뒤 다시 시도해 주세요.</p>}
     {bridgeState === 'unavailable' && <div className="cert-bridge-setup" role="status">
@@ -312,11 +330,18 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
         <div className="cert-media" aria-label="인증서 저장매체">
           {MEDIA.map(item => <button key={item} type="button" aria-pressed={medium === item}
             onClick={() => { setMedium(item); setSelectedId(undefined); setManualMode(false); setError(''); }}>
-            {item === 'hard-disk' ? <HardDrive aria-hidden="true" size={28} /> : <Usb aria-hidden="true" size={28} />}
+            {item === 'hard-disk' ? <HardDrive aria-hidden="true" size={18} /> : <Usb aria-hidden="true" size={18} />}
             <span>{MEDIA_LABEL[item]}</span>
           </button>)}
         </div>
-        <p className="cert-dialog-instruction cert-list-heading">인증서를 선택해 주세요.</p>
+        <div className="cert-list-header-row">
+          <p className="cert-dialog-instruction cert-list-heading">인증서를 선택해 주세요.</p>
+          <div className="cert-location-actions">
+            <button type="button" onClick={() => void chooseDirectory(false)} disabled={signing}><FolderSearch size={14} /> 인증서 찾기</button>
+            {permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={signing}>저장된 폴더 접근 허용</button>}
+            {directories[medium] && !permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={signing}>목록 새로고침</button>}
+          </div>
+        </div>
         <div className="cert-list-wrap">
           <table className="cert-list">
             <thead><tr><th>구분</th><th>사용자 / 인증서</th><th>만료기간</th><th>발급자</th></tr></thead>
@@ -343,12 +368,7 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
               : '처음 사용할 때 검색할 PC 폴더를 한 번 선택해 주세요.'}</p>}
         </div>
         {scanLimited[medium] && <p className="cert-scan-limit" role="alert">검색 범위가 너무 넓어 일부 폴더만 확인했습니다. NPKI 상위 폴더를 직접 선택해 다시 검색해 주세요.</p>}
-        <div className="cert-location-actions">
-          <button type="button" onClick={() => void chooseDirectory(false)} disabled={signing}><FolderSearch size={17} /> 인증서 찾기</button>
-          {permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={signing}>저장된 폴더 접근 허용</button>}
-          {directories[medium] && !permissionNeeded[medium] && <button type="button" onClick={() => void chooseDirectory(true)} disabled={signing}>목록 새로고침</button>}
-        </div>
-        <p className="cert-location-help">인비즈 PC 인증서 프로그램이 실행 중이면 NPKI 인증서를 자동으로 표시합니다. 연결되지 않으면 폴더를 선택해 검색할 수 있습니다.</p>
+        <p className="cert-location-help enroll-sr-only">인비즈 PC 인증서 프로그램이 실행 중이면 NPKI 인증서를 자동으로 표시합니다. 연결되지 않으면 폴더를 선택해 검색할 수 있습니다.</p>
         <details className="cert-manual" onToggle={event => { if (event.currentTarget.open) { setSelectedId(undefined); setManualMode(true); } }}>
           <summary>목록에 없나요? 인증서 파일 직접 선택</summary>
           <label>파일 형식<select value={kind} onChange={event => { setKind(event.target.value as 'PFX' | 'NPKI'); setManualMode(true); setSelectedId(undefined); }}>
@@ -366,7 +386,7 @@ export function ExternalCertificateProof({ challenge, payloadBase64, expiresAt, 
           placeholder={certificateChosen ? '인증서 비밀번호' : '먼저 위에서 인증서를 선택해 주세요'} disabled={!certificateChosen} required />
           <button type="button" className="cert-keyboard-toggle" disabled={!certificateChosen} aria-label={keyboardOpen ? '가상키보드 닫기' : '가상키보드 열기'}
             aria-expanded={keyboardOpen} aria-controls="cert-virtual-keyboard" onClick={() => setKeyboardOpen(!keyboardOpen)}>
-            <Keyboard aria-hidden="true" size={21} />
+            <Keyboard aria-hidden="true" size={16} />
           </button></span></label>
         {keyboardOpen && certificateChosen && <CertificateVirtualKeyboard onInsert={insertPassword} onBackspace={deletePasswordCharacter}
           onClose={() => setKeyboardOpen(false)} />}

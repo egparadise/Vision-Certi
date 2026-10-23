@@ -2,29 +2,13 @@ import { useCallback, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { CertificateEnrollmentView } from './CertificateEnrollmentView';
 import { CertificateComplete } from './CertificateComplete';
-
-type PacsLoginContext = { origin: string; nonce: string; audience: string; opener: Window };
-
-function getPacsLoginContext(): PacsLoginContext | null {
-  const query = new URLSearchParams(window.location.hash.split('?')[1] || '');
-  const nonce = query.get('nonce');
-  const audience = query.get('audience');
-  const requestedOrigin = query.get('origin');
-  if (!window.opener || window.opener.closed || !nonce || !/^[0-9a-f]{64}$/.test(nonce)
-    || !audience || !/^[a-zA-Z0-9._:-]{1,128}$/.test(audience) || !requestedOrigin) return null;
-  try {
-    const origin = new URL(requestedOrigin).origin;
-    const configured = (import.meta.env.VITE_PACS_ALLOWED_ORIGINS || '').split(',').map((item: string) => item.trim());
-    if (origin === 'null' || requestedOrigin !== origin
-      || !(origin === window.location.origin || configured.includes(origin))) return null;
-    return { origin, nonce, audience, opener: window.opener };
-  } catch { return null; }
-}
+import { pacsOpenerContext, pacsRedirectedFromHost } from '../utils/pacsOpener';
 
 /** The PACS window redeems the one-time code with its server before it creates a PACS session. */
 export function PacsCertificateLogin() {
   const { client } = useApp();
-  const [context] = useState(getPacsLoginContext);
+  const [context] = useState(pacsOpenerContext);
+  const [redirectedFrom] = useState(pacsRedirectedFromHost);
   const [delivered, setDelivered] = useState(false);
   const complete = useCallback(async (activationToken: string) => {
     if (!context || context.opener.closed) throw new Error('PACS 로그인 창이 닫혔습니다. PACS에서 다시 시도해 주세요.');
@@ -53,6 +37,9 @@ export function PacsCertificateLogin() {
       context.origin);
   }, [context]);
 
+  if (redirectedFrom) return <section role="alert">
+    PACS가 이전 주소({redirectedFrom})로 로그인 창을 열어 결과를 PACS에 전달할 수 없습니다. PACS 인증 설정의 인증 서버 주소를 {window.location.origin}로 바꾼 뒤 다시 시도해 주세요.
+  </section>;
   if (!context) return <section role="alert">PACS 로그인 요청이 유효하지 않습니다. PACS 로그인 화면에서 다시 시작해 주세요.</section>;
   if (delivered) return <CertificateComplete />;
   return <CertificateEnrollmentView initialMode="PC_LOGIN" proofMethod="external"

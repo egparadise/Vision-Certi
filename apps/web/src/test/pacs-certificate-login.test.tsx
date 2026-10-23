@@ -64,6 +64,16 @@ describe('PACS certificate login handoff', () => {
     expect(mocks.createPacsHandoff).not.toHaveBeenCalled();
   });
 
+  it('explains an outdated PACS address instead of starting certificate login', () => {
+    window.location.hash = '/certificates/pacs-login?' + new URLSearchParams({
+      nonce, audience: 'pacs-sv70', origin: 'https://pacs.internal', vcRedirectedFrom: 'vision-certi.firebaseapp.com',
+    });
+    render(<PacsCertificateLogin />);
+    expect(screen.getByRole('alert')).toHaveTextContent('vision-certi.firebaseapp.com');
+    expect(screen.queryByRole('button', { name: '서버 인증 완료' })).toBeNull();
+    expect(mocks.createPacsHandoff).not.toHaveBeenCalled();
+  });
+
   it('rejects an untrusted PACS origin before certificate login begins', () => {
     window.location.hash = '/certificates/pacs-login?' + new URLSearchParams({
       nonce, audience: 'pacs-sv70', origin: 'https://attacker.invalid',

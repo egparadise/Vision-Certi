@@ -47,7 +47,8 @@ public final class PacsCertificateProofService {
             String pcNonce, String codeChallenge, AccountLease lease) { }
 
     record AccountLease(String accountKeyHash, ClientInfo owner, String bootId, Instant lastSeenAt, boolean ended) { }
-    private static final Duration ACCOUNT_TTL = Duration.ofHours(36);
+    public static final int ACCOUNT_LEASE_HOURS = 72;
+    private static final Duration ACCOUNT_TTL = Duration.ofHours(ACCOUNT_LEASE_HOURS);
     private static final Duration OWNER_TIMEOUT = Duration.ofSeconds(90);
     public record AccountActivateRequest(String audience, UUID verificationId, String codeVerifier,
             String accountKey, String bootId, ClientInfo clientInfo) {
@@ -541,7 +542,7 @@ public final class PacsCertificateProofService {
             tx.update(PROOFS, next);
             Map<String, String> details = evidence(next);
             details.putAll(request.clientInfo().details());
-            details.put("policy", "ACCOUNT_36H_OR_OWNER_OFFLINE");
+            details.put("policy", "ACCOUNT_72H_OR_OWNER_OFFLINE");
             record(tenant(client, next.tenantId()), client.clientId(), "ACCOUNT_ACTIVATED", next.id().toString(),
                     AuditService.SUCCESS, context, details);
             return next;

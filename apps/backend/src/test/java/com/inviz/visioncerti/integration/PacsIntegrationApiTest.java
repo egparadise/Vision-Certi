@@ -115,6 +115,7 @@ class PacsIntegrationApiTest {
         mvc.perform(get(PC_BASE + "/pc/capabilities")).andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.protocol").value("VC-PC-PROOF-S256-V1"))
+                .andExpect(jsonPath("$.accountLeaseHours").value(72))
                 .andExpect(jsonPath("$.clientEvents").value(true));
         String code = pcProofCode();
         String body = pcRedeemBody(code);

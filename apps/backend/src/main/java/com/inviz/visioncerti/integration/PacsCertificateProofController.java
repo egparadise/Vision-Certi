@@ -69,7 +69,8 @@ public final class PacsCertificateProofController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(java.util.Map.of("protocol", "VC-PC-PROOF-S256-V1", "codeChallengeMethod", "S256",
                         "clientEvents", true, "clientEventPath", "/v1/pacs-certificate-proofs/pc/events",
-                        "accountLease", "VC-ACCOUNT-36H-V1", "accountLeaseHours", 36,
+                        // Keep the deployed capability/key-derivation protocol identifier stable.
+                        "accountLease", "VC-ACCOUNT-36H-V1", "accountLeaseHours", PacsCertificateProofService.ACCOUNT_LEASE_HOURS,
                         "heartbeatSeconds", 20, "ownerTimeoutSeconds", 90));
     }
 

@@ -24,6 +24,7 @@
         { "source": "/v1/**", "run": { "serviceId": "vision-certi-api", "region": "asia-northeast3" } }
       ],
       "headers": [
+        { "source": "/downloads/pacs-release.json", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "**/*.html", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/assets/index-*.js", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
@@ -49,6 +50,9 @@
         { "source": "/v1/**", "run": { "serviceId": "vision-certi-api", "region": "asia-northeast3" } }
       ],
       "headers": [
+        { "source": "/downloads/pacs-release.json", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },
+        { "source": "/downloads/vision-certi-bridge-win-x64.zip", "headers": [{ "key": "Content-Disposition", "value": "attachment; filename=vision-certi-bridge-win-x64.zip" }, { "key": "Cache-Control", "value": "no-store, max-age=0" }] },
+        { "source": "/downloads/vision-certi-pacs-window-repair.zip", "headers": [{ "key": "Content-Disposition", "value": "attachment; filename=vision-certi-pacs-window-repair.zip" }] },
         { "source": "/downloads/saintview-pacs-*.exe", "headers": [{ "key": "Content-Disposition", "value": "attachment" }, { "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/downloads/vision-certi-pacs-activity-patch.zip", "headers": [{ "key": "Content-Disposition", "value": "attachment; filename=vision-certi-pacs-activity-patch.zip" }, { "key": "Cache-Control", "value": "no-store, max-age=0" }] },
         { "source": "/", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] },

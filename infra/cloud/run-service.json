@@ -30,7 +30,7 @@
     "containers": [
       {
         "name": "api",
-        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:f0d2dff25efcf231b9bb4ea42f592ee06ea4346df6943607099840d7ef42d7f7",
+        "image": "asia-northeast3-docker.pkg.dev/hahattalk/vision-certi/api@sha256:8c535a74660d4c92981eb20474a9d23511ca21bbcb79d3facb7b9a688a6424c9",
         "ports": [
           {
             "containerPort": 8080,
@@ -40,7 +40,7 @@
         "env": [
           {
             "name": "VISIONCERTI_DEPLOY_ID",
-            "value": "2026-10-23-account36"
+            "value": "2026-10-23-account72"
           },
           {
             "name": "VISIONCERTI_CERT_YESSIGN_CRL_LOOKUP_ENABLED",

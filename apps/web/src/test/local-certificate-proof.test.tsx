@@ -87,6 +87,28 @@ it('requests a fresh challenge after installation if the previous one expired', 
   await waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
 });
 
+it('offers to start a new request once the challenge has expired', async () => {
+  mocks.discoverBridgeCertificates.mockResolvedValue([]);
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  const restart = vi.fn();
+  render(<ExternalCertificateProof challenge={{ challengeId: 'expired-visible', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() - 1000).toISOString() } as CertificateChallenge} busy={false}
+    onProof={async () => {}} onRestart={restart} />);
+  expect(screen.getByText(/인증 요청이 만료되었습니다/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '확인' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '새 인증 요청 시작' }));
+  expect(restart).toHaveBeenCalledTimes(1);
+});
+
+it('shows no restart button when the caller cannot issue a new request', async () => {
+  mocks.discoverBridgeCertificates.mockResolvedValue([]);
+  mocks.getRememberedDirectory.mockResolvedValue(undefined);
+  render(<ExternalCertificateProof challenge={{ challengeId: 'expired-fixed', signedPayloadBase64: btoa('challenge'),
+    expiresAt: new Date(Date.now() - 1000).toISOString() } as CertificateChallenge} busy={false} onProof={async () => {}} />);
+  expect(screen.getByText(/인증 요청이 만료되었습니다/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '새 인증 요청 시작' })).toBeNull();
+});
+
 it('asks the PC program to scan removable drives when that storage medium is selected', async () => {
   mocks.discoverBridgeCertificates.mockImplementation(async (medium: string) => medium === 'removable-disk' ? [{
     id: 'bridge:usb', kind: 'NPKI', name: 'USB 인증서', issuer: '발급기관',

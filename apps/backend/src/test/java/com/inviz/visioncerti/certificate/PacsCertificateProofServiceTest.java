@@ -83,7 +83,7 @@ class PacsCertificateProofServiceTest {
     @Test
     void accountLeaseSharesOnlyMatchingCredentialCapabilityAndAccount() {
         var state = activateLease();
-        assertThat(state.expiresAt()).isEqualTo(state.verifiedAt().plus(Duration.ofHours(36)));
+        assertThat(state.expiresAt()).isEqualTo(state.verifiedAt().plus(Duration.ofHours(72)));
         assertThat(sharedStatus(ACCOUNT_KEY, other).active()).isTrue();
         assertThat(sharedStatus("d".repeat(64), other).active()).isFalse();
         assertThat(sharedStatus(ACCOUNT_KEY, new PacsCertificateProofService.ClientInfo("different", "42", "PC-B", "device-b")).active()).isFalse();
@@ -120,14 +120,14 @@ class PacsCertificateProofServiceTest {
     }
 
     @Test
-    void heartbeatsNeverExtendAbsolute36HoursAndRenewalRequiresFreshProof() {
+    void heartbeatsNeverExtendAbsolute72HoursAndRenewalRequiresFreshProof() {
         var state = activateLease();
-        for (int minute = 1; minute <= 36 * 60; minute++) {
+        for (int minute = 1; minute <= 72 * 60; minute++) {
             clock.advance(Duration.ofMinutes(1));
             var pulse = service.heartbeatAccount(new PacsCertificateProofService.AccountHeartbeatRequest(pacs.clientId(),
                     state.receipt().verificationId(), PC_VERIFIER, BOOT, "device-a", false), PacsRequestContext.EMPTY);
             assertThat(pulse.expiresAt()).isEqualTo(state.expiresAt());
-            assertThat(pulse.active()).isEqualTo(minute < 36 * 60);
+            assertThat(pulse.active()).isEqualTo(minute < 72 * 60);
         }
         assertThat(sharedStatus(ACCOUNT_KEY, other).reason()).isEqualTo("EXPIRED");
     }

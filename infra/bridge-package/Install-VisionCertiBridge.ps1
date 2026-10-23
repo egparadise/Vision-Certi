@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $ErrorActionPreference = 'Stop'
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'Windows 64비트 PC가 필요합니다.' }

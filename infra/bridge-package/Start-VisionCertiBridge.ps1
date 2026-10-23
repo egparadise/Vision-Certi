@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $ErrorActionPreference = 'Stop'
 $installRoot = Split-Path -Parent $MyInvocation.MyCommand.Path

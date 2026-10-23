@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $ErrorActionPreference = 'Stop'
 $workspace = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
@@ -47,3 +47,14 @@ $digest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInv
 Write-Output "archive=$archive"
 Write-Output "sha256=$digest"
 Write-Output "bytes=$((Get-Item -LiteralPath $archive).Length)"
+
+# The certificate page publishes this checksum next to the download link; keep it in step with the archive.
+$envFile = Join-Path $webRoot '.env.production'
+if (Test-Path -LiteralPath $envFile) {
+    $envText = [System.IO.File]::ReadAllText($envFile)
+    $updated = [regex]::Replace($envText, '(?m)^VITE_CERT_INSTALLER_SHA256=.*$', 'VITE_CERT_INSTALLER_SHA256=' + $digest)
+    if ($updated -ne $envText) {
+        [System.IO.File]::WriteAllText($envFile, $updated, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Output "env=$envFile"
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "version":  "4.40.12",
+    "sourceCommit":  "4d30dec5716dcd92cf184f2cedbf4cad9a19200d",
+    "publishedAt":  "2026-10-23T13:27:17.2008421Z",
+    "platform":  "windows-x86_64",
+    "url":  "/downloads/saintview-pacs-4.40.12-setup.exe",
+    "bytes":  172764006,
+    "sha256":  "7e0511baafe29cc6cd358d5e6034360bd26a10537f6d8b7e724047717b27b422",
+    "accountLeaseHours":  72,
+    "ownerTimeoutSeconds":  90
+}

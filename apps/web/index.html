@@ -11,7 +11,10 @@
           host === 'hahattalk-vision-certi.web.app' ||
           host === 'hahattalk-vision-certi.firebaseapp.com' ||
           /^hahattalk-vision-certi--[a-z0-9-]+\.web\.app$/.test(host)) {
-        location.replace('https://vision-certi.web.app' + location.pathname + location.search + location.hash);
+        // A PACS popup must answer from the origin the PACS opened; tell the page which host that was.
+        let hash = location.hash;
+        if (/^#\/certificates\/pacs-/.test(hash)) hash += (hash.includes('?') ? '&' : '?') + 'vcRedirectedFrom=' + encodeURIComponent(host);
+        location.replace('https://vision-certi.web.app' + location.pathname + location.search + hash);
       }
     </script>
   </head>

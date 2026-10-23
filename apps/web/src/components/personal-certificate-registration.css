@@ -1,4 +1,15 @@
 .personal-certificate-page { min-height: 100vh; padding: 24px 40px 60px; background: white; color: #3c3c3c; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+.personal-certificate-page.pacs-proof-page {
+  min-height: 100vh;
+  height: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  overflow: visible;
+  background: #f1f5f9;
+}
 .personal-certificate-home { color: #0078c7; text-decoration: none; font-size: 15px; }
 .personal-certificate-page h1 { font-size: 36px; font-weight: 600; margin: 16px 0 32px; letter-spacing: -1px; outline: none; }
 .personal-certificate-steps { max-width: 780px; padding: 0; margin: 0 auto 44px; display: flex; align-items: center; justify-content: center; gap: 28px; position: relative; list-style: none; min-height: 70px; }

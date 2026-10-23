@@ -64,4 +64,15 @@ PACS는 현재 로그인 계정과 연결된 `verificationId`를 HMAC 인증으�
 
 Vision-Certi의 책임 범위는 **PACS의 요청 수신 → 해당 PC 인증서 표시 → 비밀번호를 이용한 로컬 서명 → 서버 검증 → 요청 PACS에 검증 결과 전달 및 완료 표시**까지다. PACS 계정 로그인·로컬 계정 보관·판독 승인은 PACS가 처리한다.
 
+## 팝업 동작 보완 (2026-10-22 점검)
+
+- 서버가 서명 검증을 거절하면(신뢰체인·폐지·지문 불일치 등) 팝업은 거절 사유를 표시한 채 **새 challenge를 자동으로 받는다**. 서버는 검증을 시도한 challenge를 결과와 관계없이 사용 처리하므로, 같은 challenge로 다시 서명하면 `CHALLENGE_ALREADY_USED`가 된다. 영문으로 오는 서버 코드(`CHALLENGE_ALREADY_USED`, `CHALLENGE_EXPIRED`, `CHALLENGE_NOT_FOUND`, `FINGERPRINT_MISMATCH`, `PROOF_AUDIENCE_INVALID`, `CERTIFICATE_TRUST_NOT_CONFIGURED`, `CERTIFICATE_CAPACITY_EXCEEDED`)는 한글 안내로 바꿔 표시한다.
+- challenge(5분)가 만료되면 **새 인증 요청 시작** 버튼으로 창을 닫지 않고 새 요청을 받을 수 있다. 단, PACS 클라이언트는 팝업을 연 뒤 5분이 지나면 자체 시간 초과로 창을 닫으므로 그 전에 다시 시작해야 한다.
+- PACS가 이전 주소(`hahattalk-vision-certi.web.app`, `vision-certi.firebaseapp.com` 등)로 팝업을 열면 `index.html`이 현재 주소로 이동시키면서 `vcRedirectedFrom`을 붙이고, 팝업은 인증을 시작하지 않고 PACS 인증 설정의 주소를 바꾸라는 안내만 표시한다. 이동 뒤에는 팝업 origin이 PACS가 기대하는 origin과 달라져 어떤 결과도 전달할 수 없기 때문이다. PACS 쪽 설정 복구는 [설치형 PACS 설정 패치](../infra/pacs_patch/README.md)를 사용한다.
+- 설치형 PACS(`http://tauri.localhost`)에서 **취소**를 누르면 팝업이 `window.close()`를 호출하지 않고 "인증을 취소했습니다" 화면을 남긴다. PACS의 `popup.close()`가 바깥 네이티브 창을 흰색으로 남기는 것이 확인되었고, 팝업 자체의 `window.close()`도 같은 WebView2 닫기 요청이므로 같은 현상이 예상되기 때문이다(실기기에서 별도 검증하지는 않았다). 사용자가 오른쪽 위 X로 닫으면 PACS는 취소로 처리한다. 브라우저형 PACS에서는 기존처럼 창을 닫는다.
+
+### PACS 클라이언트에 남은 사항
+
+3.40.5는 정상 결과를 받은 경로에서만 `popup.close()`를 피한다. PACS ID/PW 실패, 5분 시간 초과, 연동 설정 조회 실패 경로에서는 여전히 `popup.close()`를 호출하므로 같은 흰 창이 남을 수 있다. 근본 수정은 Rust 셸에서 팝업 WebView의 닫기 요청(`WindowCloseRequested`)을 받아 Tauri 창을 `destroy()`하는 것이다. PACS 설정 화면의 인증 서버 주소 선택지에서 `https://hahattalk-vision-certi.web.app`는 제거하거나 `vision-certi.web.app`로 정규화해야 한다.
+
 회귀 검증은 `tests/browser/native-completion.cjs`로 수행한다. 진단용 네이티브 PACS를 루프백 CDP 포트 9227로 실행한 뒤 이 스크립트를 실행한다. 테스트는 임시 인증서의 암호화된 개인키를 실제로 복호화·서명하고 공개키로 검증하되, 인증 API와 브로커 응답은 격리한다. 실제 사용자 비밀번호를 읽거나 실제 PACS 로그인을 수행하지 않는다. `PACS_USE_BUILT_ASSETS=1`은 실행 파일 내장 화면, `AUTH_USE_LIVE_ASSETS=1`은 배포된 웹 정적 파일을 사용한다.

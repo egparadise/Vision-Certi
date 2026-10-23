@@ -176,7 +176,7 @@ export const App: React.FC = () => {
   }
 
   if (hash.startsWith('#/certificates/pacs-proof')) {
-    return <main className="personal-certificate-page"><PacsCertificateProof /></main>;
+    return <main className="personal-certificate-page pacs-proof-page"><PacsCertificateProof /></main>;
   }
 
   if (hash.startsWith('#/doctor/sign-requests')) {

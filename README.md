@@ -6,6 +6,8 @@
 
 INVIZ 인증·전자서명 서버와 SV70 PACS 연동 프로젝트입니다. 의사 인증과 판독문별 승인을 검증한 뒤 OpenBao로 서명하고, PACS가 서명 증거를 확인한 후 승인 상태를 저장합니다.
 
+PACS **4.40.12**은 최초 공동인증 후 최대 **72시간** 동안 같은 계정의 다른 PC 로그인을 허용합니다. 최초 인증 PC의 연결이 끊기면 마지막 유지 신호 후 최대 90초 안에 재인증 상태가 됩니다. [현재 계정 인증 규칙](docs/PACS_72시간_계정인증_연동.md)과 [통합 초기화·배포 절차](docs/RELEASE_RUNBOOK.md)를 우선 확인하세요. 설치 파일은 [다운로드 페이지](https://vision-certi.web.app/downloads/)에서 제공합니다.
+
 ## 구성
 
 - `apps/backend`: Java/Spring Boot, PostgreSQL, Google OIDC, 인증서·CRL 검증, OpenBao Transit/PKI.
@@ -20,7 +22,7 @@ INVIZ 인증·전자서명 서버와 SV70 PACS 연동 프로젝트입니다. 의
 
 [실행·CA 설치](docs/LAN_TEST.md), [PACS 연결 값](docs/PACS_LAN_CONNECTION.md), [로그인·판독 승인 흐름](docs/PACS_EXECUTION_FLOW.md)을 따릅니다. 실제 PACS의 웹 주소를 허용 출처로 등록하고, 연동 코드와 DB 마이그레이션을 적용해야 합니다.
 
-PACS 최초 로그인에서 공동인증서를 등록하고, 등록·활성화 이후에도 매번 공동인증서로 로그인합니다. 관리자 사전등록·초대코드 발급 API는 기본 비활성화됩니다. 관리자 일괄 사전등록이나 초대코드 입력은 필요하지 않습니다. [최초 등록 계약](apps/backend/docs/PACS_SELF_ENROLLMENT.md) 및 [의료인 등록·보안프로그램 연결](docs/MEDICAL_CERTIFICATE_ONBOARDING.md)에 따라 V006 마이그레이션을 적용합니다. 판독문 최종 승인에 필요한 문서별 서명 확인은 별도입니다.
+위 내부망·사전등록 문서는 이전 개발 흐름의 참고 자료입니다. 공개 PACS 4.40.11은 [계정별 72시간 인증 계약](docs/PACS_72시간_계정인증_연동.md)을 사용하며, 인증 유지 중에는 매번 인증서 비밀번호를 다시 입력하지 않습니다. 판독문 최종 승인에 필요한 문서별 확인은 별도입니다.
 
 ## 개발 검증
 

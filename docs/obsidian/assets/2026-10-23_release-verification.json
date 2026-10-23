@@ -1,0 +1,134 @@
+﻿{
+    "downloads":  {
+                      "checkedAt":  "2026-10-23T13:38:45.022Z",
+                      "version":  "4.40.12",
+                      "downloadPagesPassed":  true,
+                      "results":  [
+                                      {
+                                          "host":  "vision-certi.web.app",
+                                          "file":  "downloads/saintview-pacs-4.40.12-setup.exe",
+                                          "status":  200,
+                                          "bytes":  172764006,
+                                          "sha256":  "7e0511baafe29cc6cd358d5e6034360bd26a10537f6d8b7e724047717b27b422",
+                                          "matches":  true
+                                      },
+                                      {
+                                          "host":  "vision-certi.web.app",
+                                          "file":  "downloads/vision-certi-bridge-win-x64.zip",
+                                          "status":  200,
+                                          "bytes":  33471795,
+                                          "sha256":  "b1d473fc63bbf0f1e04c280d2ea9be4365fa8489c8b2e0033ee38841ddc41233",
+                                          "matches":  true
+                                      },
+                                      {
+                                          "host":  "vision-certi.web.app",
+                                          "file":  "downloads/vision-certi-pacs-window-repair.zip",
+                                          "status":  200,
+                                          "bytes":  3917,
+                                          "sha256":  "a260130acca957d0d1cbc5951ced0e72543b3c2307459423da333a807daed535",
+                                          "matches":  true
+                                      },
+                                      {
+                                          "host":  "hahattalk-vision-certi.web.app",
+                                          "file":  "downloads/saintview-pacs-4.40.12-setup.exe",
+                                          "status":  200,
+                                          "bytes":  172764006,
+                                          "sha256":  "7e0511baafe29cc6cd358d5e6034360bd26a10537f6d8b7e724047717b27b422",
+                                          "matches":  true
+                                      },
+                                      {
+                                          "host":  "hahattalk-vision-certi.web.app",
+                                          "file":  "downloads/vision-certi-bridge-win-x64.zip",
+                                          "status":  200,
+                                          "bytes":  33471795,
+                                          "sha256":  "b1d473fc63bbf0f1e04c280d2ea9be4365fa8489c8b2e0033ee38841ddc41233",
+                                          "matches":  true
+                                      },
+                                      {
+                                          "host":  "hahattalk-vision-certi.web.app",
+                                          "file":  "downloads/vision-certi-pacs-window-repair.zip",
+                                          "status":  200,
+                                          "bytes":  3917,
+                                          "sha256":  "a260130acca957d0d1cbc5951ced0e72543b3c2307459423da333a807daed535",
+                                          "matches":  true
+                                      }
+                                  ]
+                  },
+    "pacsUi":  {
+                   "results":  [
+                                   {
+                                       "hours":  1,
+                                       "tone":  "normal",
+                                       "warning":  false,
+                                       "hoverVisible":  true,
+                                       "tooltipFits":  true,
+                                       "grayButtonDisabled":  true
+                                   },
+                                   {
+                                       "hours":  24,
+                                       "tone":  "warning",
+                                       "warning":  false,
+                                       "hoverVisible":  true,
+                                       "tooltipFits":  true,
+                                       "grayButtonDisabled":  true
+                                   },
+                                   {
+                                       "hours":  48,
+                                       "tone":  "danger",
+                                       "warning":  true,
+                                       "hoverVisible":  true,
+                                       "tooltipFits":  true,
+                                       "grayButtonDisabled":  true
+                                   }
+                               ],
+                   "sourceOfflineClearsGold":  true,
+                   "pageErrors":  [
+
+                                  ]
+               },
+    "web":  {
+                "checkedAt":  "2026-10-23T13:37:36.933Z",
+                "results":  [
+                                {
+                                    "host":  "vision-certi.web.app",
+                                    "htmlStatus":  200,
+                                    "scriptStatus":  200,
+                                    "htmlMatches":  true,
+                                    "scriptMatches":  true,
+                                    "cacheDisabled":  true,
+                                    "retiredEntryWorks":  true,
+                                    "ok":  true
+                                },
+                                {
+                                    "host":  "vision-certi.firebaseapp.com",
+                                    "htmlStatus":  200,
+                                    "scriptStatus":  200,
+                                    "htmlMatches":  true,
+                                    "scriptMatches":  true,
+                                    "cacheDisabled":  true,
+                                    "retiredEntryWorks":  true,
+                                    "ok":  true
+                                },
+                                {
+                                    "host":  "hahattalk-vision-certi.web.app",
+                                    "htmlStatus":  200,
+                                    "scriptStatus":  200,
+                                    "htmlMatches":  true,
+                                    "scriptMatches":  true,
+                                    "cacheDisabled":  true,
+                                    "retiredEntryWorks":  true,
+                                    "ok":  true
+                                },
+                                {
+                                    "host":  "hahattalk-vision-certi.firebaseapp.com",
+                                    "htmlStatus":  200,
+                                    "scriptStatus":  200,
+                                    "htmlMatches":  true,
+                                    "scriptMatches":  true,
+                                    "cacheDisabled":  true,
+                                    "retiredEntryWorks":  true,
+                                    "ok":  true
+                                }
+                            ]
+            }
+}
